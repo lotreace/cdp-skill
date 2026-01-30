@@ -2,14 +2,15 @@
 /**
  * CDP Skill CLI
  *
- * JSON interpreter for browser automation. Reads JSON from stdin,
- * executes browser automation steps, and outputs JSON results.
+ * JSON interpreter for browser automation. Accepts JSON as argument (preferred)
+ * or reads from stdin (fallback).
  *
  * Usage:
- *   echo '{"steps":[{"goto":"https://example.com"}]}' | node src/cli.js
+ *   node src/cdp-skill.js '{"steps":[{"goto":"https://google.com"}]}'
+ *   echo '{"steps":[...]}' | node src/cdp-skill.js
  */
 
-import { createBrowser } from './cdp.js';
+import { createBrowser, getChromeStatus } from './cdp.js';
 import { createPageController } from './page.js';
 import { createElementLocator, createInputEmulator } from './dom.js';
 import { createScreenshotCapture, createConsoleCapture, createPdfCapture } from './capture.js';
@@ -25,15 +26,23 @@ const ErrorType = {
 };
 
 /**
- * Reads entire stdin and returns as string
+ * Reads entire stdin and returns as string (with timeout for TTY detection)
  */
 async function readStdin() {
   return new Promise((resolve, reject) => {
+    // If stdin is a TTY (interactive terminal) with no data, don't wait
+    if (process.stdin.isTTY) {
+      resolve('');
+      return;
+    }
+
     const chunks = [];
+    let hasData = false;
 
     process.stdin.setEncoding('utf8');
 
     process.stdin.on('data', chunk => {
+      hasData = true;
       chunks.push(chunk);
     });
 
@@ -44,7 +53,34 @@ async function readStdin() {
     process.stdin.on('error', err => {
       reject(err);
     });
+
+    // Timeout if no data arrives (handles edge cases)
+    setTimeout(() => {
+      if (!hasData) {
+        resolve('');
+      }
+    }, 100);
   });
+}
+
+/**
+ * Get input from argument or stdin
+ * Prefers argument for cross-platform compatibility
+ */
+async function getInput() {
+  // Check for JSON argument (skip node and script path)
+  const args = process.argv.slice(2);
+
+  if (args.length > 0) {
+    // Join all args in case JSON was split by shell
+    const argInput = args.join(' ').trim();
+    if (argInput) {
+      return argInput;
+    }
+  }
+
+  // Fallback to stdin
+  return readStdin();
 }
 
 /**
@@ -94,6 +130,37 @@ function errorResponse(type, message) {
 }
 
 /**
+ * Check if steps contain only chromeStatus (lightweight query)
+ */
+function isChromeStatusOnly(steps) {
+  return steps.length === 1 && steps[0].chromeStatus !== undefined;
+}
+
+/**
+ * Handle chromeStatus step - lightweight, no session needed
+ */
+async function handleChromeStatus(config, step) {
+  const host = config.host || 'localhost';
+  const port = config.port || 9222;
+  const autoLaunch = step.chromeStatus === true || step.chromeStatus?.autoLaunch !== false;
+  const headless = step.chromeStatus?.headless || false;
+
+  const status = await getChromeStatus({ host, port, autoLaunch, headless });
+
+  return {
+    status: status.running ? 'passed' : 'failed',
+    chrome: status,
+    steps: [{
+      action: 'chromeStatus',
+      status: status.running ? 'passed' : 'failed',
+      output: status
+    }],
+    outputs: [{ step: 0, action: 'chromeStatus', output: status }],
+    errors: status.error ? [{ step: 0, action: 'chromeStatus', error: status.error }] : []
+  };
+}
+
+/**
  * Main CLI execution
  */
 async function main() {
@@ -101,8 +168,8 @@ async function main() {
   let pageController = null;
 
   try {
-    // Read and parse input
-    const input = await readStdin();
+    // Read and parse input (argument preferred, stdin fallback)
+    const input = await getInput();
     const json = parseInput(input);
 
     // Extract config with defaults
@@ -110,6 +177,13 @@ async function main() {
     const host = config.host || 'localhost';
     const port = config.port || 9222;
     const timeout = config.timeout || 30000;
+
+    // Handle chromeStatus specially - no session needed
+    if (isChromeStatusOnly(json.steps)) {
+      const result = await handleChromeStatus(config, json.steps[0]);
+      console.log(JSON.stringify(result));
+      process.exit(result.status === 'passed' ? 0 : 1);
+    }
 
     // Connect to browser
     browser = createBrowser({ host, port, connectTimeout: timeout });

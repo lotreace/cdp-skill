@@ -1,13 +1,13 @@
 ---
 name: cdp-skill
-description: Automate Chrome browser interactions via JSON piped to a Node.js CLI. Use when you need to navigate websites, fill forms, click elements, take screenshots, extract data, or run end-to-end browser tests. Supports accessibility snapshots for resilient element targeting.
+description: Automate Chrome browser interactions via JSON passed to a Node.js CLI. Use when you need to navigate websites, fill forms, click elements, take screenshots, extract data, or run end-to-end browser tests. Supports accessibility snapshots for resilient element targeting.
 license: MIT
-compatibility: Requires Chrome/Chromium running with --remote-debugging-port=9222 and Node.js.
+compatibility: Requires Chrome/Chromium (auto-launched if not running) and Node.js.
 ---
 
 # CDP Browser Automation Skill
 
-Automate Chrome browser interactions via JSON piped to a Node.js CLI. Produce JSON step definitions, not JavaScript code.
+Automate Chrome browser interactions via JSON passed to a Node.js CLI. Produce JSON step definitions, not JavaScript code.
 
 ## Purpose
 
@@ -19,34 +19,49 @@ This skill enables **AI-powered browser automation**. The intended workflow:
 
 ## Quick Start
 
-Chrome must be running with remote debugging:
+**Step 1: Check Chrome status (auto-launches if needed)**
 ```bash
-# macOS
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
-
-# Linux
-google-chrome --remote-debugging-port=9222
-
-# Windows
-chrome.exe --remote-debugging-port=9222
+node src/cdp-skill.js '{"steps":[{"chromeStatus":true}]}'
 ```
 
-Execute steps:
+Returns:
+```json
+{
+  "status": "passed",
+  "chrome": {
+    "running": true,
+    "launched": true,
+    "version": "Chrome/120.0.6099.109",
+    "port": 9222,
+    "tabs": [{"targetId": "ABC123", "url": "about:blank", "title": ""}]
+  }
+}
+```
+
+The skill auto-detects Chrome location on macOS, Linux, and Windows. Set `CHROME_PATH` environment variable for custom installations.
+
+**Step 2: Execute automation steps**
 ```bash
-echo '{"steps":[{"goto":"https://example.com"}]}' | node src/cli.js
+node src/cdp-skill.js '{"steps":[{"goto":"https://google.com"}]}'
+```
+
+Stdin pipe also works:
+```bash
+echo '{"steps":[{"goto":"https://google.com"}]}' | node src/cdp-skill.js
 ```
 
 ### Tab Reuse (Critical)
 
-The first invocation creates a new tab and returns a `targetId`. **Include this in ALL subsequent calls** to reuse the same tab:
+Use a `targetId` from `chromeStatus` response or previous step output. **Include targetId in ALL subsequent calls** to reuse the same tab:
 
 ```bash
-# First call - extract targetId from response
-RESULT=$(echo '{"steps":[{"goto":"https://example.com"}]}' | node src/cli.js)
-TARGET_ID=$(echo "$RESULT" | jq -r '.tab.targetId')
+# Get available tabs from chromeStatus
+RESULT=$(node src/cdp-skill.js '{"steps":[{"chromeStatus":true}]}')
+TARGET_ID=$(echo "$RESULT" | jq -r '.chrome.tabs[0].targetId')
 
-# All subsequent calls - include targetId
-echo "{\"config\":{\"targetId\":\"$TARGET_ID\"},\"steps\":[{\"click\":\"#btn\"}]}" | node src/cli.js
+# Use targetId for all subsequent calls
+node src/cdp-skill.js "{\"config\":{\"targetId\":\"$TARGET_ID\"},\"steps\":[{\"goto\":\"https://google.com\"}]}"
+node src/cdp-skill.js "{\"config\":{\"targetId\":\"$TARGET_ID\"},\"steps\":[{\"click\":\"#btn\"}]}"
 ```
 
 Omitting `targetId` creates orphan tabs that accumulate until Chrome restarts.
@@ -130,11 +145,38 @@ Refs work with: `click`, `fill`, `hover`.
 
 ## Step Reference
 
+### Chrome Management
+
+**chromeStatus** - Check if Chrome is running, auto-launch if not
+```json
+{"chromeStatus": true}
+{"chromeStatus": {"autoLaunch": false}}
+{"chromeStatus": {"headless": true}}
+```
+Options: `autoLaunch` (default: true), `headless` (default: false)
+
+Returns:
+```json
+{
+  "running": true,
+  "launched": false,
+  "version": "Chrome/120.0.6099.109",
+  "port": 9222,
+  "tabs": [
+    {"targetId": "ABC123...", "url": "https://google.com", "title": "Google"}
+  ]
+}
+```
+
+If Chrome cannot be found: `{running: false, launched: false, error: "Chrome not found..."}`
+
+**Note:** This step is lightweight - it doesn't create a session. Use it as your first call to ensure Chrome is ready, then use a `targetId` from the tabs list for subsequent calls.
+
 ### Navigation
 
 **goto** - Navigate to URL
 ```json
-{"goto": "https://example.com"}
+{"goto": "https://google.com"}
 ```
 
 **back** / **forward** - History navigation
@@ -339,9 +381,9 @@ Note: Console logs don't persist across CLI invocations.
 
 **screenshot**
 ```json
-{"screenshot": "./result.png"}
-{"screenshot": {"path": "./full.png", "fullPage": true}}
-{"screenshot": {"path": "./element.png", "selector": "#header"}}
+{"screenshot": "result.png"}
+{"screenshot": {"path": "full.png", "fullPage": true}}
+{"screenshot": {"path": "/absolute/path/element.png", "selector": "#header"}}
 ```
 Options: `path`, `fullPage`, `selector`, `format` (png|jpeg|webp), `quality`, `omitBackground`, `clip`
 
@@ -349,12 +391,14 @@ Returns: `{path, viewport: {width, height}, format, fullPage, selector}`
 
 **pdf**
 ```json
-{"pdf": "./report.pdf"}
-{"pdf": {"path": "./report.pdf", "landscape": true, "printBackground": true}}
+{"pdf": "report.pdf"}
+{"pdf": {"path": "/absolute/path/report.pdf", "landscape": true, "printBackground": true}}
 ```
 Options: `path`, `selector`, `landscape`, `printBackground`, `scale`, `paperWidth`, `paperHeight`, margins, `pageRanges`, `validate`
 
 Returns: `{path, fileSize, fileSizeFormatted, pageCount, dimensions, validation?}`
+
+**Note:** Relative paths are saved to the platform temp directory (`$TMPDIR/cdp-skill/` on macOS/Linux, `%TEMP%\cdp-skill\` on Windows). Use absolute paths to save elsewhere.
 
 
 ### JavaScript Execution
@@ -368,13 +412,13 @@ Options: `expression`, `await`, `timeout`, `serialize`
 
 **Shell escaping tip:** For complex expressions with quotes or special characters, use a heredoc or JSON file:
 ```bash
-# Heredoc approach
-node src/cli.js <<'EOF'
+# Heredoc approach (Unix)
+node src/cdp-skill.js <<'EOF'
 {"steps":[{"eval":"document.querySelectorAll('button').length"}]}
 EOF
 
 # Or save to file and pipe
-cat steps.json | node src/cli.js
+cat steps.json | node src/cdp-skill.js
 ```
 
 Returns typed results:
@@ -433,7 +477,7 @@ Presets: `iphone-se`, `iphone-14`, `iphone-15-pro`, `ipad`, `ipad-pro-11`, `pixe
 **cookies** - Get/set/clear cookies
 ```json
 {"cookies": {"get": true}}
-{"cookies": {"get": ["https://example.com"], "name": "session_id"}}
+{"cookies": {"get": ["https://google.com"], "name": "session_id"}}
 {"cookies": {"set": [{"name": "token", "value": "abc", "domain": "example.com", "expires": "7d"}]}}
 {"cookies": {"delete": "session_id"}}
 {"cookies": {"clear": true}}
@@ -505,11 +549,13 @@ Capture screenshots/DOM before and after each action:
 {
   "config": {
     "debug": true,
-    "debugOptions": {"outputDir": "./debug", "captureScreenshots": true, "captureDom": true}
+    "debugOptions": {"captureScreenshots": true, "captureDom": true}
   },
   "steps": [...]
 }
 ```
+
+Debug output goes to the platform temp directory by default. Set `"outputDir": "/path/to/dir"` to override.
 
 
 ## Not Supported
@@ -526,16 +572,19 @@ Handle via multiple invocations:
 | Issue | Solution |
 |-------|----------|
 | Tabs accumulating | Include `targetId` in config |
-| CONNECTION error | Start Chrome with `--remote-debugging-port=9222` |
+| CONNECTION error | Use `chromeStatus` first - it auto-launches Chrome |
+| Chrome not found | Set `CHROME_PATH` environment variable |
 | Element not found | Add `wait` step first |
 | Clicks not working | Scroll element into view first |
 
 ## Best Practices
 
-1. **Discover before interacting** - Use `inspect` and `snapshot` to understand page structure
-2. **Use website navigation** - Click links and submit forms; don't guess URLs
-3. **Be persistent** - Try alternative selectors, add waits, scroll first
-4. **Prefer refs** - Use `snapshot` + refs over brittle CSS selectors
+1. **Start with chromeStatus** - Ensures Chrome is running and gives you available tabs
+2. **Reuse only your own tabs** - Always pass `targetId` from your previous response; other agents may be using the same browser
+3. **Discover before interacting** - Use `inspect` and `snapshot` to understand page structure
+4. **Use website navigation** - Click links and submit forms; don't guess URLs
+5. **Be persistent** - Try alternative selectors, add waits, scroll first
+6. **Prefer refs** - Use `snapshot` + refs over brittle CSS selectors
 
 ## Feedback
 

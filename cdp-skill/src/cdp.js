@@ -3,7 +3,10 @@
  * Core CDP connection, discovery, target management, and browser client
  */
 
-import { timeoutError } from './utils.js';
+import { spawn, execSync } from 'child_process';
+import os from 'os';
+import fs from 'fs';
+import { timeoutError, sleep } from './utils.js';
 
 // ============================================================================
 // Connection
@@ -902,4 +905,205 @@ export function createBrowser(options = {}) {
     get targets() { return targetManager; },
     get sessions() { return sessionRegistry; }
   };
+}
+
+// ============================================================================
+// Chrome Launcher
+// ============================================================================
+
+const CHROME_PATHS = {
+  darwin: [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary'
+  ],
+  linux: [
+    'google-chrome',
+    'google-chrome-stable',
+    'chromium-browser',
+    'chromium',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/snap/bin/chromium'
+  ],
+  win32: [
+    process.env.LOCALAPPDATA + '\\Google\\Chrome\\Application\\chrome.exe',
+    process.env.PROGRAMFILES + '\\Google\\Chrome\\Application\\chrome.exe',
+    process.env['PROGRAMFILES(X86)'] + '\\Google\\Chrome\\Application\\chrome.exe',
+    process.env.LOCALAPPDATA + '\\Chromium\\Application\\chrome.exe'
+  ]
+};
+
+/**
+ * Find Chrome executable on the system
+ * @returns {string|null} Path to Chrome executable or null if not found
+ */
+export function findChromePath() {
+  // Check environment variable first
+  if (process.env.CHROME_PATH) {
+    if (fs.existsSync(process.env.CHROME_PATH)) {
+      return process.env.CHROME_PATH;
+    }
+  }
+
+  const platform = os.platform();
+  const paths = CHROME_PATHS[platform] || [];
+
+  for (const chromePath of paths) {
+    try {
+      // For Linux, check if command exists in PATH
+      if (platform === 'linux' && !chromePath.startsWith('/')) {
+        try {
+          const result = execSync(`which ${chromePath}`, { encoding: 'utf8' }).trim();
+          if (result) return result;
+        } catch {
+          continue;
+        }
+      } else if (fs.existsSync(chromePath)) {
+        return chromePath;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Launch Chrome with remote debugging enabled
+ * @param {Object} [options] - Launch options
+ * @param {number} [options.port=9222] - Debugging port
+ * @param {string} [options.chromePath] - Custom Chrome path
+ * @param {boolean} [options.headless=false] - Run in headless mode
+ * @param {string} [options.userDataDir] - Custom user data directory
+ * @returns {Promise<{process: ChildProcess, port: number}>}
+ */
+export async function launchChrome(options = {}) {
+  const {
+    port = 9222,
+    chromePath = findChromePath(),
+    headless = false,
+    userDataDir = null
+  } = options;
+
+  if (!chromePath) {
+    throw new Error(
+      'Chrome not found. Install Google Chrome or set CHROME_PATH environment variable.\n' +
+      'Download: https://www.google.com/chrome/'
+    );
+  }
+
+  const args = [
+    `--remote-debugging-port=${port}`,
+    '--no-first-run',
+    '--no-default-browser-check'
+  ];
+
+  if (headless) {
+    args.push('--headless=new');
+  }
+
+  if (userDataDir) {
+    args.push(`--user-data-dir=${userDataDir}`);
+  }
+
+  const chromeProcess = spawn(chromePath, args, {
+    detached: true,
+    stdio: 'ignore'
+  });
+
+  // Don't let this process keep Node alive
+  chromeProcess.unref();
+
+  // Wait for Chrome to be ready
+  const discovery = createDiscovery('localhost', port, 1000);
+  const maxWait = 10000;
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < maxWait) {
+    if (await discovery.isAvailable()) {
+      return { process: chromeProcess, port };
+    }
+    await sleep(100);
+  }
+
+  // Kill process if it didn't start properly
+  try {
+    chromeProcess.kill();
+  } catch { /* ignore */ }
+
+  throw new Error(`Chrome failed to start within ${maxWait}ms`);
+}
+
+/**
+ * Get Chrome status - check if running, optionally launch if not
+ * @param {Object} [options] - Options
+ * @param {string} [options.host='localhost'] - Chrome host
+ * @param {number} [options.port=9222] - Chrome debugging port
+ * @param {boolean} [options.autoLaunch=true] - Auto-launch if not running
+ * @param {boolean} [options.headless=false] - Launch in headless mode
+ * @returns {Promise<{running: boolean, launched?: boolean, version?: string, tabs?: Array, error?: string}>}
+ */
+export async function getChromeStatus(options = {}) {
+  const {
+    host = 'localhost',
+    port = 9222,
+    autoLaunch = true,
+    headless = false
+  } = options;
+
+  const discovery = createDiscovery(host, port, 2000);
+
+  // Check if already running
+  let wasRunning = await discovery.isAvailable();
+  let launched = false;
+
+  // Auto-launch if not running
+  if (!wasRunning && autoLaunch && host === 'localhost') {
+    try {
+      await launchChrome({ port, headless });
+      launched = true;
+      wasRunning = true;
+    } catch (err) {
+      return {
+        running: false,
+        launched: false,
+        error: err.message
+      };
+    }
+  }
+
+  if (!wasRunning) {
+    return {
+      running: false,
+      launched: false,
+      error: `Chrome not running on ${host}:${port}`
+    };
+  }
+
+  // Get version and tabs
+  try {
+    const version = await discovery.getVersion();
+    const pages = await discovery.getPages();
+
+    return {
+      running: true,
+      launched,
+      version: version.browser,
+      port,
+      tabs: pages.map(p => ({
+        targetId: p.id,
+        url: p.url,
+        title: p.title
+      }))
+    };
+  } catch (err) {
+    return {
+      running: false,
+      launched,
+      error: err.message
+    };
+  }
 }

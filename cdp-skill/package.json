@@ -1,11 +1,11 @@
 {
   "name": "cdp-skill",
-  "version": "1.0.0",
-  "description": "Browser automation skill using Chrome DevTools Protocol for Claude Code and Codex",
+  "version": "1.0.1",
+  "description": "Browser automation skill using Chrome DevTools Protocol for Claude Code and AI agents",
   "type": "module",
   "main": "src/index.js",
   "bin": {
-    "cdp-skill": "src/cli.js"
+    "cdp-skill": "src/cdp-skill.js"
   },
   "exports": {
     ".": "./src/index.js",
@@ -26,6 +26,14 @@
     "SKILL.md",
     "src/"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lotreace/cdp-skill.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lotreace/cdp-skill/issues"
+  },
+  "homepage": "https://github.com/lotreace/cdp-skill#readme",
   "keywords": [
     "cdp",
     "chrome",
@@ -33,7 +41,11 @@
     "browser",
     "automation",
     "claude-code",
-    "skill"
+    "ai-agent",
+    "skill",
+    "testing",
+    "e2e",
+    "web-scraping"
   ],
   "skill": {
     "name": "cdp-skill",

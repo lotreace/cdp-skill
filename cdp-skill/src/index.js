@@ -15,7 +15,10 @@ export {
   createTargetManager,
   createSessionRegistry,
   createPageSession,
-  createBrowser
+  createBrowser,
+  findChromePath,
+  launchChrome,
+  getChromeStatus
 } from './cdp.js';
 
 // ============================================================================
