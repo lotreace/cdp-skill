@@ -1,0 +1,47 @@
+{
+  "name": "cdp-skill",
+  "version": "1.0.0",
+  "description": "Browser automation skill using Chrome DevTools Protocol for Claude Code and Codex",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "cdp-skill": "src/cli.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./utils": "./src/utils.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "postinstall": "node install.js",
+    "preuninstall": "node uninstall.js",
+    "test": "node --test --test-force-exit src/tests/*.test.js",
+    "test:run": "node --test --test-force-exit --test-reporter spec src/tests/*.test.js"
+  },
+  "files": [
+    "install.js",
+    "uninstall.js",
+    "SKILL.md",
+    "src/"
+  ],
+  "keywords": [
+    "cdp",
+    "chrome",
+    "devtools",
+    "browser",
+    "automation",
+    "claude-code",
+    "skill"
+  ],
+  "skill": {
+    "name": "cdp-skill",
+    "description": "Automate Chrome browser interactions via CDP",
+    "entry": "./SKILL.md"
+  },
+  "author": "Cezar Lotrean",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}
