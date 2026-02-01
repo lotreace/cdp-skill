@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { createElementLocator } from '../dom.js';
+import { createElementLocator } from '../dom/index.js';
 import { ErrorTypes } from '../utils.js';
 
 describe('ElementLocator', () => {

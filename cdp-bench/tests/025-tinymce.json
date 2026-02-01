@@ -1,0 +1,6 @@
+{
+  "id": 25,
+  "url": "https://the-internet.herokuapp.com/tinymce",
+  "category": "create",
+  "task": "Interact with the TinyMCE WYSIWYG editor inside the iframe: clear the existing content, type a new paragraph with the text 'Hello World', then use the toolbar to make 'World' bold and change the text color to red. Verify the formatting was applied."
+}

@@ -11,13 +11,13 @@
  *   node src/cdp-skill.js --debug '{"steps":[...]}'  # Enable debug logging
  */
 
-import { createBrowser, getChromeStatus } from './cdp.js';
-import { createPageController } from './page.js';
-import { createElementLocator, createInputEmulator } from './dom.js';
-import { createScreenshotCapture, createConsoleCapture, createPdfCapture } from './capture.js';
+import { createBrowser, getChromeStatus } from './cdp/index.js';
+import { createPageController } from './page/index.js';
+import { createElementLocator, createInputEmulator } from './dom/index.js';
+import { createScreenshotCapture, createConsoleCapture, createPdfCapture } from './capture/index.js';
 import { createAriaSnapshot } from './aria.js';
-import { createCookieManager } from './page.js';
-import { runSteps } from './runner.js';
+import { createCookieManager } from './page/index.js';
+import { runSteps } from './runner/index.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -424,6 +424,7 @@ async function main() {
     const host = config.host || 'localhost';
     const port = config.port || 9222;
     const timeout = config.timeout || 30000;
+    const headless = config.headless || false;  // Run Chrome in headless mode (no focus stealing)
     const tab = json.tab || config.tab;  // Top-level tab takes precedence
 
     // Handle chromeStatus specially - no session needed
@@ -442,16 +443,29 @@ async function main() {
       process.exit(result.status === 'ok' ? 0 : 1);
     }
 
-    // Connect to browser
+    // Connect to browser, auto-launch if needed
     browser = createBrowser({ host, port, connectTimeout: timeout });
 
     try {
       await browser.connect();
     } catch (err) {
-      throw {
-        type: ErrorType.CONNECTION,
-        message: `Chrome not running on ${host}:${port} - ${err.message}`
-      };
+      // Chrome not running - try to auto-launch
+      const status = await getChromeStatus({ host, port, autoLaunch: true, headless });
+      if (!status.running) {
+        throw {
+          type: ErrorType.CONNECTION,
+          message: `Chrome not running and failed to launch: ${status.error || 'unknown error'}`
+        };
+      }
+      // Retry connection after launch
+      try {
+        await browser.connect();
+      } catch (retryErr) {
+        throw {
+          type: ErrorType.CONNECTION,
+          message: `Chrome launched but connection failed: ${retryErr.message}`
+        };
+      }
     }
 
     // Get page session - requires explicit targetId or openTab step

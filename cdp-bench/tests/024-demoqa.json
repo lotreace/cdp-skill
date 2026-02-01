@@ -1,0 +1,6 @@
+{
+  "id": 24,
+  "url": "https://demoqa.com/automation-practice-form",
+  "category": "create",
+  "task": "Complete the practice form with: First Name 'John', Last Name 'Doe', Email 'john.doe@example.com', Gender 'Male', Mobile '1234567890', select a Date of Birth, check 'Sports' and 'Reading' hobbies, enter an address, then submit the form and verify the confirmation modal shows the entered data."
+}

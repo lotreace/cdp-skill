@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { createElementHandle } from '../dom.js';
+import { createElementHandle } from '../dom/index.js';
 import { ErrorTypes, staleElementError } from '../utils.js';
 
 describe('ElementHandle', () => {

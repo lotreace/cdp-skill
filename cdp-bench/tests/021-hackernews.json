@@ -1,0 +1,6 @@
+{
+  "id": 21,
+  "url": "https://news.ycombinator.com",
+  "category": "read",
+  "task": "Browse Hacker News front page, identify a story with at least 10 comments, click to view its comments page, and report the top 3 comment authors and a brief summary of the discussion topic."
+}

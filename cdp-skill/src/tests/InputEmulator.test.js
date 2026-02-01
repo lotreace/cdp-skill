@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { createInputEmulator } from '../dom.js';
+import { createInputEmulator } from '../dom/index.js';
 
 describe('InputEmulator', () => {
   let mockCdp;

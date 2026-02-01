@@ -1,0 +1,6 @@
+{
+  "id": 15,
+  "url": "https://the-internet.herokuapp.com/horizontal_slider",
+  "category": "update",
+  "task": "Interact with the horizontal slider: move it to value 2.5 using mouse drag or keyboard arrows, then move it to the maximum value (5), and finally to value 3.5. Verify the displayed value updates correctly after each change."
+}

@@ -1,0 +1,6 @@
+{
+  "id": 26,
+  "url": "https://quilljs.com/",
+  "category": "create",
+  "task": "Find the Quill editor demo on the page, click into the editor area, clear any existing content, then compose a short formatted document: add a heading 'Test Document', followed by a bulleted list with 3 items, and make one word bold. Verify the formatting appears correctly."
+}

@@ -6,7 +6,7 @@ import {
   waitForNetworkIdle,
   waitForDocumentReady,
   waitForSelector
-} from '../page.js';
+} from '../page/index.js';
 import { ErrorTypes } from '../utils.js';
 
 describe('WaitStrategy (functional)', () => {

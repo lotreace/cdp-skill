@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { createErrorAggregator } from '../capture.js';
+import { createErrorAggregator } from '../capture/index.js';
 
 describe('ErrorAggregator', () => {
   let errorAggregator;

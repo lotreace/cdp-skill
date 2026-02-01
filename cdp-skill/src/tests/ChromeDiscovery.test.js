@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { createDiscovery } from '../cdp.js';
+import { createDiscovery } from '../cdp/index.js';
 
 describe('ChromeDiscovery', () => {
   let originalFetch;

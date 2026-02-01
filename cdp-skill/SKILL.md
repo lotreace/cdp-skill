@@ -87,13 +87,18 @@ node src/cdp-skill.js '{"steps":[{"closeTab":"t1"}]}'
     "host": "localhost",
     "port": 9222,
     "tab": "t1",
-    "timeout": 10000
+    "timeout": 10000,
+    "headless": false
   },
   "steps": [...]
 }
 ```
 
-Config is optional on first call. `tab` required on subsequent calls.
+Config options:
+- `host`, `port` - CDP connection (default: localhost:9222)
+- `tab` - Tab ID to use (required on subsequent calls)
+- `timeout` - Command timeout in ms (default: 30000)
+- `headless` - Run Chrome in headless mode (default: false). Prevents Chrome from stealing focus. Chrome auto-launches if not running.
 
 ## Output Schema
 
@@ -394,9 +399,28 @@ Returns: `{frameId, url, name}`
 {"click": {"ref": "e4"}}
 {"click": {"x": 450, "y": 200}}
 ```
-Options: `selector`, `ref`, `x`/`y`, `verify`, `force`, `debug`, `timeout`
+Options: `selector`, `ref`, `x`/`y`, `force`, `debug`, `timeout`, `jsClick`, `nativeOnly`
 
-Returns: `{clicked: true}`. With `verify`: adds `{targetReceived: true/false}`. With navigation: adds `{navigated: true, newUrl: "..."}`.
+Returns: `{clicked: true, method: "cdp"|"jsClick"|"jsClick-auto"}`. With navigation: adds `{navigated: true, newUrl: "..."}`.
+
+**Automatic Click Verification**
+Clicks are automatically verified - if CDP mouse events don't reach the target element (common on React, Vue, Next.js sites), the system automatically falls back to JavaScript click. The `method` field shows what was used:
+- `"cdp"` - CDP mouse events worked
+- `"jsClick"` - User requested `jsClick: true`
+- `"jsClick-auto"` - CDP failed, automatic fallback to JavaScript click
+
+**click** - Force JavaScript click
+```json
+{"click": {"selector": "#submit", "jsClick": true}}
+{"click": {"ref": "e4", "jsClick": true}}
+```
+Use `jsClick: true` to skip CDP and use JavaScript `element.click()` directly.
+
+**click** - Disable auto-fallback
+```json
+{"click": {"selector": "#btn", "nativeOnly": true}}
+```
+Use `nativeOnly: true` to disable the automatic jsClick fallback. The click will use CDP only and report `targetReceived: false` if the click didn't reach the element.
 
 **click** - Multi-selector fallback
 ```json
@@ -538,7 +562,12 @@ Options:
 - `offsetX`/`offsetY`: offset from element center (default: 0)
 - `steps` (default: 10), `delay` (ms, default: 0)
 
-Returns: `{dragged: true, source: {x, y}, target: {x, y}, steps}`
+Returns: `{dragged: true, method: "html5-dnd"|"range-input"|"mouse-events", source: {x, y}, target: {x, y}, steps}`
+
+The `method` field indicates which drag strategy was used:
+- `"html5-dnd"` - HTML5 Drag and Drop API (for draggable elements)
+- `"range-input"` - Direct value manipulation (for `<input type="range">` sliders)
+- `"mouse-events"` - JavaScript mouse event simulation (for custom drag implementations)
 
 **selectOption** - Select option(s) in a native `<select>` dropdown
 ```json

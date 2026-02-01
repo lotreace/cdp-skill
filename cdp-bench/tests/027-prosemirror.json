@@ -1,0 +1,6 @@
+{
+  "id": 27,
+  "url": "https://prosemirror.net/examples/basic/",
+  "category": "create",
+  "task": "Use the ProseMirror basic example editor: select all existing text, delete it, then type a new paragraph 'Testing ProseMirror', select the word 'ProseMirror' and apply bold formatting using the toolbar or keyboard shortcut (Ctrl/Cmd+B). Add a second paragraph with italic text."
+}

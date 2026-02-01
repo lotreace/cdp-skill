@@ -4,6 +4,19 @@
 
 **Make this project amazingly effective** - the CDP skill should be the most reliable, efficient, and intuitive browser automation tool for Claude Code agents. Every feature should reduce round trips, provide clear feedback, and just work.
 
+## CDP-Bench Eval System
+
+The `cdp-bench/` directory contains a **quantitative evaluation system** for measuring and improving cdp-skill reliability.
+
+- **`/cdp-bench-eval-skill` skill**: Run tests via `/cdp-bench-eval-skill`, `/cdp-bench-eval-skill <category>`, or `/cdp-bench-eval-skill <test-id>`
+- **Test files**: `cdp-bench/tests/**/*.eval.md` - YAML frontmatter + markdown prose
+- **Results**: `cdp-bench/runs/{timestamp}/results.jsonl` - structured test outcomes
+- **Baselines**: `cdp-bench/baselines/v{version}.jsonl` - known-good states per version
+
+The eval flywheel: Run tests → Identify weaknesses → Fix skill → Measure improvement → Repeat.
+
+See `cdp-bench/VISION.md` for goals and `cdp-bench/PHASE-2.md` / `cdp-bench/PHASE-3.md` for roadmap.
+
 ## Code Style
 
 **This repository uses a FUNCTIONAL programming style, not OOP.**

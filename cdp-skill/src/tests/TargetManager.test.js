@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { createTargetManager } from '../cdp.js';
+import { createTargetManager } from '../cdp/index.js';
 
 /**
  * Mock CDPConnection for testing

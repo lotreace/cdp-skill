@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { createPageController, WaitCondition } from '../page.js';
+import { createPageController, WaitCondition } from '../page/index.js';
 import { ErrorTypes } from '../utils.js';
 
 describe('PageController', () => {

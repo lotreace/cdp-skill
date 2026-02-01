@@ -1,0 +1,6 @@
+{
+  "id": 16,
+  "url": "https://the-internet.herokuapp.com/hovers",
+  "category": "read",
+  "task": "Test hover interactions on the user cards: hover over each of the three avatar figures to reveal their hidden usernames and 'View profile' links. Click at least one 'View profile' link while the hover content is visible."
+}

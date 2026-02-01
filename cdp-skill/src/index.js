@@ -21,7 +21,7 @@ export {
   getChromeStatus,
   isChromeProcessRunning,
   createNewTab
-} from './cdp.js';
+} from './cdp/index.js';
 
 // ============================================================================
 // Page Operations and Waiting
@@ -42,7 +42,7 @@ export {
   lcsSimilarity,
   getDOMSignature,
   waitForDOMStability
-} from './page.js';
+} from './page/index.js';
 
 // ============================================================================
 // DOM Operations and Input
@@ -70,7 +70,7 @@ export {
   createActionabilityChecker,
   createElementValidator,
   createReactInputFiller
-} from './dom.js';
+} from './dom/index.js';
 
 // ============================================================================
 // ARIA and Role-based Queries
@@ -97,7 +97,7 @@ export {
   createPdfCapture,
   createDebugCapture,
   createEvalSerializer
-} from './capture.js';
+} from './capture/index.js';
 
 // ============================================================================
 // Test Execution
@@ -107,7 +107,7 @@ export {
   executeStep,
   runSteps,
   createTestRunner
-} from './runner.js';
+} from './runner/index.js';
 
 // ============================================================================
 // Utilities and Errors
@@ -156,5 +156,5 @@ export {
 // ============================================================================
 // Default Export - High-level browser factory
 // ============================================================================
-import { createBrowser } from './cdp.js';
+import { createBrowser } from './cdp/index.js';
 export default createBrowser;

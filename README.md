@@ -56,11 +56,13 @@ node src/cdp-skill.js '{"steps":[{"goto":"https://google.com"}]}'
 - **CSS queries** - Traditional selector-based queries
 - **Multi-query** - Batch multiple queries in one step
 - **Page inspection** - Quick overview of page structure
+- **Coordinate discovery** - `refAt`, `elementsAt`, `elementsNear` for visual-based targeting
 
 ### Frame Support
 - **List frames** - Enumerate all iframes
 - **Switch context** - Execute in iframe by selector, index, or name
 - **Cross-origin detection** - Identifies cross-origin frames in snapshots
+- **Shadow DOM** - Pierce shadow roots with `pierceShadow` option in snapshots
 
 ### Screenshots & PDF
 - **Viewport capture** - Current view
@@ -115,6 +117,7 @@ src/
 ├── dom.js         # Element location, input emulation, clicks
 ├── aria.js        # Accessibility snapshots, role queries
 ├── capture.js     # Screenshots, PDF, console, network
+├── diff.js        # Snapshot diffing, context capture
 ├── runner.js      # Step validation and execution
 ├── utils.js       # Errors, key validation, device presets
 └── index.js       # Public API exports

@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { createNetworkCapture } from '../capture.js';
+import { createNetworkCapture } from '../capture/index.js';
 
 describe('NetworkErrorCapture', () => {
   let networkCapture;

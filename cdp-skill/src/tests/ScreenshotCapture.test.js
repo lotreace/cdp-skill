@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { createScreenshotCapture } from '../capture.js';
+import { createScreenshotCapture } from '../capture/index.js';
 
 describe('ScreenshotCapture', () => {
   let screenshotCapture;

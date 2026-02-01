@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { createTestRunner, validateSteps } from '../runner.js';
+import { createTestRunner, validateSteps } from '../runner/index.js';
 import { ErrorTypes } from '../utils.js';
 
 describe('TestRunner', () => {

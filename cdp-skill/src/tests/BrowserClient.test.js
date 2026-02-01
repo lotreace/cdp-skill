@@ -1,6 +1,6 @@
 import { describe, it, mock, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { createBrowser, createPageSession } from '../cdp.js';
+import { createBrowser, createPageSession } from '../cdp/index.js';
 import { ErrorTypes } from '../utils.js';
 
 /**

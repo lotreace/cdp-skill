@@ -1,0 +1,6 @@
+{
+  "id": 17,
+  "url": "https://www.wikipedia.org",
+  "category": "read",
+  "task": "Search Wikipedia for 'Artificial intelligence', navigate to the article page, read the introduction section, then click an internal wiki link to explore a related article."
+}
