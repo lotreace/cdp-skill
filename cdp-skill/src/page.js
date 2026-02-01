@@ -361,11 +361,13 @@ export function createPageController(cdpClient) {
 
       let resolved = false;
       let timeoutId = null;
+      let checkInterval = null;
 
       const waiter = (result) => {
         if (!resolved) {
           resolved = true;
           if (timeoutId) clearTimeout(timeoutId);
+          if (checkInterval) clearInterval(checkInterval);
           networkIdleWaiters.delete(waiter);
           resolve(result);
         }
@@ -376,13 +378,14 @@ export function createPageController(cdpClient) {
       timeoutId = setTimeout(() => {
         if (!resolved) {
           resolved = true;
+          if (checkInterval) clearInterval(checkInterval);
           networkIdleWaiters.delete(waiter);
           reject(timeoutError(`Network did not become idle within ${timeout}ms (${pendingRequests.size} requests pending)`));
         }
       }, timeout);
 
       // Check periodically if we missed the idle event
-      const checkInterval = setInterval(() => {
+      checkInterval = setInterval(() => {
         if (resolved) {
           clearInterval(checkInterval);
           return;
@@ -536,10 +539,7 @@ export function createPageController(cdpClient) {
     mainFrameId = frameTree.frame.id;
     currentFrameId = mainFrameId;
 
-    // Enable Runtime to track execution contexts for frames
-    await cdpClient.send('Runtime.enable');
-
-    // Track execution contexts for each frame
+    // Track execution contexts for each frame (Runtime.enable already called above)
     addListener('Runtime.executionContextCreated', ({ context }) => {
       if (context.auxData && context.auxData.frameId) {
         frameExecutionContexts.set(context.auxData.frameId, context.id);
@@ -1048,6 +1048,7 @@ export function createPageController(cdpClient) {
         if (lifecycleHandler) {
           removeLifecycleWaiter(lifecycleHandler);
         }
+        removeCrashWaiter(fail);
       };
 
       const finish = (result) => {
@@ -1129,6 +1130,112 @@ export function createPageController(cdpClient) {
     return { actionResult, navigation };
   }
 
+  /**
+   * Search for an element across all frames (Feature 2: Frame auto-detection)
+   * Uses direct Runtime.evaluate with contextId for each frame
+   * @param {string} selector - CSS selector to search for
+   * @param {Object} elementLocator - Element locator (used only for main frame)
+   * @returns {Promise<{found: boolean, frameId: string|null, objectId: string|null, frameUrl: string|null, handle: Object|null}>}
+   */
+  async function searchAllFrames(selector, elementLocator) {
+    const originalFrameId = currentFrameId;
+    const originalContextId = currentExecutionContextId;
+
+    try {
+      // First check the current/main frame using elementLocator
+      try {
+        const result = await elementLocator.findElement(selector);
+        if (result && result._handle) {
+          return {
+            found: true,
+            frameId: currentFrameId,
+            objectId: result._handle.objectId,
+            frameUrl: null,
+            handle: result._handle // Caller is responsible for disposing
+          };
+        }
+      } catch {
+        // Element not found in main frame, continue
+      }
+
+      // Get all frames
+      const { frameTree } = await cdpClient.send('Page.getFrameTree');
+
+      function collectFrames(node, frames = []) {
+        if (node.childFrames) {
+          for (const child of node.childFrames) {
+            frames.push(child);
+            collectFrames(child, frames);
+          }
+        }
+        return frames;
+      }
+
+      const childFrames = collectFrames(frameTree);
+
+      // Search each child frame using direct Runtime.evaluate with contextId
+      for (const frameNode of childFrames) {
+        const frameId = frameNode.frame.id;
+
+        try {
+          let contextId = frameExecutionContexts.get(frameId);
+
+          // Create isolated world if needed
+          if (!contextId) {
+            try {
+              const { executionContextId } = await cdpClient.send('Page.createIsolatedWorld', {
+                frameId,
+                worldName: 'cdp-automation'
+              });
+              contextId = executionContextId;
+              frameExecutionContexts.set(frameId, contextId);
+            } catch {
+              // Frame might be cross-origin or unavailable
+              continue;
+            }
+          }
+
+          // Query element directly in the frame's context
+          const evalResult = await cdpClient.send('Runtime.evaluate', {
+            expression: `document.querySelector(${JSON.stringify(selector)})`,
+            contextId,
+            returnByValue: false
+          });
+
+          if (evalResult.result && evalResult.result.objectId && evalResult.result.subtype !== 'null') {
+            // Return the result - caller must use switchToFrame(frameId) before using the objectId
+            // Note: frame context is NOT changed here; caller is responsible for switching if needed
+            return {
+              found: true,
+              frameId,
+              objectId: evalResult.result.objectId,
+              frameUrl: frameNode.frame.url,
+              handle: null // No handle for frame searches - caller uses objectId directly
+            };
+          }
+        } catch (err) {
+          // Element not found or frame context invalid - remove stale context and continue
+          if (err && err.message && err.message.includes('context')) {
+            frameExecutionContexts.delete(frameId);
+          }
+        }
+      }
+
+      // Element not found in any frame
+      return {
+        found: false,
+        frameId: null,
+        objectId: null,
+        frameUrl: null,
+        handle: null
+      };
+    } finally {
+      // Restore original frame context
+      currentFrameId = originalFrameId;
+      currentExecutionContextId = originalContextId;
+    }
+  }
+
   return {
     initialize,
     navigate,
@@ -1151,6 +1258,7 @@ export function createPageController(cdpClient) {
     withNavigation,
     waitForNetworkQuiet,
     getNetworkStatus,
+    searchAllFrames,
     dispose,
     get mainFrameId() { return mainFrameId; },
     get currentFrameId() { return currentFrameId; },
@@ -1543,10 +1651,14 @@ export function createCookieManager(session) {
   /**
    * Clear all cookies or cookies matching specific domains
    * @param {string[]} [urls] - Optional URLs to filter cookies by domain
+   * @param {Object} [options] - Optional filters
+   * @param {string} [options.domain] - Clear cookies for specific domain (e.g., "example.com")
    * @returns {Promise<{count: number}>} Number of cookies deleted
    */
-  async function clearCookies(urls = []) {
-    if (urls.length === 0) {
+  async function clearCookies(urls = [], options = {}) {
+    const { domain } = options;
+
+    if (urls.length === 0 && !domain) {
       // Clear all cookies
       const allCookies = await getCookies();
       const count = allCookies.length;
@@ -1554,8 +1666,21 @@ export function createCookieManager(session) {
       return { count };
     }
 
-    // Get cookies matching the domains
-    const cookiesToDelete = await getCookies(urls);
+    // Get cookies to filter
+    let cookiesToDelete;
+    if (domain) {
+      // Filter by domain - get all cookies and match domain
+      const allCookies = await getCookies();
+      cookiesToDelete = allCookies.filter(cookie =>
+        cookie.domain === domain ||
+        cookie.domain === `.${domain}` ||
+        cookie.domain.endsWith(`.${domain}`)
+      );
+    } else {
+      // Filter by URLs (original behavior)
+      cookiesToDelete = await getCookies(urls);
+    }
+
     let deletedCount = 0;
 
     for (const cookie of cookiesToDelete) {

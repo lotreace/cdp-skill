@@ -5,6 +5,7 @@
 
 import { spawn, execSync } from 'child_process';
 import os from 'os';
+import path from 'path';
 import fs from 'fs';
 import { timeoutError, sleep } from './utils.js';
 
@@ -972,13 +973,94 @@ export function findChromePath() {
 }
 
 /**
+ * Check if Chrome process is running (without necessarily having CDP enabled)
+ * On macOS, Chrome can run without windows and without CDP port
+ * @returns {{running: boolean, hasCdpPort: boolean, pid: number|null}}
+ */
+export function isChromeProcessRunning() {
+  const platform = os.platform();
+
+  try {
+    if (platform === 'darwin') {
+      // macOS: Check for Chrome process
+      const result = execSync('pgrep -x "Google Chrome" 2>/dev/null || pgrep -f "Google Chrome.app" 2>/dev/null', {
+        encoding: 'utf8',
+        timeout: 5000
+      }).trim();
+      if (result) {
+        const pids = result.split('\n').filter(p => p);
+        // Check if any Chrome process has --remote-debugging-port
+        try {
+          const psResult = execSync(`ps aux | grep -E "Google Chrome.*--remote-debugging-port" | grep -v grep`, {
+            encoding: 'utf8',
+            timeout: 5000
+          }).trim();
+          return { running: true, hasCdpPort: psResult.length > 0, pid: parseInt(pids[0]) };
+        } catch {
+          return { running: true, hasCdpPort: false, pid: parseInt(pids[0]) };
+        }
+      }
+    } else if (platform === 'linux') {
+      const result = execSync('pgrep -f "(chrome|chromium)" 2>/dev/null', { encoding: 'utf8', timeout: 5000 }).trim();
+      if (result) {
+        const pids = result.split('\n').filter(p => p);
+        try {
+          const psResult = execSync(`ps aux | grep -E "(chrome|chromium).*--remote-debugging-port" | grep -v grep`, {
+            encoding: 'utf8',
+            timeout: 5000
+          }).trim();
+          return { running: true, hasCdpPort: psResult.length > 0, pid: parseInt(pids[0]) };
+        } catch {
+          return { running: true, hasCdpPort: false, pid: parseInt(pids[0]) };
+        }
+      }
+    } else if (platform === 'win32') {
+      const result = execSync('tasklist /FI "IMAGENAME eq chrome.exe" /NH', { encoding: 'utf8', timeout: 5000 });
+      if (result.includes('chrome.exe')) {
+        // Windows: harder to check command line args, assume CDP might be available
+        return { running: true, hasCdpPort: true, pid: null };
+      }
+    }
+  } catch {
+    // Process check failed, assume not running
+  }
+
+  return { running: false, hasCdpPort: false, pid: null };
+}
+
+/**
+ * Create a new tab in Chrome via CDP
+ * @param {string} host - Chrome debugging host
+ * @param {number} port - Chrome debugging port
+ * @param {string} [url='about:blank'] - URL to open
+ * @returns {Promise<{targetId: string, url: string}>}
+ */
+export async function createNewTab(host = 'localhost', port = 9222, url = 'about:blank') {
+  const response = await fetch(`http://${host}:${port}/json/new?${encodeURIComponent(url)}`);
+  if (!response.ok) {
+    throw new Error(`Failed to create new tab: ${response.statusText}`);
+  }
+  const target = await response.json();
+  return {
+    targetId: target.id,
+    url: target.url
+  };
+}
+
+/**
  * Launch Chrome with remote debugging enabled
+ *
+ * IMPORTANT: On macOS/Linux, if Chrome is already running without CDP,
+ * starting Chrome with --remote-debugging-port will just open a new window
+ * in the existing Chrome (which ignores the flag). To solve this, we
+ * automatically use a separate user data directory when Chrome is already running.
+ *
  * @param {Object} [options] - Launch options
  * @param {number} [options.port=9222] - Debugging port
  * @param {string} [options.chromePath] - Custom Chrome path
  * @param {boolean} [options.headless=false] - Run in headless mode
  * @param {string} [options.userDataDir] - Custom user data directory
- * @returns {Promise<{process: ChildProcess, port: number}>}
+ * @returns {Promise<{process: ChildProcess, port: number, usedSeparateProfile: boolean}>}
  */
 export async function launchChrome(options = {}) {
   const {
@@ -1005,13 +1087,28 @@ export async function launchChrome(options = {}) {
     args.push('--headless=new');
   }
 
+  // Chrome requires --user-data-dir for remote debugging (as of Chrome 129+)
+  // Always use a dedicated profile for CDP to avoid conflicts with user's normal browsing
+  let usedSeparateProfile = false;
   if (userDataDir) {
     args.push(`--user-data-dir=${userDataDir}`);
+  } else {
+    // Always use a separate profile for CDP - required by modern Chrome
+    const tempDir = path.join(os.tmpdir(), 'cdp-skill-chrome-profile');
+    args.push(`--user-data-dir=${tempDir}`);
+    usedSeparateProfile = true;
   }
 
+  // Capture stderr to report Chrome errors to the agent
   const chromeProcess = spawn(chromePath, args, {
     detached: true,
-    stdio: 'ignore'
+    stdio: ['ignore', 'ignore', 'pipe'] // capture stderr
+  });
+
+  // Collect stderr output for error reporting
+  let stderrOutput = '';
+  chromeProcess.stderr.on('data', (data) => {
+    stderrOutput += data.toString();
   });
 
   // Don't let this process keep Node alive
@@ -1024,7 +1121,7 @@ export async function launchChrome(options = {}) {
 
   while (Date.now() - startTime < maxWait) {
     if (await discovery.isAvailable()) {
-      return { process: chromeProcess, port };
+      return { process: chromeProcess, port, usedSeparateProfile };
     }
     await sleep(100);
   }
@@ -1034,17 +1131,30 @@ export async function launchChrome(options = {}) {
     chromeProcess.kill();
   } catch { /* ignore */ }
 
-  throw new Error(`Chrome failed to start within ${maxWait}ms`);
+  // Include Chrome's error output in the error message
+  const errorDetails = stderrOutput.trim();
+  const errorMsg = errorDetails
+    ? `Chrome failed to start within ${maxWait}ms. Chrome error: ${errorDetails}`
+    : `Chrome failed to start within ${maxWait}ms`;
+  throw new Error(errorMsg);
 }
 
 /**
  * Get Chrome status - check if running, optionally launch if not
+ *
+ * Handles several scenarios:
+ * 1. Chrome not running → launch new Chrome with CDP port
+ * 2. Chrome running but without CDP port (common on macOS when all windows closed)
+ *    → launch NEW Chrome instance with CDP (never kills existing Chrome)
+ * 3. Chrome running with CDP but no tabs → create new tab
+ * 4. Chrome running with CDP and tabs → return tabs
+ *
  * @param {Object} [options] - Options
  * @param {string} [options.host='localhost'] - Chrome host
  * @param {number} [options.port=9222] - Chrome debugging port
  * @param {boolean} [options.autoLaunch=true] - Auto-launch if not running
  * @param {boolean} [options.headless=false] - Launch in headless mode
- * @returns {Promise<{running: boolean, launched?: boolean, version?: string, tabs?: Array, error?: string}>}
+ * @returns {Promise<{running: boolean, launched?: boolean, version?: string, tabs?: Array, error?: string, note?: string}>}
  */
 export async function getChromeStatus(options = {}) {
   const {
@@ -1056,26 +1166,68 @@ export async function getChromeStatus(options = {}) {
 
   const discovery = createDiscovery(host, port, 2000);
 
-  // Check if already running
-  let wasRunning = await discovery.isAvailable();
+  // Check if CDP is available on the port
+  let cdpAvailable = await discovery.isAvailable();
   let launched = false;
+  let createdTab = false;
+  let note = null;
 
-  // Auto-launch if not running
-  if (!wasRunning && autoLaunch && host === 'localhost') {
-    try {
-      await launchChrome({ port, headless });
-      launched = true;
-      wasRunning = true;
-    } catch (err) {
-      return {
-        running: false,
-        launched: false,
-        error: err.message
-      };
+  // If CDP not available, check if Chrome process is running
+  if (!cdpAvailable && autoLaunch && host === 'localhost') {
+    const processCheck = isChromeProcessRunning();
+
+    if (processCheck.running) {
+      // Chrome is running but CDP isn't available
+      // This can happen when:
+      // 1. Chrome has no CDP flag at all (hasCdpPort=false)
+      // 2. Chrome has CDP flag in args but isn't actually listening (hasCdpPort=true but stale)
+      //    This occurs on macOS when Chrome was started with the flag but joined an existing session
+      // In both cases, we need to launch a new instance with a separate profile
+      const reason = processCheck.hasCdpPort
+        ? 'Chrome has --remote-debugging-port flag but CDP is not responding (stale instance)'
+        : 'Chrome is running without CDP port';
+      note = `${reason}. Launched new instance with debugging enabled.`;
+      try {
+        await launchChrome({ port, headless });
+        launched = true;
+        cdpAvailable = true;
+      } catch (err) {
+        return {
+          running: false,
+          launched: false,
+          error: `${reason}. Failed to launch new instance: ${err.message}`,
+          note: 'On macOS, Chrome keeps running after closing all windows. A new Chrome instance with CDP was attempted but failed.'
+        };
+      }
+    } else {
+      // Chrome not running at all - launch it
+      try {
+        await launchChrome({ port, headless });
+        launched = true;
+        cdpAvailable = true;
+      } catch (err) {
+        return {
+          running: false,
+          launched: false,
+          error: err.message
+        };
+      }
     }
   }
 
-  if (!wasRunning) {
+  if (!cdpAvailable) {
+    const processCheck = isChromeProcessRunning();
+    if (processCheck.running) {
+      const reason = processCheck.hasCdpPort
+        ? `Chrome has --remote-debugging-port flag but CDP is not responding on port ${port} (stale instance).`
+        : `Chrome is running but not with CDP debugging enabled on port ${port}.`;
+      return {
+        running: false,
+        launched: false,
+        error: `${reason} On macOS, Chrome stays running after closing all windows. ` +
+               `Set autoLaunch:true to start a new Chrome instance with CDP.`
+      };
+    }
     return {
       running: false,
       launched: false,
@@ -1086,9 +1238,29 @@ export async function getChromeStatus(options = {}) {
   // Get version and tabs
   try {
     const version = await discovery.getVersion();
-    const pages = await discovery.getPages();
+    let pages = await discovery.getPages();
 
-    return {
+    // If no tabs and autoLaunch is enabled, create a new tab
+    if (pages.length === 0 && autoLaunch && host === 'localhost') {
+      try {
+        const newTab = await createNewTab(host, port, 'about:blank');
+        pages = [{ id: newTab.targetId, url: newTab.url, title: '' }];
+        createdTab = true;
+        note = note ? note + ' Created new tab.' : 'Chrome had no tabs open. Created new tab.';
+      } catch (err) {
+        return {
+          running: true,
+          launched,
+          version: version.browser,
+          port,
+          tabs: [],
+          error: `Chrome running but has no tabs and failed to create one: ${err.message}`,
+          note: 'On macOS, Chrome can run without any windows. Try opening a new Chrome window manually.'
+        };
+      }
+    }
+
+    const result = {
       running: true,
       launched,
       version: version.browser,
@@ -1099,6 +1271,11 @@ export async function getChromeStatus(options = {}) {
         title: p.title
       }))
     };
+
+    if (createdTab) result.createdTab = true;
+    if (note) result.note = note;
+
+    return result;
   } catch (err) {
     return {
       running: false,

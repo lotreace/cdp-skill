@@ -61,6 +61,10 @@ describe('TestRunner', () => {
       if (method === 'Runtime.evaluate' && params?.expression?.includes('getComputedStyle')) {
         return Promise.resolve({ result: { value: true } });
       }
+      // Handle Runtime.callFunctionOn for ActionabilityChecker - attached check
+      if (method === 'Runtime.callFunctionOn' && params?.functionDeclaration?.includes('isConnected')) {
+        return Promise.resolve({ result: { value: { matches: true, received: 'attached' } } });
+      }
       // Handle Runtime.callFunctionOn for ActionabilityChecker - visible check
       if (method === 'Runtime.callFunctionOn' && params?.functionDeclaration?.includes('visibility')) {
         return Promise.resolve({ result: { value: { matches: true, received: 'visible' } } });
@@ -137,11 +141,16 @@ describe('TestRunner', () => {
       getViewportDimensions: mock.fn(() => Promise.resolve({ width: 1920, height: 1080 }))
     };
 
+    const mockConsoleCapture = {
+      getMessages: () => []
+    };
+
     testRunner = createTestRunner({
       pageController: mockPageController,
       elementLocator: mockElementLocator,
       inputEmulator: mockInputEmulator,
-      screenshotCapture: mockScreenshotCapture
+      screenshotCapture: mockScreenshotCapture,
+      consoleCapture: mockConsoleCapture
     });
   });
 
@@ -159,7 +168,7 @@ describe('TestRunner', () => {
 
       const result = await testRunner.run(steps);
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.steps.length, 3);
       assert.strictEqual(result.errors.length, 0);
     });
@@ -182,7 +191,7 @@ describe('TestRunner', () => {
 
       const result = await testRunner.run(steps, { stepTimeout: 500 });
 
-      assert.strictEqual(result.status, 'failed');
+      assert.strictEqual(result.status, 'error');
       assert.strictEqual(result.steps.length, 2);
       assert.strictEqual(result.errors.length, 1);
       assert.strictEqual(result.errors[0].step, 2);
@@ -215,7 +224,7 @@ describe('TestRunner', () => {
 
       const result = await testRunner.run(steps, { stopOnError: false, stepTimeout: 500 });
 
-      assert.strictEqual(result.status, 'failed');
+      assert.strictEqual(result.status, 'error');
       assert.strictEqual(result.steps.length, 3);
       assert.strictEqual(result.errors.length, 1);
 
@@ -223,17 +232,6 @@ describe('TestRunner', () => {
       mockElementLocator.session.send = originalSend;
     });
 
-    it('should collect screenshots', async () => {
-      const steps = [
-        { goto: 'http://test.com' },
-        { screenshot: '/tmp/test.png' }
-      ];
-
-      const result = await testRunner.run(steps);
-
-      assert.strictEqual(result.screenshots.length, 1);
-      assert.strictEqual(result.screenshots[0], '/tmp/screenshot.png');
-    });
   });
 
   describe('executeStep - goto', () => {
@@ -241,8 +239,9 @@ describe('TestRunner', () => {
       const result = await testRunner.executeStep({ goto: 'http://test.com' });
 
       assert.strictEqual(result.action, 'goto');
-      assert.deepStrictEqual(result.params, { url: 'http://test.com' });
-      assert.strictEqual(result.status, 'passed');
+      // Note: params are only included in error responses now
+      assert.strictEqual(result.params, undefined);
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(mockPageController.navigate.mock.calls.length, 1);
       assert.strictEqual(mockPageController.navigate.mock.calls[0].arguments[0], 'http://test.com');
     });
@@ -253,8 +252,9 @@ describe('TestRunner', () => {
       const result = await testRunner.executeStep({ wait: '#main' });
 
       assert.strictEqual(result.action, 'wait');
-      assert.strictEqual(result.params, '#main');
-      assert.strictEqual(result.status, 'passed');
+      // Note: params are only included in error responses now
+      assert.strictEqual(result.params, undefined);
+      assert.strictEqual(result.status, 'ok');
       // Browser-side polling now uses session.send directly, not elementLocator.waitForSelector
     });
 
@@ -262,8 +262,9 @@ describe('TestRunner', () => {
       const result = await testRunner.executeStep({ wait: { selector: '#main', timeout: 5000 } });
 
       assert.strictEqual(result.action, 'wait');
-      assert.strictEqual(result.status, 'passed');
-      assert.deepStrictEqual(result.params, { selector: '#main', timeout: 5000 });
+      assert.strictEqual(result.status, 'ok');
+      // Note: params are only included in error responses now
+      assert.strictEqual(result.params, undefined);
     });
 
     it('should wait for text', async () => {
@@ -271,8 +272,9 @@ describe('TestRunner', () => {
 
       // WaitExecutor now uses session.send directly for text wait
       assert.strictEqual(result.action, 'wait');
-      assert.strictEqual(result.status, 'passed');
-      assert.deepStrictEqual(result.params, { text: 'Hello World', timeout: 3000 });
+      assert.strictEqual(result.status, 'ok');
+      // Note: params are only included in error responses now
+      assert.strictEqual(result.params, undefined);
     });
 
     it('should wait for time delay', async () => {
@@ -287,7 +289,7 @@ describe('TestRunner', () => {
     it('should fail on invalid wait params', async () => {
       const result = await testRunner.executeStep({ wait: { invalid: true } });
 
-      assert.strictEqual(result.status, 'failed');
+      assert.strictEqual(result.status, 'error');
       assert.ok(result.error.includes('Invalid wait params'));
     });
   });
@@ -297,7 +299,7 @@ describe('TestRunner', () => {
       const result = await testRunner.executeStep({ click: '#button' });
 
       assert.strictEqual(result.action, 'click');
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       // The ClickExecutor uses actionabilityChecker which goes through session.send
       // instead of elementLocator.findElement, so we verify click was called
       assert.strictEqual(mockInputEmulator.click.mock.calls.length, 1);
@@ -309,7 +311,7 @@ describe('TestRunner', () => {
     it('should click element by selector object', async () => {
       const result = await testRunner.executeStep({ click: { selector: '#button' } });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       // Verify click was performed (actionabilityChecker handles element finding)
       assert.strictEqual(mockInputEmulator.click.mock.calls.length, 1);
     });
@@ -326,7 +328,7 @@ describe('TestRunner', () => {
 
       const result = await testRunner.executeStep({ click: '#missing' }, { stepTimeout: 1000 });
 
-      assert.strictEqual(result.status, 'failed');
+      assert.strictEqual(result.status, 'error');
       // The error could be about element not found, actionability, or timeout
       assert.ok(result.error.includes('Element not found') ||
                 result.error.includes('not actionable') ||
@@ -337,27 +339,27 @@ describe('TestRunner', () => {
       mockElementLocator.session.send = originalSend;
     });
 
-    it('should fail when element not actionable', async () => {
-      // Override session.send to return failure for visibility check
+    it('should fail when element not attached', async () => {
+      // Override session.send to return failure for attached check (element detached from DOM)
       const originalSend = mockElementLocator.session.send;
       mockElementLocator.session.send = mock.fn((method, params) => {
-        // Return element found
+        // Return element found initially
         if (method === 'Runtime.evaluate' && params?.expression?.includes('document.querySelector')) {
           return Promise.resolve({ result: { objectId: 'mock-object-id-123' } });
         }
-        // Return visibility failure
-        if (method === 'Runtime.callFunctionOn' && params?.functionDeclaration?.includes('visibility')) {
-          return Promise.resolve({ result: { value: { matches: false, received: 'visibility:hidden' } } });
+        // Return attached check failure (element disconnected)
+        if (method === 'Runtime.callFunctionOn' && params?.functionDeclaration?.includes('isConnected')) {
+          return Promise.resolve({ result: { value: { matches: false, received: 'detached' } } });
         }
         return originalSend(method, params);
       });
 
-      const result = await testRunner.executeStep({ click: '#hidden' }, { stepTimeout: 1000 });
+      const result = await testRunner.executeStep({ click: '#detached' }, { stepTimeout: 1000 });
 
-      assert.strictEqual(result.status, 'failed');
-      // The error could be about visibility, actionability, or timeout
-      assert.ok(result.error.includes('not actionable') ||
-                result.error.includes('visible') ||
+      assert.strictEqual(result.status, 'error');
+      // The error should be about element not being attached/actionable
+      assert.ok(result.error.includes('not attached') ||
+                result.error.includes('detached') ||
                 result.error.includes('Timeout') ||
                 result.error.includes('timed out'));
 
@@ -386,17 +388,17 @@ describe('TestRunner', () => {
       assert.strictEqual(mockInputEmulator.type.mock.calls.length, 1);
     });
 
-    it('should fail without selector or ref', async () => {
+    it('should fail without selector, ref, or label', async () => {
       const result = await testRunner.executeStep({ fill: { value: 'test' } });
 
-      assert.strictEqual(result.status, 'failed');
-      assert.ok(result.error.includes('Fill requires selector or ref'));
+      assert.strictEqual(result.status, 'error');
+      assert.ok(result.error.includes('Fill requires selector, ref, or label'));
     });
 
     it('should fail without value', async () => {
       const result = await testRunner.executeStep({ fill: { selector: '#input' } });
 
-      assert.strictEqual(result.status, 'failed');
+      assert.strictEqual(result.status, 'error');
       assert.ok(result.error.includes('Fill requires value'));
     });
 
@@ -412,7 +414,7 @@ describe('TestRunner', () => {
 
       const result = await testRunner.executeStep({ fill: { selector: '#missing', value: 'test' } }, { stepTimeout: 1000 });
 
-      assert.strictEqual(result.status, 'failed');
+      assert.strictEqual(result.status, 'error');
       // The error could be about element not found, actionability, or timeout
       assert.ok(result.error.includes('Element not found') ||
                 result.error.includes('not actionable') ||
@@ -429,26 +431,11 @@ describe('TestRunner', () => {
       const result = await testRunner.executeStep({ press: 'Enter' });
 
       assert.strictEqual(result.action, 'press');
-      assert.deepStrictEqual(result.params, { key: 'Enter' });
+      // Note: params are only included in error responses now
+      assert.strictEqual(result.params, undefined);
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(mockInputEmulator.press.mock.calls.length, 1);
       assert.strictEqual(mockInputEmulator.press.mock.calls[0].arguments[0], 'Enter');
-    });
-  });
-
-  describe('executeStep - screenshot', () => {
-    it('should capture screenshot with path string', async () => {
-      const result = await testRunner.executeStep({ screenshot: '/tmp/test.png' });
-
-      assert.strictEqual(result.action, 'screenshot');
-      assert.strictEqual(result.screenshot, '/tmp/screenshot.png');
-      assert.strictEqual(mockScreenshotCapture.captureToFile.mock.calls[0].arguments[0], '/tmp/test.png');
-    });
-
-    it('should capture screenshot with options object', async () => {
-      const result = await testRunner.executeStep({ screenshot: { path: '/tmp/test.png', fullPage: true } });
-
-      assert.strictEqual(mockScreenshotCapture.captureToFile.mock.calls[0].arguments[0], '/tmp/test.png');
-      assert.strictEqual(mockScreenshotCapture.captureToFile.mock.calls[0].arguments[1].fullPage, true);
     });
   });
 
@@ -456,14 +443,14 @@ describe('TestRunner', () => {
     it('should fail on unknown step type', async () => {
       const result = await testRunner.executeStep({ unknownAction: true });
 
-      assert.strictEqual(result.status, 'failed');
+      assert.strictEqual(result.status, 'error');
       assert.ok(result.error.includes('Unknown step type'));
     });
 
     it('should fail on ambiguous step with multiple actions', async () => {
       const result = await testRunner.executeStep({ goto: 'http://test.com', click: '#button' });
 
-      assert.strictEqual(result.status, 'failed');
+      assert.strictEqual(result.status, 'error');
       assert.ok(result.error.includes('Ambiguous step'));
       assert.ok(result.error.includes('goto'));
       assert.ok(result.error.includes('click'));
@@ -476,18 +463,12 @@ describe('TestRunner', () => {
 
       const result = await testRunner.executeStep({ goto: 'http://test.com' }, { stepTimeout: 50 });
 
-      assert.strictEqual(result.status, 'failed');
+      assert.strictEqual(result.status, 'error');
       assert.ok(result.error.includes('timed out'));
     });
   });
 
-  describe('step timing', () => {
-    it('should track step duration', async () => {
-      const result = await testRunner.executeStep({ wait: { time: 50 } });
-
-      assert.ok(result.duration >= 50);
-    });
-  });
+  // Note: Step duration tracking removed for streamlined response format
 
   describe('validateSteps', () => {
     it('should pass valid steps', () => {
@@ -500,9 +481,7 @@ describe('TestRunner', () => {
         { click: '#button' },
         { click: { selector: '#link' } },
         { fill: { selector: '#input', value: 'test' } },
-        { press: 'Enter' },
-        { screenshot: '/tmp/test.png' },
-        { screenshot: { path: '/tmp/test2.png', fullPage: true } }
+        { press: 'Enter' }
       ];
 
       const result = testRunner.validateSteps(steps);
@@ -585,12 +564,12 @@ describe('TestRunner', () => {
       assert.ok(result.errors[0].errors[0].includes('requires selector'));
     });
 
-    it('should return errors for fill without selector or ref', () => {
+    it('should return errors for fill without selector, ref, or label', () => {
       const steps = [{ fill: { value: 'test' } }];
 
       const result = testRunner.validateSteps(steps);
       assert.strictEqual(result.valid, false);
-      assert.ok(result.errors[0].errors.some(e => e.includes('requires selector or ref')));
+      assert.ok(result.errors[0].errors.some(e => e.includes('requires selector, ref, or label')));
     });
 
     it('should return errors for fill without value', () => {
@@ -606,7 +585,7 @@ describe('TestRunner', () => {
 
       const result = testRunner.validateSteps(steps);
       assert.strictEqual(result.valid, false);
-      assert.ok(result.errors[0].errors[0].includes('object with selector/ref and value'));
+      assert.ok(result.errors[0].errors[0].includes('object with selector/ref/label and value'));
     });
 
     it('should accept fill with ref instead of selector', () => {
@@ -653,22 +632,6 @@ describe('TestRunner', () => {
       const result = testRunner.validateSteps(steps);
       assert.strictEqual(result.valid, false);
       assert.ok(result.errors[0].errors[0].includes('non-empty key'));
-    });
-
-    it('should return errors for empty screenshot path', () => {
-      const steps = [{ screenshot: '' }];
-
-      const result = testRunner.validateSteps(steps);
-      assert.strictEqual(result.valid, false);
-      assert.ok(result.errors[0].errors[0].includes('cannot be empty'));
-    });
-
-    it('should return errors for screenshot without path', () => {
-      const steps = [{ screenshot: { fullPage: true } }];
-
-      const result = testRunner.validateSteps(steps);
-      assert.strictEqual(result.valid, false);
-      assert.ok(result.errors[0].errors[0].includes('requires path'));
     });
 
     it('should collect all invalid steps', () => {
@@ -1009,7 +972,7 @@ describe('TestRunner', () => {
         assert: { url: { contains: '/wiki/Albert' } }
       });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.action, 'assert');
       assert.strictEqual(result.output.passed, true);
       assert.strictEqual(result.output.assertions.length, 1);
@@ -1024,7 +987,7 @@ describe('TestRunner', () => {
         assert: { url: { contains: '/wiki/Albert' } }
       });
 
-      assert.strictEqual(result.status, 'failed');
+      assert.strictEqual(result.status, 'error');
       assert.ok(result.error.includes('URL assertion failed'));
     });
 
@@ -1035,7 +998,7 @@ describe('TestRunner', () => {
         assert: { url: { equals: 'https://example.com' } }
       });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.output.assertions[0].passed, true);
     });
 
@@ -1046,7 +1009,7 @@ describe('TestRunner', () => {
         assert: { url: { startsWith: 'https://' } }
       });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.output.assertions[0].passed, true);
     });
 
@@ -1057,7 +1020,7 @@ describe('TestRunner', () => {
         assert: { url: { endsWith: '/success' } }
       });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.output.assertions[0].passed, true);
     });
 
@@ -1068,7 +1031,7 @@ describe('TestRunner', () => {
         assert: { url: { matches: '^https://.*\\.example\\.com' } }
       });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.output.assertions[0].passed, true);
     });
 
@@ -1087,7 +1050,7 @@ describe('TestRunner', () => {
         assert: { text: 'Welcome' }
       });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.output.passed, true);
       assert.strictEqual(result.output.assertions[0].type, 'text');
       assert.strictEqual(result.output.assertions[0].passed, true);
@@ -1110,7 +1073,7 @@ describe('TestRunner', () => {
         assert: { text: 'Goodbye' }
       });
 
-      assert.strictEqual(result.status, 'failed');
+      assert.strictEqual(result.status, 'error');
       assert.ok(result.error.includes('Text assertion failed'));
 
       mockElementLocator.session.send = originalSend;
@@ -1133,7 +1096,7 @@ describe('TestRunner', () => {
         assert: { selector: 'h1', text: 'Title' }
       });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.output.assertions[0].selector, 'h1');
 
       mockElementLocator.session.send = originalSend;
@@ -1175,7 +1138,7 @@ describe('TestRunner', () => {
         }
       });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.action, 'queryAll');
       assert.ok(result.output.title);
       assert.ok(result.output.links);
@@ -1206,7 +1169,7 @@ describe('TestRunner', () => {
         }
       });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.ok(result.output.title);
       assert.ok(result.output.missing.error);
 
@@ -1237,7 +1200,7 @@ describe('TestRunner', () => {
         cookies: { get: true, name: 'session_id' }
       });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.output.cookies.length, 1);
       assert.strictEqual(result.output.cookies[0].name, 'session_id');
     });
@@ -1263,7 +1226,7 @@ describe('TestRunner', () => {
         cookies: { get: true, name: ['session_id', 'auth_token'] }
       });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.output.cookies.length, 2);
       const names = result.output.cookies.map(c => c.name);
       assert.ok(names.includes('session_id'));
@@ -1452,7 +1415,7 @@ describe('TestRunner', () => {
         console: { stackTrace: true }
       });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.output.messages.length, 1);
       assert.ok(result.output.messages[0].stackTrace);
       assert.strictEqual(result.output.messages[0].stackTrace.length, 2);
@@ -1490,7 +1453,7 @@ describe('TestRunner', () => {
         console: { stackTrace: false }
       });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.output.messages.length, 1);
       assert.strictEqual(result.output.messages[0].stackTrace, undefined);
     });
@@ -1520,7 +1483,7 @@ describe('TestRunner', () => {
         console: { stackTrace: true }
       });
 
-      assert.strictEqual(result.status, 'passed');
+      assert.strictEqual(result.status, 'ok');
       assert.strictEqual(result.output.messages.length, 1);
       // stackTrace should be undefined when not present on the message
       assert.strictEqual(result.output.messages[0].stackTrace, undefined);

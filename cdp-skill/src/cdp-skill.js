@@ -8,6 +8,7 @@
  * Usage:
  *   node src/cdp-skill.js '{"steps":[{"goto":"https://google.com"}]}'
  *   echo '{"steps":[...]}' | node src/cdp-skill.js
+ *   node src/cdp-skill.js --debug '{"steps":[...]}'  # Enable debug logging
  */
 
 import { createBrowser, getChromeStatus } from './cdp.js';
@@ -17,6 +18,172 @@ import { createScreenshotCapture, createConsoleCapture, createPdfCapture } from 
 import { createAriaSnapshot } from './aria.js';
 import { createCookieManager } from './page.js';
 import { runSteps } from './runner.js';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+
+// Debug logging state
+let debugMode = false;
+let debugLogDir = null;
+let debugSequence = 0;
+
+/**
+ * Initialize debug logging - creates log/ directory
+ */
+function initDebugLogging() {
+  debugLogDir = path.join(process.cwd(), 'log');
+  if (!fs.existsSync(debugLogDir)) {
+    fs.mkdirSync(debugLogDir, { recursive: true });
+  }
+  // Find next sequence number based on existing files
+  const files = fs.readdirSync(debugLogDir).filter(f => f.match(/^\d{3}-/));
+  if (files.length > 0) {
+    const maxSeq = Math.max(...files.map(f => parseInt(f.slice(0, 3), 10)));
+    debugSequence = maxSeq + 1;
+  } else {
+    debugSequence = 1;
+  }
+}
+
+/**
+ * Generate a descriptive filename based on steps and tab
+ * @param {Array} steps - Array of step objects
+ * @param {string} status - 'ok' or 'error'
+ * @param {string|null} tabId - Tab ID (e.g., 't1')
+ * @returns {string} Filename like "001-t1-goto-click.ok.json"
+ */
+function generateDebugFilename(steps, status, tabId) {
+  const seq = String(debugSequence).padStart(3, '0');
+  debugSequence++;
+
+  // Extract action names from steps (max 3 for filename brevity)
+  const actions = steps.slice(0, 3).map(step => {
+    // Find the action key in the step
+    const actionKeys = ['goto', 'click', 'fill', 'type', 'press', 'scroll', 'snapshot',
+      'query', 'hover', 'wait', 'eval', 'openTab', 'closeTab', 'chromeStatus',
+      'selectOption', 'select', 'viewport', 'cookies', 'back', 'forward', 'drag',
+      'fillForm', 'extract', 'formState', 'assert', 'validate', 'submit'];
+    for (const key of actionKeys) {
+      if (step[key] !== undefined) return key;
+    }
+    return 'step';
+  });
+
+  let actionStr = actions.join('-');
+  if (steps.length > 3) {
+    actionStr += `-plus${steps.length - 3}`;
+  }
+
+  // Sanitize for filename safety
+  actionStr = actionStr.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 50);
+
+  // Include tab ID if available
+  const tabPart = tabId ? `${tabId}-` : '';
+
+  return `${seq}-${tabPart}${actionStr}.${status}.json`;
+}
+
+/**
+ * Write debug log combining request and response
+ * @param {Object} request - The parsed JSON request
+ * @param {Object} response - The response object
+ */
+function writeDebugLog(request, response) {
+  if (!debugMode || !debugLogDir) return;
+
+  const steps = request.steps || [];
+  const status = response.status || 'unknown';
+
+  // Extract tab ID from request or response
+  const tabId = request.tab || request.config?.tab || response.tab || response.closed || null;
+
+  const filename = generateDebugFilename(steps, status, tabId);
+  const filepath = path.join(debugLogDir, filename);
+
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    request: request,
+    response: response
+  };
+
+  try {
+    fs.writeFileSync(filepath, JSON.stringify(logEntry, null, 2));
+  } catch (e) {
+    // Don't let logging errors break the CLI
+    console.error(`Debug log error: ${e.message}`);
+  }
+}
+
+// Tab registry - maps short aliases (t1, t2, ...) to targetIds
+const TAB_REGISTRY_PATH = path.join(os.tmpdir(), 'cdp-skill-tabs.json');
+
+function loadTabRegistry() {
+  try {
+    if (fs.existsSync(TAB_REGISTRY_PATH)) {
+      return JSON.parse(fs.readFileSync(TAB_REGISTRY_PATH, 'utf8'));
+    }
+  } catch (e) {
+    // Ignore errors, start fresh
+  }
+  return { tabs: {}, nextId: 1 };
+}
+
+function saveTabRegistry(registry) {
+  try {
+    fs.writeFileSync(TAB_REGISTRY_PATH, JSON.stringify(registry, null, 2));
+  } catch (e) {
+    // Ignore errors
+  }
+}
+
+function registerTab(targetId) {
+  const registry = loadTabRegistry();
+
+  // Check if already registered
+  for (const [alias, tid] of Object.entries(registry.tabs)) {
+    if (tid === targetId) return alias;
+  }
+
+  // Assign new alias
+  const alias = `t${registry.nextId}`;
+  registry.tabs[alias] = targetId;
+  registry.nextId++;
+  saveTabRegistry(registry);
+  return alias;
+}
+
+function resolveTabAlias(aliasOrTargetId) {
+  if (!aliasOrTargetId) return null;
+
+  // If it looks like a full targetId (32 hex chars), return as-is
+  if (/^[A-F0-9]{32}$/i.test(aliasOrTargetId)) {
+    return aliasOrTargetId;
+  }
+
+  // Try to resolve alias
+  const registry = loadTabRegistry();
+  return registry.tabs[aliasOrTargetId] || aliasOrTargetId;
+}
+
+function unregisterTab(targetId) {
+  const registry = loadTabRegistry();
+  for (const [alias, tid] of Object.entries(registry.tabs)) {
+    if (tid === targetId) {
+      delete registry.tabs[alias];
+      saveTabRegistry(registry);
+      return alias;
+    }
+  }
+  return null;
+}
+
+function getTabAlias(targetId) {
+  const registry = loadTabRegistry();
+  for (const [alias, tid] of Object.entries(registry.tabs)) {
+    if (tid === targetId) return alias;
+  }
+  return null;
+}
 
 const ErrorType = {
   PARSE: 'PARSE',
@@ -66,14 +233,26 @@ async function readStdin() {
 /**
  * Get input from argument or stdin
  * Prefers argument for cross-platform compatibility
+ * Also parses --debug flag
  */
 async function getInput() {
   // Check for JSON argument (skip node and script path)
   const args = process.argv.slice(2);
 
-  if (args.length > 0) {
+  // Filter out --debug flag and enable debug mode if present
+  const filteredArgs = [];
+  for (const arg of args) {
+    if (arg === '--debug') {
+      debugMode = true;
+      initDebugLogging();
+    } else {
+      filteredArgs.push(arg);
+    }
+  }
+
+  if (filteredArgs.length > 0) {
     // Join all args in case JSON was split by shell
-    const argInput = args.join(' ').trim();
+    const argInput = filteredArgs.join(' ').trim();
     if (argInput) {
       return argInput;
     }
@@ -120,7 +299,7 @@ function parseInput(input) {
 }
 
 /**
- * Creates error response JSON
+ * Creates error response JSON (streamlined format)
  */
 function errorResponse(type, message) {
   return {
@@ -137,6 +316,13 @@ function isChromeStatusOnly(steps) {
 }
 
 /**
+ * Check if steps contain only closeTab (doesn't need a tab session)
+ */
+function isCloseTabOnly(steps) {
+  return steps.length === 1 && steps[0].closeTab !== undefined;
+}
+
+/**
  * Handle chromeStatus step - lightweight, no session needed
  */
 async function handleChromeStatus(config, step) {
@@ -147,17 +333,76 @@ async function handleChromeStatus(config, step) {
 
   const status = await getChromeStatus({ host, port, autoLaunch, headless });
 
-  return {
-    status: status.running ? 'passed' : 'failed',
+  // Streamlined format
+  const content = {
+    status: status.running ? 'ok' : 'error',
     chrome: status,
-    steps: [{
-      action: 'chromeStatus',
-      status: status.running ? 'passed' : 'failed',
-      output: status
-    }],
-    outputs: [{ step: 0, action: 'chromeStatus', output: status }],
-    errors: status.error ? [{ step: 0, action: 'chromeStatus', error: status.error }] : []
+    steps: [{ action: 'chromeStatus', status: status.running ? 'ok' : 'error' }]
   };
+
+  // Add errors only if present
+  if (status.error) {
+    content.errors = [{ step: 1, action: 'chromeStatus', error: status.error }];
+  }
+
+  return content;
+}
+
+/**
+ * Handle closeTab step - no session needed, just close the target via CDP
+ */
+async function handleCloseTab(config, step) {
+  const host = config.host || 'localhost';
+  const port = config.port || 9222;
+  const tabRef = step.closeTab;
+
+  if (!tabRef || typeof tabRef !== 'string') {
+    return {
+      status: 'error',
+      error: { type: 'VALIDATION', message: 'closeTab requires a tab id or targetId string' }
+    };
+  }
+
+  // Resolve alias to targetId
+  const targetId = resolveTabAlias(tabRef);
+  const alias = getTabAlias(targetId);
+
+  try {
+    // Use http to close the target directly via CDP's /json/close endpoint
+    const http = await import('http');
+    const closeUrl = `http://${host}:${port}/json/close/${targetId}`;
+
+    await new Promise((resolve, reject) => {
+      const req = http.get(closeUrl, (res) => {
+        if (res.statusCode === 200) {
+          resolve();
+        } else {
+          reject(new Error(`Failed to close tab: HTTP ${res.statusCode}`));
+        }
+      });
+      req.on('error', reject);
+      req.setTimeout(5000, () => {
+        req.destroy();
+        reject(new Error('Timeout closing tab'));
+      });
+    });
+
+    // Unregister the tab alias
+    unregisterTab(targetId);
+
+    // Streamlined format
+    return {
+      status: 'ok',
+      closed: alias || tabRef,
+      steps: [{ action: 'closeTab', status: 'ok' }]
+    };
+
+  } catch (err) {
+    return {
+      status: 'error',
+      error: { type: 'EXECUTION', message: err.message }
+    };
+  }
 }
 
 /**
@@ -166,23 +411,35 @@ async function handleChromeStatus(config, step) {
 async function main() {
   let browser = null;
   let pageController = null;
+  let parsedRequest = null;  // Track for debug logging in error handler
 
   try {
     // Read and parse input (argument preferred, stdin fallback)
     const input = await getInput();
     const json = parseInput(input);
+    parsedRequest = json;  // Store for error handler
 
-    // Extract config with defaults
+    // Extract config with defaults - tab can be at top level or in config
     const config = json.config || {};
     const host = config.host || 'localhost';
     const port = config.port || 9222;
     const timeout = config.timeout || 30000;
+    const tab = json.tab || config.tab;  // Top-level tab takes precedence
 
     // Handle chromeStatus specially - no session needed
     if (isChromeStatusOnly(json.steps)) {
       const result = await handleChromeStatus(config, json.steps[0]);
+      writeDebugLog(json, result);
       console.log(JSON.stringify(result));
-      process.exit(result.status === 'passed' ? 0 : 1);
+      process.exit(result.status === 'ok' ? 0 : 1);
+    }
+
+    // Handle closeTab specially - no session needed, just close the target
+    if (isCloseTabOnly(json.steps)) {
+      const result = await handleCloseTab(config, json.steps[0]);
+      writeDebugLog(json, result);
+      console.log(JSON.stringify(result));
+      process.exit(result.status === 'ok' ? 0 : 1);
     }
 
     // Connect to browser
@@ -197,30 +454,47 @@ async function main() {
       };
     }
 
-    // Get or create page session
+    // Get page session - requires explicit targetId or openTab step
     let session;
-    if (config.targetId) {
+
+    // Check if first step is openTab
+    const firstStep = json.steps[0];
+    const hasOpenTab = firstStep && firstStep.openTab !== undefined;
+
+    // Extract URL from openTab if provided
+    let openTabUrl = null;
+    if (hasOpenTab) {
+      const openTabParam = firstStep.openTab;
+      if (typeof openTabParam === 'string') {
+        openTabUrl = openTabParam;
+      } else if (typeof openTabParam === 'object' && openTabParam !== null && openTabParam.url) {
+        openTabUrl = openTabParam.url;
+      }
+    }
+
+    // Resolve tab alias to targetId
+    const resolvedTargetId = tab ? resolveTabAlias(tab) : null;
+
+    if (resolvedTargetId) {
       try {
-        session = await browser.attachToPage(config.targetId);
+        session = await browser.attachToPage(resolvedTargetId);
       } catch (err) {
         throw {
           type: ErrorType.CONNECTION,
-          message: `Could not attach to tab ${config.targetId}: ${err.message}`
+          message: `Could not attach to tab ${tab}${tab !== resolvedTargetId ? ` (${resolvedTargetId})` : ''}: ${err.message}`
         };
       }
-    } else {
+    } else if (hasOpenTab) {
+      // Create new tab via openTab step
       try {
-        // If Chrome was just started, it has an empty tab - reuse it instead of creating another
-        // Otherwise create a new tab for this test session
-        // User should pass targetId from response to subsequent calls to reuse the same tab
-        const emptyTab = await browser.findPage(/^(about:blank|chrome:\/\/newtab)/);
-        if (emptyTab) {
-          session = emptyTab;
-        } else {
-          session = await browser.newPage();
-        }
+        session = await browser.newPage();
+        // Register the new tab and get its alias
+        const tabAlias = registerTab(session.targetId);
+        // Mark openTab as handled and store URL/alias if provided
+        json.steps[0]._openTabHandled = true;
+        json.steps[0]._openTabUrl = openTabUrl;
+        json.steps[0]._openTabAlias = tabAlias;
       } catch (err) {
-        // Check if Chrome has no tabs open (common when started with --remote-debugging-port)
         if (err.message.includes('no browser is open')) {
           throw {
             type: ErrorType.CONNECTION,
@@ -232,6 +506,14 @@ async function main() {
           message: `Failed to create new tab: ${err.message}`
         };
       }
+    } else {
+      // No targetId and no openTab step - fail with helpful message
+      throw {
+        type: ErrorType.VALIDATION,
+        message: `No tab specified. Either:\n` +
+          `  1. Use {"steps":[{"openTab":"url"},...]} to create a new tab\n` +
+          `  2. Pass tab id: {"tab":"t1", "steps":[...]}`
+      };
     }
 
     // Create dependencies
@@ -246,6 +528,9 @@ async function main() {
 
     // Initialize page controller (enables required CDP domains)
     await pageController.initialize();
+
+    // Reset viewport to default (clears any previous emulation from other sessions)
+    await pageController.resetViewport();
 
     // Start console capture to collect logs during execution
     await consoleCapture.startCapture();
@@ -262,37 +547,84 @@ async function main() {
       cookieManager
     };
 
-    // Run steps
+    // Run steps (pass tab alias for auto-screenshots)
+    const tabAlias = getTabAlias(session.targetId) || registerTab(session.targetId);
     const result = await runSteps(deps, json.steps, {
       stopOnError: true,
-      stepTimeout: timeout
+      stepTimeout: timeout,
+      targetId: session.targetId,
+      tabAlias
     });
 
-    // Build output with tab info
-    const viewport = await pageController.getViewport();
+    // Capture screenshot at command-level (replaces per-step screenshots)
+    let screenshotPath = null;
+    try {
+      const screenshotId = tabAlias || 'command';
+      screenshotPath = path.join(os.tmpdir(), 'cdp-skill', `${screenshotId}.after.png`);
+      // Ensure directory exists
+      const screenshotDir = path.dirname(screenshotPath);
+      if (!fs.existsSync(screenshotDir)) {
+        fs.mkdirSync(screenshotDir, { recursive: true });
+      }
+      await screenshotCapture.captureToFile(screenshotPath, { fullPage: false });
+    } catch (e) {
+      // Screenshot failure shouldn't fail the command
+      screenshotPath = null;
+    }
+
+    // Build streamlined output
     const output = {
       status: result.status,
-      tab: {
-        targetId: session.targetId,
-        url: await pageController.getUrl(),
-        title: await pageController.getTitle(),
-        viewport
-      },
+      tab: getTabAlias(session.targetId) || registerTab(session.targetId),
+      // Command-level auto-snapshot results
+      navigated: result.navigated,
+      fullSnapshot: result.fullSnapshot,
+      context: result.context,
+      changes: result.changes,
+      viewportSnapshot: result.viewportSnapshot,
+      truncated: result.truncated,
+      screenshot: screenshotPath,
+      // Command-level console (errors/warnings only)
+      console: result.console,
       steps: result.steps,
-      outputs: result.outputs,
-      errors: result.errors,
-      screenshots: result.screenshots
+      errors: result.errors
     };
 
+    // Remove null/undefined fields for compactness
+    if (output.navigated === undefined) delete output.navigated;
+    if (!output.fullSnapshot) delete output.fullSnapshot;
+    if (!output.context) delete output.context;
+    if (!output.changes) delete output.changes;
+    if (!output.viewportSnapshot) delete output.viewportSnapshot;
+    if (output.truncated === undefined) delete output.truncated;
+    if (!output.screenshot) delete output.screenshot;
+    if (!output.console) delete output.console;
+    if (output.errors.length === 0) delete output.errors;
+
+    // Simplify context - remove scroll.x and null values
+    if (output.context) {
+      if (output.context.scroll) {
+        delete output.context.scroll.x;
+      }
+      if (output.context.activeElement === null) delete output.context.activeElement;
+      if (output.context.modal === null) delete output.context.modal;
+    }
+
+    // Create final output (no summary - agent should inspect keys directly)
+    const finalOutput = output;
+
+    // Debug logging
+    writeDebugLog(json, finalOutput);
+
     // Output result
-    console.log(JSON.stringify(output));
+    console.log(JSON.stringify(finalOutput));
 
     // Cleanup
     await consoleCapture.stopCapture();
     pageController.dispose();
     await browser.disconnect();
 
-    process.exit(result.status === 'passed' ? 0 : 1);
+    process.exit(result.status === 'ok' ? 0 : 1);
 
   } catch (err) {
     // Cleanup on error
@@ -304,13 +636,18 @@ async function main() {
     }
 
     // Handle known error types
+    let errResponse;
     if (err.type) {
-      console.log(JSON.stringify(errorResponse(err.type, err.message)));
+      errResponse = errorResponse(err.type, err.message);
     } else {
       // Unknown error
-      console.log(JSON.stringify(errorResponse(ErrorType.EXECUTION, err.message || String(err))));
+      errResponse = errorResponse(ErrorType.EXECUTION, err.message || String(err));
     }
 
+    // Debug logging for errors
+    writeDebugLog(parsedRequest || { steps: [] }, errResponse);
+
+    console.log(JSON.stringify(errResponse));
     process.exit(1);
   }
 }

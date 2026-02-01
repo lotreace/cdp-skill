@@ -274,11 +274,17 @@ export async function getCurrentUrl(session) {
  * @returns {Promise<Object|null>}
  */
 export async function getElementAtPoint(session, x, y) {
+  // Validate coordinates are numbers to prevent injection
+  const safeX = Number(x);
+  const safeY = Number(y);
+  if (!Number.isFinite(safeX) || !Number.isFinite(safeY)) {
+    return null;
+  }
   try {
     const result = await session.send('Runtime.evaluate', {
       expression: `
         (function() {
-          const el = document.elementFromPoint(${x}, ${y});
+          const el = document.elementFromPoint(${safeX}, ${safeY});
           if (!el) return null;
           return {
             tagName: el.tagName.toLowerCase(),
@@ -872,10 +878,128 @@ export function createFormValidator(session, elementLocator) {
     }
   }
 
+  /**
+   * Get complete form state including all fields and their values (Feature 12)
+   * @param {string} selector - CSS selector for the form element
+   * @returns {Promise<Object>} Form state object
+   */
+  async function getFormState(selector) {
+    const element = await elementLocator.findElement(selector);
+    if (!element) {
+      throw new Error(`Form not found: ${selector}`);
+    }
+
+    try {
+      const result = await session.send('Runtime.callFunctionOn', {
+        objectId: element._handle.objectId,
+        functionDeclaration: `function() {
+          if (this.tagName !== 'FORM') {
+            return { error: 'Element is not a form' };
+          }
+
+          const form = this;
+          const fields = [];
+          let formValid = true;
+
+          // Get form attributes
+          const action = form.action || '';
+          const method = (form.method || 'get').toUpperCase();
+          const enctype = form.enctype || 'application/x-www-form-urlencoded';
+
+          // Get associated label for an element
+          function getLabel(el) {
+            // Try label with for attribute (use CSS.escape to prevent selector injection)
+            if (el.id) {
+              const label = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+              if (label) return label.textContent.trim();
+            }
+            // Try parent label
+            const parentLabel = el.closest('label');
+            if (parentLabel) {
+              // Get text content excluding the input's text
+              const clone = parentLabel.cloneNode(true);
+              const inputs = clone.querySelectorAll('input, textarea, select');
+              inputs.forEach(i => i.remove());
+              return clone.textContent.trim();
+            }
+            // Try aria-label
+            if (el.getAttribute('aria-label')) {
+              return el.getAttribute('aria-label');
+            }
+            // Try placeholder
+            if (el.placeholder) {
+              return el.placeholder;
+            }
+            return null;
+          }
+
+          const elements = form.elements;
+          for (let i = 0; i < elements.length; i++) {
+            const el = elements[i];
+            const tagName = el.tagName.toLowerCase();
+            const type = el.type ? el.type.toLowerCase() : tagName;
+
+            // Skip buttons and hidden fields
+            if (type === 'submit' || type === 'reset' || type === 'button' || type === 'hidden') {
+              continue;
+            }
+
+            // Get validation state
+            const valid = el.checkValidity ? el.checkValidity() : true;
+            if (!valid) formValid = false;
+
+            // Get value (mask passwords)
+            let value;
+            if (type === 'password') {
+              value = el.value ? '••••••••' : '';
+            } else if (type === 'checkbox' || type === 'radio') {
+              value = el.checked;
+            } else if (tagName === 'select') {
+              const selected = [];
+              for (let j = 0; j < el.selectedOptions.length; j++) {
+                selected.push(el.selectedOptions[j].text);
+              }
+              value = el.multiple ? selected : (selected[0] || '');
+            } else {
+              value = el.value || '';
+            }
+
+            fields.push({
+              name: el.name || el.id || null,
+              type: type,
+              label: getLabel(el),
+              value: value,
+              required: el.required || false,
+              valid: valid,
+              validationMessage: el.validationMessage || null,
+              disabled: el.disabled || false,
+              readOnly: el.readOnly || false
+            });
+          }
+
+          return {
+            action,
+            method,
+            enctype,
+            fields,
+            valid: formValid,
+            fieldCount: fields.length
+          };
+        }`,
+        returnByValue: true
+      });
+
+      return result.result.value;
+    } finally {
+      await element._handle.dispose();
+    }
+  }
+
   return {
     validateElement,
     submitForm,
-    getFormErrors
+    getFormErrors,
+    getFormState
   };
 }
 

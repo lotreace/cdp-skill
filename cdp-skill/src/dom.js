@@ -24,7 +24,7 @@ import {
 } from './utils.js';
 
 const MAX_TIMEOUT = 300000; // 5 minutes max timeout
-const DEFAULT_TIMEOUT = 30000;
+const DEFAULT_TIMEOUT = 10000; // 10 seconds - auto-force kicks in if element exists but not actionable
 const POLL_INTERVAL = 100;
 
 // ============================================================================
@@ -926,6 +926,152 @@ export function createElementLocator(session, options = {}) {
     return elements;
   }
 
+  /**
+   * Find an element by its visible text content
+   * Priority order: buttons → links → [role="button"] → any clickable element
+   * @param {string} text - Text to search for
+   * @param {Object} [opts] - Options
+   * @param {boolean} [opts.exact=false] - Require exact text match
+   * @param {string} [opts.tag] - Limit search to specific tag (e.g., 'button', 'a')
+   * @returns {Promise<Object|null>} Element handle or null
+   */
+  async function findElementByText(text, opts = {}) {
+    if (!text || typeof text !== 'string') {
+      throw new Error('Text must be a non-empty string');
+    }
+
+    const { exact = false, tag = null } = opts;
+    const textLower = text.toLowerCase();
+    const textJson = JSON.stringify(text);
+    const textLowerJson = JSON.stringify(textLower);
+
+    // Build the selector priorities based on tag filter
+    let selectorGroups;
+    if (tag) {
+      selectorGroups = [[tag]];
+    } else {
+      // Priority: buttons → links → role buttons → other clickable
+      selectorGroups = [
+        ['button', 'input[type="button"]', 'input[type="submit"]', 'input[type="reset"]'],
+        ['a[href]'],
+        ['[role="button"]'],
+        ['[onclick]', '[tabindex]', 'label', 'summary']
+      ];
+    }
+
+    const expression = `
+      (function() {
+        const text = ${textJson};
+        const textLower = ${textLowerJson};
+        const exact = ${exact};
+        const selectorGroups = ${JSON.stringify(selectorGroups)};
+
+        function getElementText(el) {
+          // Check aria-label first
+          const ariaLabel = el.getAttribute('aria-label');
+          if (ariaLabel) return ariaLabel;
+
+          // For inputs, check value and placeholder
+          if (el.tagName === 'INPUT') {
+            return el.value || el.placeholder || '';
+          }
+
+          // Get visible text content
+          return el.textContent || '';
+        }
+
+        function matchesText(elText) {
+          if (exact) {
+            return elText.trim() === text;
+          }
+          return elText.toLowerCase().includes(textLower);
+        }
+
+        function isVisible(el) {
+          if (!el.isConnected) return false;
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+            return false;
+          }
+          const rect = el.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        }
+
+        // Search in priority order
+        for (const selectors of selectorGroups) {
+          const selectorString = selectors.join(', ');
+          const elements = document.querySelectorAll(selectorString);
+
+          for (const el of elements) {
+            if (!isVisible(el)) continue;
+            const elText = getElementText(el);
+            if (matchesText(elText)) {
+              return el;
+            }
+          }
+        }
+
+        return null;
+      })()
+    `;
+
+    let result;
+    try {
+      result = await session.send('Runtime.evaluate', {
+        expression,
+        returnByValue: false
+      });
+    } catch (error) {
+      throw connectionError(error.message, 'Runtime.evaluate (findElementByText)');
+    }
+
+    if (result.exceptionDetails) {
+      throw new Error(`Text search error: ${result.exceptionDetails.text}`);
+    }
+
+    if (result.result.subtype === 'null' || result.result.type === 'undefined') {
+      return null;
+    }
+
+    return createElementHandle(session, result.result.objectId, { selector: `text:${text}` });
+  }
+
+  /**
+   * Wait for an element with specific text to appear
+   * @param {string} text - Text to search for
+   * @param {Object} [opts] - Options
+   * @param {number} [opts.timeout=30000] - Timeout in ms
+   * @param {boolean} [opts.exact=false] - Require exact match
+   * @param {boolean} [opts.visible=true] - Require element to be visible
+   * @returns {Promise<Object>} Element handle
+   */
+  async function waitForElementByText(text, opts = {}) {
+    const { timeout = defaultTimeout, exact = false, visible = true } = opts;
+    const validatedTimeout = validateTimeout(timeout);
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < validatedTimeout) {
+      const element = await findElementByText(text, { exact });
+
+      if (element) {
+        if (!visible) return element;
+
+        try {
+          const isVis = await element.isVisible();
+          if (isVis) return element;
+        } catch {
+          // Element may have been removed
+        }
+
+        await element.dispose();
+      }
+
+      await sleep(100);
+    }
+
+    throw elementNotFoundError(`text:"${text}"`, validatedTimeout);
+  }
+
   return {
     get session() { return session; },
     querySelector,
@@ -934,6 +1080,8 @@ export function createElementLocator(session, options = {}) {
     waitForSelector,
     waitForText,
     findElement,
+    findElementByText,
+    waitForElementByText,
     getBoundingBox,
     getDefaultTimeout: () => defaultTimeout,
     setDefaultTimeout: (timeout) => { defaultTimeout = validateTimeout(timeout); }
@@ -1343,22 +1491,24 @@ export function createInputEmulator(session) {
  * @returns {Object} Actionability checker interface
  */
 export function createActionabilityChecker(session) {
-  const retryDelays = [0, 20, 100, 100, 500];
-  const stableFrameCount = 3;
+  // Simplified: removed stability check, shorter retry delays
+  const retryDelays = [0, 50, 100, 200];
 
   function getRequiredStates(actionType) {
+    // Removed 'stable' requirement - it caused timeouts on elements with CSS transitions
+    // Zero-size elements are handled separately with JS click fallback
     switch (actionType) {
       case 'click':
-        return ['visible', 'enabled', 'stable'];
+        return ['attached'];  // Just check element exists and is connected
       case 'hover':
-        return ['visible', 'stable'];
+        return ['attached'];
       case 'fill':
       case 'type':
-        return ['visible', 'enabled', 'editable'];
+        return ['attached', 'editable'];
       case 'select':
-        return ['visible', 'enabled'];
+        return ['attached'];
       default:
-        return ['visible'];
+        return ['attached'];
     }
   }
 
@@ -1540,8 +1690,25 @@ export function createActionabilityChecker(session) {
     }
   }
 
+  async function checkAttached(objectId) {
+    try {
+      const result = await session.send('Runtime.callFunctionOn', {
+        objectId,
+        functionDeclaration: `function() {
+          return { matches: this.isConnected, received: this.isConnected ? 'attached' : 'detached' };
+        }`,
+        returnByValue: true
+      });
+      return result.result.value;
+    } catch (error) {
+      return { matches: false, received: 'error', error: error.message };
+    }
+  }
+
   async function checkState(objectId, state) {
     switch (state) {
+      case 'attached':
+        return checkAttached(objectId);
       case 'visible':
         return checkVisible(objectId);
       case 'enabled':
@@ -1566,11 +1733,13 @@ export function createActionabilityChecker(session) {
   }
 
   async function waitForActionable(selector, actionType, opts = {}) {
-    const { timeout = 30000, force = false, autoForce = true } = opts;
+    // Simplified: shorter default timeout (5s), simpler retry logic
+    const { timeout = 5000, force = false } = opts;
     const startTime = Date.now();
 
     const requiredStates = getRequiredStates(actionType);
 
+    // Force mode: just find the element, skip all checks
     if (force) {
       const element = await findElementInternal(selector);
       if (!element.success) {
@@ -1581,7 +1750,6 @@ export function createActionabilityChecker(session) {
 
     let retry = 0;
     let lastError = null;
-    let lastMissingState = null;
     let lastObjectId = null;
 
     while (Date.now() - startTime < timeout) {
@@ -1612,8 +1780,7 @@ export function createActionabilityChecker(session) {
         return { success: true, objectId: element.objectId };
       }
 
-      lastMissingState = stateCheck.missingState;
-      lastError = `Element is not ${stateCheck.missingState}`;
+      lastError = `Element is not ${stateCheck.missingState}: ${stateCheck.received}`;
       retry++;
     }
 
@@ -1621,25 +1788,9 @@ export function createActionabilityChecker(session) {
       await releaseObject(session, lastObjectId);
     }
 
-    // Auto-retry with force:true if element was found but not actionable
-    // This helps with overlays, loading states, etc. that may obscure elements
-    if (autoForce && lastMissingState && lastMissingState !== 'not found') {
-      const element = await findElementInternal(selector);
-      if (element.success) {
-        return {
-          success: true,
-          objectId: element.objectId,
-          forced: true,
-          autoForced: true,
-          originalError: lastError
-        };
-      }
-    }
-
     return {
       success: false,
-      error: lastError || 'Timeout waiting for element to be actionable',
-      missingState: lastMissingState
+      error: lastError || `Element not found: ${selector} (timeout: ${timeout}ms)`
     };
   }
 
@@ -1839,6 +1990,104 @@ export function createActionabilityChecker(session) {
     }
   }
 
+  /**
+   * Scroll incrementally until an element becomes visible (Feature 10)
+   * Useful for lazy-loaded content or infinite scroll pages
+   * @param {string} selector - CSS selector for the element
+   * @param {Object} [options] - Scroll options
+   * @param {number} [options.maxScrolls=10] - Maximum number of scroll attempts
+   * @param {number} [options.scrollAmount=500] - Pixels to scroll each attempt
+   * @param {number} [options.timeout=30000] - Total timeout in ms
+   * @param {string} [options.direction='down'] - Scroll direction ('down' or 'up')
+   * @returns {Promise<{found: boolean, objectId?: string, scrollCount: number}>}
+   */
+  async function scrollUntilVisible(selector, options = {}) {
+    const {
+      maxScrolls = 10,
+      scrollAmount = 500,
+      timeout = 30000,
+      direction = 'down'
+    } = options;
+
+    const startTime = Date.now();
+    let scrollCount = 0;
+
+    while (scrollCount < maxScrolls && (Date.now() - startTime) < timeout) {
+      // Try to find the element
+      const findResult = await findElementInternal(selector);
+
+      if (findResult.success) {
+        // Check if visible
+        const visibleResult = await checkVisible(findResult.objectId);
+        if (visibleResult.matches) {
+          return {
+            found: true,
+            objectId: findResult.objectId,
+            scrollCount,
+            visibleAfterScrolls: scrollCount
+          };
+        }
+
+        // Element exists but not visible, try scrolling it into view
+        try {
+          await session.send('Runtime.callFunctionOn', {
+            objectId: findResult.objectId,
+            functionDeclaration: `function() {
+              this.scrollIntoView({ block: 'center', behavior: 'instant' });
+            }`
+          });
+          await sleep(100);
+
+          // Check visibility again
+          const visibleAfterScroll = await checkVisible(findResult.objectId);
+          if (visibleAfterScroll.matches) {
+            return {
+              found: true,
+              objectId: findResult.objectId,
+              scrollCount,
+              scrolledIntoView: true
+            };
+          }
+        } catch {
+          // Failed to scroll into view, continue with page scrolling
+        }
+
+        // Release the object as we'll search again
+        await releaseObject(session, findResult.objectId);
+      }
+
+      // Scroll the page
+      const scrollDir = direction === 'up' ? -scrollAmount : scrollAmount;
+      await session.send('Runtime.evaluate', {
+        expression: `window.scrollBy(0, ${scrollDir})`
+      });
+
+      scrollCount++;
+      await sleep(200); // Wait for content to load/render
+    }
+
+    // Final attempt to find the element
+    const finalResult = await findElementInternal(selector);
+    if (finalResult.success) {
+      const visibleResult = await checkVisible(finalResult.objectId);
+      if (visibleResult.matches) {
+        return {
+          found: true,
+          objectId: finalResult.objectId,
+          scrollCount,
+          foundOnFinalCheck: true
+        };
+      }
+      await releaseObject(session, finalResult.objectId);
+    }
+
+    return {
+      found: false,
+      scrollCount,
+      reason: scrollCount >= maxScrolls ? 'maxScrollsReached' : 'timeout'
+    };
+  }
+
   return {
     waitForActionable,
     getClickablePoint,
@@ -1849,7 +2098,8 @@ export function createActionabilityChecker(session) {
     checkEnabled,
     checkEditable,
     checkStable,
-    getRequiredStates
+    getRequiredStates,
+    scrollUntilVisible
   };
 }
 
@@ -2101,6 +2351,215 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     return result.result.value;
   }
 
+  /**
+   * Detect content changes after an action using MutationObserver (Feature 6)
+   * @param {Object} [options] - Detection options
+   * @param {number} [options.timeout=5000] - Max wait time in ms
+   * @param {number} [options.stableTime=500] - Time with no changes to consider stable
+   * @param {boolean} [options.checkNavigation=true] - Also check for URL changes
+   * @returns {Promise<Object>} Content change result
+   */
+  async function detectContentChange(options = {}) {
+    const {
+      timeout = 5000,
+      stableTime = 500,
+      checkNavigation = true
+    } = options;
+
+    const urlBefore = checkNavigation ? await getCurrentUrl(session) : null;
+
+    const result = await session.send('Runtime.evaluate', {
+      expression: `
+        (function() {
+          return new Promise((resolve) => {
+            const timeout = ${timeout};
+            const stableTime = ${stableTime};
+            const startTime = Date.now();
+
+            let changeCount = 0;
+            let lastChangeTime = startTime;
+            let stableCheckTimer = null;
+
+            const observer = new MutationObserver((mutations) => {
+              changeCount += mutations.length;
+              lastChangeTime = Date.now();
+
+              // Reset stable timer on each change
+              if (stableCheckTimer) {
+                clearTimeout(stableCheckTimer);
+              }
+
+              stableCheckTimer = setTimeout(() => {
+                cleanup('contentChange');
+              }, stableTime);
+            });
+
+            observer.observe(document.body, {
+              childList: true,
+              subtree: true,
+              attributes: true,
+              characterData: true
+            });
+
+            const timeoutId = setTimeout(() => {
+              cleanup(changeCount > 0 ? 'contentChange' : 'none');
+            }, timeout);
+
+            function cleanup(type) {
+              observer.disconnect();
+              clearTimeout(timeoutId);
+              if (stableCheckTimer) clearTimeout(stableCheckTimer);
+
+              resolve({
+                type,
+                changeCount,
+                duration: Date.now() - startTime
+              });
+            }
+
+            // Initial check: if no changes for stableTime, resolve as 'none'
+            stableCheckTimer = setTimeout(() => {
+              if (changeCount === 0) {
+                cleanup('none');
+              }
+            }, stableTime);
+          });
+        })()
+      `,
+      returnByValue: true,
+      awaitPromise: true
+    });
+
+    const changeResult = result.result.value || { type: 'none', changeCount: 0 };
+
+    // Check for navigation
+    if (checkNavigation) {
+      const urlAfter = await getCurrentUrl(session);
+      if (urlAfter !== urlBefore) {
+        return {
+          type: 'navigation',
+          newUrl: urlAfter,
+          previousUrl: urlBefore,
+          changeCount: changeResult.changeCount,
+          duration: changeResult.duration
+        };
+      }
+    }
+
+    return changeResult;
+  }
+
+  /**
+   * Get information about what element is intercepting a click at given coordinates (Feature 4)
+   * @param {number} x - X coordinate
+   * @param {number} y - Y coordinate
+   * @param {string} [targetObjectId] - Optional object ID of expected target
+   * @returns {Promise<Object|null>} Interceptor info or null if no interception
+   */
+  async function getInterceptorInfo(x, y, targetObjectId = null) {
+    const expression = `
+      (function() {
+        const x = ${x};
+        const y = ${y};
+        const el = document.elementFromPoint(x, y);
+        if (!el) return null;
+
+        function getSelector(element) {
+          if (element.id) return '#' + element.id;
+          let selector = element.tagName.toLowerCase();
+          if (element.className && typeof element.className === 'string') {
+            const classes = element.className.trim().split(/\\s+/).slice(0, 2);
+            if (classes.length > 0 && classes[0]) {
+              selector += '.' + classes.join('.');
+            }
+          }
+          return selector;
+        }
+
+        function getText(element) {
+          const text = element.textContent || '';
+          return text.trim().substring(0, 100);
+        }
+
+        function isOverlay(element) {
+          const style = window.getComputedStyle(element);
+          const position = style.position;
+          const zIndex = parseInt(style.zIndex) || 0;
+          return (position === 'fixed' || position === 'absolute') && zIndex > 0;
+        }
+
+        function getCommonOverlayType(element) {
+          const text = getText(element).toLowerCase();
+          const classes = (element.className || '').toLowerCase();
+          const id = (element.id || '').toLowerCase();
+
+          if (text.includes('cookie') || classes.includes('cookie') || id.includes('cookie')) {
+            return 'cookie-banner';
+          }
+          if (text.includes('accept') || classes.includes('consent') || id.includes('consent')) {
+            return 'consent-dialog';
+          }
+          if (classes.includes('modal') || id.includes('modal') || element.getAttribute('role') === 'dialog') {
+            return 'modal';
+          }
+          if (classes.includes('overlay') || id.includes('overlay')) {
+            return 'overlay';
+          }
+          if (classes.includes('popup') || id.includes('popup')) {
+            return 'popup';
+          }
+          if (classes.includes('toast') || id.includes('toast') || classes.includes('notification')) {
+            return 'notification';
+          }
+          return null;
+        }
+
+        const rect = el.getBoundingClientRect();
+        const overlayType = getCommonOverlayType(el);
+
+        return {
+          selector: getSelector(el),
+          text: getText(el),
+          tagName: el.tagName.toLowerCase(),
+          isOverlay: isOverlay(el),
+          overlayType,
+          rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+        };
+      })()
+    `;
+
+    const result = await session.send('Runtime.evaluate', {
+      expression,
+      returnByValue: true
+    });
+
+    if (result.exceptionDetails || !result.result.value) {
+      return null;
+    }
+
+    const interceptor = result.result.value;
+
+    // If we have a target objectId, check if the interceptor is the same element
+    if (targetObjectId) {
+      const checkResult = await session.send('Runtime.callFunctionOn', {
+        objectId: targetObjectId,
+        functionDeclaration: `function(x, y) {
+          const topEl = document.elementFromPoint(x, y);
+          return topEl === this || this.contains(topEl);
+        }`,
+        arguments: [{ value: x }, { value: y }],
+        returnByValue: true
+      });
+
+      if (checkResult.result.value === true) {
+        // The target element is at the click point, no interception
+        return null;
+      }
+    }
+
+    return interceptor;
+  }
+
   async function executeJsClick(objectId) {
     const result = await session.send('Runtime.callFunctionOn', {
       objectId,
@@ -2178,13 +2637,22 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       returnByValue: true
     });
 
-    return {
-      targetReceived: verifyResult.result.value === true
-    };
+    const targetReceived = verifyResult.result.value === true;
+    const result = { targetReceived };
+
+    // Feature 4: If click didn't reach target, get interceptor info
+    if (!targetReceived) {
+      const interceptor = await getInterceptorInfo(x, y, targetObjectId);
+      if (interceptor) {
+        result.interceptedBy = interceptor;
+      }
+    }
+
+    return result;
   }
 
   async function addNavigationAndDebugInfo(result, urlBeforeClick, debugData, opts) {
-    const { waitForNavigation = false, navigationTimeout = 100, debug = false } = opts;
+    const { waitForNavigation = false, navigationTimeout = 100, debug = false, waitAfter = false, waitAfterOptions = {} } = opts;
 
     if (waitForNavigation) {
       const navResult = await detectNavigation(session, urlBeforeClick, navigationTimeout);
@@ -2192,6 +2660,16 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       if (navResult.newUrl) {
         result.newUrl = navResult.newUrl;
       }
+    }
+
+    // Feature 6: Auto-wait after click
+    if (waitAfter) {
+      const changeResult = await detectContentChange({
+        timeout: waitAfterOptions.timeout || 5000,
+        stableTime: waitAfterOptions.stableTime || 500,
+        checkNavigation: true
+      });
+      result.waitResult = changeResult;
     }
 
     if (debug && debugData) {
@@ -2243,6 +2721,10 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
   async function clickByRef(ref, jsClick = false, opts = {}) {
     const { force = false, debug = false, waitForNavigation, navigationTimeout = 100 } = opts;
 
+    if (!ariaSnapshot) {
+      throw new Error('ariaSnapshot is required for ref-based clicks');
+    }
+
     const refInfo = await ariaSnapshot.getElementByRef(ref);
     if (!refInfo) {
       throw elementNotFoundError(`ref:${ref}`, 0);
@@ -2252,7 +2734,7 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       return {
         clicked: false,
         stale: true,
-        warning: `Element ref:${ref} is no longer attached to the DOM. Page content may have changed.`
+        warning: `Element ref:${ref} is no longer attached to the DOM. Page content may have changed. Run 'snapshot' again to get fresh refs.`
       };
     }
 
@@ -2272,107 +2754,45 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       elementAtPoint = await getElementAtPoint(session, point.x, point.y);
     }
 
-    // For ref-based clicks, we try CDP click first then fallback to JS click
-    // This ensures React components and other frameworks work reliably
+    // Simple approach: do the click and trust it worked
+    // We have exact coordinates from snapshot, so CDP click should hit the target
     let usedMethod = 'cdp';
-    let usedFallback = false;
 
     if (jsClick) {
       // User explicitly requested JS click
       await executeJsClickOnRef(ref);
       usedMethod = 'jsClick';
     } else {
-      // Set up click verification using a global tracker
-      const setupResult = await session.send('Runtime.evaluate', {
-        expression: `
-          (function() {
-            const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
-            if (!el) return { found: false };
-            if (!el.isConnected) return { found: false, stale: true };
-
-            // Set up click verification with a unique key
-            const verifyKey = '__clickVerify_' + ${JSON.stringify(ref)};
-            window[verifyKey] = false;
-            el.__clickVerifyHandler = () => { window[verifyKey] = true; };
-            el.addEventListener('click', el.__clickVerifyHandler, { once: true });
-
-            return { found: true, verifyKey: verifyKey };
-          })()
-        `,
-        returnByValue: true
-      });
-
-      const setupValue = setupResult.result.value;
-      if (!setupValue || !setupValue.found) {
-        if (setupValue && setupValue.stale) {
-          return {
-            clicked: false,
-            stale: true,
-            warning: `Element ref:${ref} is no longer attached to the DOM. Page content may have changed.`
-          };
-        }
-        throw elementNotFoundError(`ref:${ref}`, 0);
-      }
-
-      const verifyKey = setupValue.verifyKey;
-
       // Perform CDP click at coordinates
       await inputEmulator.click(point.x, point.y);
-      await sleep(50);
-
-      // Check if the click was received by the target element
-      const checkResult = await session.send('Runtime.evaluate', {
-        expression: `
-          (function() {
-            const received = window[${JSON.stringify(verifyKey)}] === true;
-            delete window[${JSON.stringify(verifyKey)}];
-
-            // Clean up handler if still attached
-            const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
-            if (el && el.__clickVerifyHandler) {
-              el.removeEventListener('click', el.__clickVerifyHandler);
-              delete el.__clickVerifyHandler;
-            }
-
-            return received;
-          })()
-        `,
-        returnByValue: true
-      });
-
-      const clickReceived = checkResult.result.value === true;
-
-      if (!clickReceived) {
-        // CDP click didn't reach the target, fallback to JS click
-        await executeJsClickOnRef(ref);
-        usedMethod = 'jsClick-fallback';
-        usedFallback = true;
-      }
     }
 
+    // Brief wait for any navigation to start
+    await sleep(50);
+
     // Check for navigation
-    let willNavigate = false;
-    const shouldWaitNav = waitForNavigation || willNavigate;
+    let navigated = false;
+    try {
+      const urlAfterClick = await getCurrentUrl(session);
+      navigated = urlAfterClick !== urlBeforeClick;
+    } catch {
+      // If we can't get URL, page likely navigated
+      navigated = true;
+    }
 
     const result = {
       clicked: true,
       method: usedMethod,
       ref,
-      willNavigate
+      navigated
     };
 
-    if (usedFallback) {
-      result.fallbackReason = 'CDP click did not reach target element';
-    }
-
-    if (shouldWaitNav) {
-      const navResult = await detectNavigation(session, urlBeforeClick, navigationTimeout);
-      result.navigated = navResult.navigated;
-      if (navResult.newUrl) {
-        result.newUrl = navResult.newUrl;
+    if (navigated) {
+      try {
+        result.newUrl = await getCurrentUrl(session);
+      } catch {
+        // Page still navigating
       }
-    } else {
-      result.navigated = false;
     }
 
     if (debug) {
@@ -2386,7 +2806,7 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
   }
 
   async function tryJsClickFallback(selector, opts = {}) {
-    const { urlBeforeClick, waitForNavigation = false, navigationTimeout = 100, debug = false, fallbackReason = 'CDP click failed' } = opts;
+    const { urlBeforeClick, waitForNavigation = false, navigationTimeout = 100, debug = false, waitAfter = false, waitAfterOptions = {}, fallbackReason = 'CDP click failed' } = opts;
 
     const element = await elementLocator.findElement(selector);
     if (!element) {
@@ -2404,7 +2824,7 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
         ...result
       };
 
-      return addNavigationAndDebugInfo(clickResult, urlBeforeClick, null, { waitForNavigation, navigationTimeout, debug });
+      return addNavigationAndDebugInfo(clickResult, urlBeforeClick, null, { waitForNavigation, navigationTimeout, debug, waitAfter, waitAfterOptions });
     } catch (e) {
       await element._handle.dispose();
       throw e;
@@ -2419,7 +2839,9 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       debug = false,
       waitForNavigation = false,
       navigationTimeout = 100,
-      timeout = 30000
+      timeout = 5000,  // Reduced from 30s to 5s for faster failure
+      waitAfter = false,
+      waitAfterOptions = {}
     } = opts;
 
     const urlBeforeClick = await getCurrentUrl(session);
@@ -2430,34 +2852,29 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     });
 
     if (!waitResult.success) {
-      if (!jsClick) {
-        try {
-          return await tryJsClickFallback(selector, {
-            urlBeforeClick,
-            waitForNavigation,
-            navigationTimeout,
-            debug,
-            fallbackReason: waitResult.error
-          });
-        } catch {
-          // JS click also failed
-        }
-      }
-      throw new Error(`Element not actionable: ${waitResult.error}`);
+      throw new Error(waitResult.error || `Element not found: ${selector}`);
     }
 
     const objectId = waitResult.objectId;
 
     try {
+      // User explicitly requested JS click
       if (jsClick) {
         const result = await executeJsClick(objectId);
         const clickResult = { clicked: true, method: 'jsClick', ...result };
-        return addNavigationAndDebugInfo(clickResult, urlBeforeClick, null, { waitForNavigation, navigationTimeout, debug });
+        return addNavigationAndDebugInfo(clickResult, urlBeforeClick, null, { waitForNavigation, navigationTimeout, debug, waitAfter, waitAfterOptions });
       }
 
       const point = await actionabilityChecker.getClickablePoint(objectId);
       if (!point) {
         throw new Error('Could not determine click point for element');
+      }
+
+      // Auto-fallback to JS click for zero-size elements (hidden inputs, etc.)
+      if (point.rect.width === 0 || point.rect.height === 0) {
+        const result = await executeJsClick(objectId);
+        const clickResult = { clicked: true, method: 'jsClick', reason: 'zero-size-element', ...result };
+        return addNavigationAndDebugInfo(clickResult, urlBeforeClick, null, { waitForNavigation, navigationTimeout, debug, waitAfter, waitAfterOptions });
       }
 
       const viewportBox = await getViewportBounds();
@@ -2468,29 +2885,11 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
         elementAtPoint = await getElementAtPoint(session, clippedPoint.x, clippedPoint.y);
       }
 
-      if (verify) {
-        const result = await clickWithVerification(clippedPoint.x, clippedPoint.y, objectId);
-
-        if (!result.targetReceived) {
-          const jsResult = await executeJsClick(objectId);
-
-          const clickResult = {
-            clicked: true,
-            method: 'jsClick-fallback',
-            cdpAttempted: true,
-            targetReceived: jsResult.targetReceived
-          };
-          return addNavigationAndDebugInfo(clickResult, urlBeforeClick, { point: clippedPoint, elementAtPoint }, { waitForNavigation, navigationTimeout, debug });
-        }
-
-        const clickResult = { clicked: true, method: 'cdp', ...result };
-        return addNavigationAndDebugInfo(clickResult, urlBeforeClick, { point: clippedPoint, elementAtPoint }, { waitForNavigation, navigationTimeout, debug });
-      }
-
+      // CDP click at coordinates
       await inputEmulator.click(clippedPoint.x, clippedPoint.y);
 
       const clickResult = { clicked: true, method: 'cdp' };
-      return addNavigationAndDebugInfo(clickResult, urlBeforeClick, { point: clippedPoint, elementAtPoint }, { waitForNavigation, navigationTimeout, debug });
+      return addNavigationAndDebugInfo(clickResult, urlBeforeClick, { point: clippedPoint, elementAtPoint }, { waitForNavigation, navigationTimeout, debug, waitAfter, waitAfterOptions });
 
     } catch (e) {
       if (!jsClick) {
@@ -2500,6 +2899,8 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
             waitForNavigation,
             navigationTimeout,
             debug,
+            waitAfter,
+            waitAfterOptions,
             fallbackReason: e.message
           });
         } catch {
@@ -2512,29 +2913,236 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     }
   }
 
+  /**
+   * Click an element by its visible text content
+   * @param {string} text - Text to find and click
+   * @param {Object} opts - Click options
+   * @returns {Promise<Object>} Click result
+   */
+  async function clickByText(text, opts = {}) {
+    const {
+      exact = false,
+      tag = null,
+      jsClick = false,
+      verify = false,
+      force = false,
+      debug = false,
+      waitForNavigation = false,
+      navigationTimeout = 100,
+      timeout = 30000,
+      waitAfter = false,
+      waitAfterOptions = {}
+    } = opts;
+
+    const urlBeforeClick = await getCurrentUrl(session);
+
+    // Find element by text using the locator
+    const element = await elementLocator.findElementByText(text, { exact, tag });
+    if (!element) {
+      throw elementNotFoundError(`text:"${text}"`, timeout);
+    }
+
+    const objectId = element.objectId;
+
+    try {
+      // Check actionability unless force is true
+      if (!force) {
+        const actionable = await element.isActionable();
+        if (!actionable.actionable) {
+          // Try JS click as fallback
+          if (!jsClick) {
+            try {
+              const result = await executeJsClick(objectId);
+              const clickResult = {
+                clicked: true,
+                method: 'jsClick-fallback',
+                text,
+                fallbackReason: actionable.reason,
+                ...result
+              };
+              return addNavigationAndDebugInfo(clickResult, urlBeforeClick, null, { waitForNavigation, navigationTimeout, debug, waitAfter, waitAfterOptions });
+            } catch {
+              // JS click also failed
+            }
+          }
+          throw new Error(`Element with text "${text}" not actionable: ${actionable.reason}`);
+        }
+      }
+
+      if (jsClick) {
+        const result = await executeJsClick(objectId);
+        const clickResult = { clicked: true, method: 'jsClick', text, ...result };
+        return addNavigationAndDebugInfo(clickResult, urlBeforeClick, null, { waitForNavigation, navigationTimeout, debug, waitAfter, waitAfterOptions });
+      }
+
+      const point = await element.getClickPoint();
+      if (!point) {
+        throw new Error(`Could not determine click point for element with text "${text}"`);
+      }
+
+      let elementAtPoint = null;
+      if (debug) {
+        elementAtPoint = await getElementAtPoint(session, point.x, point.y);
+      }
+
+      if (verify) {
+        const result = await clickWithVerification(point.x, point.y, objectId);
+
+        if (!result.targetReceived) {
+          const jsResult = await executeJsClick(objectId);
+          const clickResult = {
+            clicked: true,
+            method: 'jsClick-fallback',
+            text,
+            cdpAttempted: true,
+            targetReceived: jsResult.targetReceived,
+            interceptedBy: result.interceptedBy
+          };
+          return addNavigationAndDebugInfo(clickResult, urlBeforeClick, { point, elementAtPoint }, { waitForNavigation, navigationTimeout, debug, waitAfter, waitAfterOptions });
+        }
+
+        const clickResult = { clicked: true, method: 'cdp', text, ...result };
+        return addNavigationAndDebugInfo(clickResult, urlBeforeClick, { point, elementAtPoint }, { waitForNavigation, navigationTimeout, debug, waitAfter, waitAfterOptions });
+      }
+
+      await inputEmulator.click(point.x, point.y);
+
+      const clickResult = { clicked: true, method: 'cdp', text };
+      return addNavigationAndDebugInfo(clickResult, urlBeforeClick, { point, elementAtPoint }, { waitForNavigation, navigationTimeout, debug, waitAfter, waitAfterOptions });
+
+    } catch (e) {
+      if (!jsClick) {
+        try {
+          const result = await executeJsClick(objectId);
+          const clickResult = {
+            clicked: true,
+            method: 'jsClick-fallback',
+            text,
+            fallbackReason: e.message,
+            ...result
+          };
+          return addNavigationAndDebugInfo(clickResult, urlBeforeClick, null, { waitForNavigation, navigationTimeout, debug, waitAfter, waitAfterOptions });
+        } catch {
+          // JS click also failed
+        }
+      }
+      throw e;
+    } finally {
+      await element.dispose();
+    }
+  }
+
   async function execute(params) {
     const selector = typeof params === 'string' ? params : params.selector;
-    const ref = typeof params === 'object' ? params.ref : null;
+    let ref = typeof params === 'object' ? params.ref : null;
+    const text = typeof params === 'object' ? params.text : null;
+    const selectors = typeof params === 'object' ? params.selectors : null;
     const jsClick = typeof params === 'object' && params.jsClick === true;
     const verify = typeof params === 'object' && params.verify === true;
     const force = typeof params === 'object' && params.force === true;
     const debug = typeof params === 'object' && params.debug === true;
     const waitForNavigation = typeof params === 'object' && params.waitForNavigation === true;
     const navigationTimeout = typeof params === 'object' ? params.navigationTimeout : undefined;
+    const exact = typeof params === 'object' && params.exact === true;
+    const tag = typeof params === 'object' ? params.tag : null;
+    // Feature 6: Auto-wait after click
+    const waitAfter = typeof params === 'object' && params.waitAfter === true;
+    const waitAfterOptions = typeof params === 'object' ? params.waitAfterOptions : {};
+    // Feature 10: Scroll until visible
+    const scrollUntilVisible = typeof params === 'object' && params.scrollUntilVisible === true;
+    const scrollOptions = typeof params === 'object' ? params.scrollOptions : {};
 
+    // Detect if string selector looks like a ref (e.g., "e1", "e12", "e123")
+    // This allows {"click": "e1"} to work the same as {"click": {"ref": "e1"}}
+    if (!ref && selector && /^e\d+$/.test(selector)) {
+      ref = selector;
+    }
+
+    // Handle coordinate-based click
     if (typeof params === 'object' && typeof params.x === 'number' && typeof params.y === 'number') {
-      return clickAtCoordinates(params.x, params.y, { debug, waitForNavigation, navigationTimeout });
+      return clickAtCoordinates(params.x, params.y, { debug, waitForNavigation, navigationTimeout, waitAfter, waitAfterOptions });
     }
 
+    // Handle click by ref
     if (ref && ariaSnapshot) {
-      return clickByRef(ref, jsClick, { waitForNavigation, navigationTimeout, force, debug });
+      return clickByRef(ref, jsClick, { waitForNavigation, navigationTimeout, force, debug, waitAfter, waitAfterOptions });
     }
 
-    return clickBySelector(selector, { jsClick, verify, force, debug, waitForNavigation, navigationTimeout });
+    // Handle click by visible text (Feature 5)
+    if (text) {
+      return clickByText(text, { exact, tag, jsClick, verify, force, debug, waitForNavigation, navigationTimeout, waitAfter, waitAfterOptions });
+    }
+
+    // Handle multi-selector fallback (Feature 1)
+    if (selectors && Array.isArray(selectors)) {
+      return clickWithMultiSelector(selectors, { jsClick, verify, force, debug, waitForNavigation, navigationTimeout, waitAfter, waitAfterOptions });
+    }
+
+    // Feature 10: If scrollUntilVisible is set, first scroll to find the element
+    if (scrollUntilVisible && selector) {
+      const scrollResult = await actionabilityChecker.scrollUntilVisible(selector, scrollOptions);
+      if (!scrollResult.found) {
+        throw elementNotFoundError(selector, scrollOptions.timeout || 30000);
+      }
+      // Release the objectId from scroll search since clickBySelector will find it again
+      if (scrollResult.objectId) {
+        try {
+          await releaseObject(session, scrollResult.objectId);
+        } catch { /* ignore cleanup errors */ }
+      }
+      // Element found, now proceed with normal click
+      // The scrollUntilVisible already scrolled it into view, so the actionability check should pass
+    }
+
+    return clickBySelector(selector, { jsClick, verify, force, debug, waitForNavigation, navigationTimeout, waitAfter, waitAfterOptions });
+  }
+
+  /**
+   * Click using multiple selectors with fallback (Feature 1)
+   * Tries selectors in order until one succeeds
+   * @param {Array} selectors - Array of selectors to try
+   * @param {Object} opts - Click options
+   * @returns {Promise<Object>} Click result
+   */
+  async function clickWithMultiSelector(selectors, opts = {}) {
+    const errors = [];
+
+    for (const selectorSpec of selectors) {
+      try {
+        // Handle role-based selector objects
+        if (typeof selectorSpec === 'object' && selectorSpec.role) {
+          const { role, name } = selectorSpec;
+          const elements = await elementLocator.queryByRole(role, { name });
+          if (elements.length > 0) {
+            const element = elements[0];
+            const result = await clickBySelector(element.selector || `[role="${role}"]`, opts);
+            result.usedSelector = selectorSpec;
+            result.selectorIndex = selectors.indexOf(selectorSpec);
+            return result;
+          }
+          errors.push({ selector: selectorSpec, error: `No elements found with role="${role}"${name ? ` and name="${name}"` : ''}` });
+          continue;
+        }
+
+        // Handle regular CSS selector
+        const result = await clickBySelector(selectorSpec, opts);
+        result.usedSelector = selectorSpec;
+        result.selectorIndex = selectors.indexOf(selectorSpec);
+        return result;
+      } catch (e) {
+        errors.push({ selector: selectorSpec, error: e.message });
+      }
+    }
+
+    // All selectors failed
+    const errorMessages = errors.map((e, i) => `  ${i + 1}. ${typeof e.selector === 'object' ? JSON.stringify(e.selector) : e.selector}: ${e.error}`).join('\n');
+    throw new Error(`All ${selectors.length} selectors failed:\n${errorMessages}`);
   }
 
   return {
-    execute
+    execute,
+    clickByText,
+    clickWithMultiSelector
   };
 }
 
@@ -2562,13 +3170,17 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
   async function fillByRef(ref, value, opts = {}) {
     const { clear = true, react = false } = opts;
 
+    if (!ariaSnapshot) {
+      throw new Error('ariaSnapshot is required for ref-based fills');
+    }
+
     const refInfo = await ariaSnapshot.getElementByRef(ref);
     if (!refInfo) {
       throw elementNotFoundError(`ref:${ref}`, 0);
     }
 
     if (refInfo.stale) {
-      throw new Error(`Element ref:${ref} is no longer attached to the DOM. Page content may have changed.`);
+      throw new Error(`Element ref:${ref} is no longer attached to the DOM. Page content may have changed. Run 'snapshot' again to get fresh refs.`);
     }
 
     if (refInfo.isVisible === false) {
@@ -2577,7 +3189,7 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
 
     const elementResult = await session.send('Runtime.evaluate', {
       expression: `(function() {
-        const el = window.__ariaRefs && window.__ariaRefs.get('${ref}');
+        const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
         return el;
       })()`,
       returnByValue: false
@@ -2632,7 +3244,7 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
   }
 
   async function fillBySelector(selector, value, opts = {}) {
-    const { clear = true, react = false, force = false, timeout = 30000 } = opts;
+    const { clear = true, react = false, force = false, timeout = 5000 } = opts;  // Reduced from 30s
 
     const waitResult = await actionabilityChecker.waitForActionable(selector, 'fill', {
       timeout,
@@ -2681,19 +3293,261 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
     }
   }
 
+  /**
+   * Find an input element by its associated label text (Feature 9)
+   * Search order: label[for] → nested input in label → aria-label → placeholder
+   * @param {string} labelText - Label text to search for
+   * @param {Object} [opts] - Options
+   * @param {boolean} [opts.exact=false] - Require exact match
+   * @returns {Promise<{objectId: string, method: string}|null>} Element info or null
+   */
+  async function findInputByLabel(labelText, opts = {}) {
+    const { exact = false } = opts;
+    const labelTextJson = JSON.stringify(labelText);
+    const labelTextLowerJson = JSON.stringify(labelText.toLowerCase());
+
+    const expression = `
+      (function() {
+        const labelText = ${labelTextJson};
+        const labelTextLower = ${labelTextLowerJson};
+        const exact = ${exact};
+
+        function matchesText(text) {
+          if (!text) return false;
+          if (exact) {
+            return text.trim() === labelText;
+          }
+          return text.toLowerCase().includes(labelTextLower);
+        }
+
+        function isEditable(el) {
+          if (!el || !el.isConnected) return false;
+          const tag = el.tagName.toLowerCase();
+          if (tag === 'textarea') return true;
+          if (tag === 'select') return true;
+          if (el.isContentEditable) return true;
+          if (tag === 'input') {
+            const type = (el.type || 'text').toLowerCase();
+            const editableTypes = ['text', 'password', 'email', 'number', 'search', 'tel', 'url', 'date', 'datetime-local', 'month', 'time', 'week'];
+            return editableTypes.includes(type);
+          }
+          return false;
+        }
+
+        function isVisible(el) {
+          if (!el.isConnected) return false;
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden') return false;
+          const rect = el.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        }
+
+        // 1. Search label[for] pointing to an input
+        const labels = document.querySelectorAll('label[for]');
+        for (const label of labels) {
+          if (matchesText(label.textContent)) {
+            const input = document.getElementById(label.getAttribute('for'));
+            if (input && isEditable(input) && isVisible(input)) {
+              return { element: input, method: 'label-for' };
+            }
+          }
+        }
+
+        // 2. Search for nested input inside label
+        const allLabels = document.querySelectorAll('label');
+        for (const label of allLabels) {
+          if (matchesText(label.textContent)) {
+            const input = label.querySelector('input, textarea, select');
+            if (input && isEditable(input) && isVisible(input)) {
+              return { element: input, method: 'label-nested' };
+            }
+          }
+        }
+
+        // 3. Search by aria-label attribute
+        const ariaElements = document.querySelectorAll('[aria-label]');
+        for (const el of ariaElements) {
+          if (matchesText(el.getAttribute('aria-label'))) {
+            if (isEditable(el) && isVisible(el)) {
+              return { element: el, method: 'aria-label' };
+            }
+          }
+        }
+
+        // 4. Search by aria-labelledby
+        const ariaLabelledByElements = document.querySelectorAll('[aria-labelledby]');
+        for (const el of ariaLabelledByElements) {
+          const labelId = el.getAttribute('aria-labelledby');
+          const labelEl = document.getElementById(labelId);
+          if (labelEl && matchesText(labelEl.textContent)) {
+            if (isEditable(el) && isVisible(el)) {
+              return { element: el, method: 'aria-labelledby' };
+            }
+          }
+        }
+
+        // 5. Search by placeholder attribute
+        const placeholderElements = document.querySelectorAll('[placeholder]');
+        for (const el of placeholderElements) {
+          if (matchesText(el.getAttribute('placeholder'))) {
+            if (isEditable(el) && isVisible(el)) {
+              return { element: el, method: 'placeholder' };
+            }
+          }
+        }
+
+        return null;
+      })()
+    `;
+
+    let result;
+    try {
+      result = await session.send('Runtime.evaluate', {
+        expression,
+        returnByValue: false
+      });
+    } catch (error) {
+      throw connectionError(error.message, 'Runtime.evaluate (findInputByLabel)');
+    }
+
+    if (result.exceptionDetails) {
+      throw new Error(`Label search error: ${result.exceptionDetails.text}`);
+    }
+
+    if (result.result.subtype === 'null' || result.result.type === 'undefined') {
+      return null;
+    }
+
+    // The result is an object with element and method
+    // We need to get the element's objectId
+    const objId = result.result.objectId;
+    const propsResult = await session.send('Runtime.getProperties', {
+      objectId: objId,
+      ownProperties: true
+    });
+
+    let elementObjectId = null;
+    let method = null;
+
+    for (const prop of propsResult.result) {
+      if (prop.name === 'element' && prop.value && prop.value.objectId) {
+        elementObjectId = prop.value.objectId;
+      }
+      if (prop.name === 'method' && prop.value) {
+        method = prop.value.value;
+      }
+    }
+
+    // Release the wrapper object
+    await releaseObject(session, objId);
+
+    if (!elementObjectId) {
+      return null;
+    }
+
+    return { objectId: elementObjectId, method };
+  }
+
+  /**
+   * Fill an input field by its label text (Feature 9)
+   * @param {string} label - Label text to find
+   * @param {*} value - Value to fill
+   * @param {Object} [opts] - Options
+   * @returns {Promise<Object>} Fill result
+   */
+  async function fillByLabel(label, value, opts = {}) {
+    const { clear = true, react = false, exact = false } = opts;
+
+    const inputInfo = await findInputByLabel(label, { exact });
+    if (!inputInfo) {
+      throw elementNotFoundError(`label:"${label}"`, 0);
+    }
+
+    const { objectId, method: foundMethod } = inputInfo;
+
+    const editableCheck = await elementValidator.isEditable(objectId);
+    if (!editableCheck.editable) {
+      await releaseObject(session, objectId);
+      throw elementNotEditableError(`label:"${label}"`, editableCheck.reason);
+    }
+
+    try {
+      if (react) {
+        await reactInputFiller.fillByObjectId(objectId, value);
+        return { filled: true, label, method: 'react', foundBy: foundMethod };
+      }
+
+      // Scroll into view
+      await session.send('Runtime.callFunctionOn', {
+        objectId,
+        functionDeclaration: `function() {
+          this.scrollIntoView({ block: 'center', behavior: 'instant' });
+        }`
+      });
+
+      await sleep(100);
+
+      // Get element bounds for clicking
+      const boxResult = await session.send('Runtime.callFunctionOn', {
+        objectId,
+        functionDeclaration: `function() {
+          const rect = this.getBoundingClientRect();
+          return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+        }`,
+        returnByValue: true
+      });
+
+      const box = boxResult.result.value;
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      await inputEmulator.click(x, y);
+
+      // Focus the element
+      await session.send('Runtime.callFunctionOn', {
+        objectId,
+        functionDeclaration: `function() { this.focus(); }`
+      });
+
+      if (clear) {
+        await inputEmulator.selectAll();
+      }
+
+      await inputEmulator.type(String(value));
+
+      return { filled: true, label, method: 'keyboard', foundBy: foundMethod };
+    } catch (e) {
+      await resetInputState(session);
+      throw e;
+    } finally {
+      await releaseObject(session, objectId);
+    }
+  }
+
   async function execute(params) {
-    const { selector, ref, value, clear = true, react = false } = params;
+    let { selector, ref, label, value, clear = true, react = false, exact = false } = params;
 
     if (value === undefined) {
       throw new Error('Fill requires value');
     }
 
+    // Detect if selector looks like a ref (e.g., "e1", "e12", "e123")
+    // This allows {"fill": {"selector": "e1", "value": "..."}} to work like {"fill": {"ref": "e1", "value": "..."}}
+    if (!ref && selector && /^e\d+$/.test(selector)) {
+      ref = selector;
+    }
+
+    // Handle fill by ref
     if (ref && ariaSnapshot) {
       return fillByRef(ref, value, { clear, react });
     }
 
+    // Handle fill by label (Feature 9)
+    if (label) {
+      return fillByLabel(label, value, { clear, react, exact });
+    }
+
     if (!selector) {
-      throw new Error('Fill requires selector or ref');
+      throw new Error('Fill requires selector, ref, or label');
     }
 
     return fillBySelector(selector, value, { clear, react });

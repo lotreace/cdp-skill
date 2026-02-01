@@ -1,25 +1,31 @@
-# Test 3: GitHub Trending with Viewport
+# Test 3: GitHub Trending Navigation
 
 ## Objective
-Test viewport/device emulation while browsing GitHub trending repositories.
+Test navigation and data extraction on GitHub trending repositories.
 
 ## Steps
 
-1. Set viewport to mobile dimensions (375x667, mobile: true)
-2. Navigate to https://github.com/trending
-3. Take a screenshot to verify mobile layout
-4. Query for repository names/links
-5. Change viewport to desktop (1920x1080)
-6. Take another screenshot to compare layouts
-7. Query again and compare results
+1. Navigate to https://github.com/trending
+2. Wait for the repository list to load
+3. Use snapshot to get the accessibility tree
+4. Query for repository links (use CSS selector `h2 a` or role-based query)
+5. Extract the first 5 repository names
+6. Click on the first repository to navigate to it
+7. Verify navigation occurred (URL should contain the repo name)
+8. Use inspect to get page overview
+9. Go back to trending page
+10. Verify we're back on trending
 
 ## Expected Results
-- Viewport changes should affect page rendering
-- Mobile layout should differ from desktop
-- Query results should work in both viewports
-- Screenshots should show different layouts
+- Repository list should load and be queryable
+- Navigation to repo page should work
+- Back navigation should return to trending
+- All data extraction methods should return results
 
-## Feature Requests to Note
-- FR-026: Device presets like `{"viewport": "iphone-14"}`
-- FR-027: Viewport info should be included in tab output
-- FR-016: Query text cleanup option to trim whitespace
+## Features Being Tested
+- Navigation (goto, back)
+- Waiting for content
+- Accessibility snapshots
+- CSS and role-based queries
+- Click navigation
+- Page inspection

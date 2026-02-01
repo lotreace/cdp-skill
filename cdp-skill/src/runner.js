@@ -28,15 +28,222 @@ import {
 } from './aria.js';
 
 import {
-  createEvalSerializer,
-  createDebugCapture
+  createEvalSerializer
 } from './capture.js';
 
-import { sleep, resetInputState, releaseObject, resolveTempPath, generateTempPath } from './utils.js';
+import {
+  createSnapshotDiffer,
+  createContextCapture
+} from './diff.js';
+
+import { sleep, resetInputState, releaseObject, resolveTempPath, generateTempPath, getCurrentUrl } from './utils.js';
+import fs from 'fs/promises';
 
 const keyValidator = createKeyValidator();
 
-const STEP_TYPES = ['goto', 'wait', 'delay', 'click', 'fill', 'fillForm', 'press', 'screenshot', 'query', 'queryAll', 'inspect', 'scroll', 'console', 'pdf', 'eval', 'snapshot', 'hover', 'viewport', 'cookies', 'back', 'forward', 'waitForNavigation', 'listTabs', 'closeTab', 'type', 'select', 'validate', 'submit', 'assert', 'switchToFrame', 'switchToMainFrame', 'listFrames', 'drag'];
+const STEP_TYPES = ['goto', 'wait', 'click', 'fill', 'fillForm', 'press', 'query', 'queryAll', 'inspect', 'scroll', 'console', 'pdf', 'eval', 'snapshot', 'hover', 'viewport', 'cookies', 'back', 'forward', 'waitForNavigation', 'listTabs', 'closeTab', 'openTab', 'type', 'select', 'selectOption', 'validate', 'submit', 'assert', 'switchToFrame', 'switchToMainFrame', 'listFrames', 'drag', 'formState', 'extract', 'getDom', 'getBox', 'fillActive', 'refAt', 'elementsAt', 'elementsNear'];
+
+// Feature 7: Visual actions that trigger auto-screenshot
+// Actions that should capture a screenshot - anything that interacts with or queries the visible page
+const VISUAL_ACTIONS = [
+  'goto', 'click', 'fill', 'fillForm', 'type', 'hover', 'press', 'scroll', 'wait',  // interactions
+  'snapshot', 'query', 'queryAll', 'inspect', 'eval', 'extract', 'formState',  // queries
+  'drag', 'select', 'selectOption', 'validate', 'submit', 'assert',  // other page interactions
+  'openTab'  // navigation actions - behave like goto for auto-snapshot
+];
+
+/**
+ * Build action context string for diff summary (Feature 8.1)
+ * Creates a human-readable description of what action was taken
+ * @param {string} action - Action type (click, scroll, etc.)
+ * @param {*} params - Action parameters
+ * @param {Object} context - Page context (scroll, focused, etc.)
+ * @returns {string} Action context description
+ */
+function buildActionContext(action, params, context) {
+  switch (action) {
+    case 'scroll': {
+      const { scroll } = context || {};
+      if (scroll?.percent === 100) return 'Scrolled to bottom';
+      if (scroll?.percent === 0) return 'Scrolled to top';
+      if (scroll?.percent > 0) return `Scrolled to ${scroll.percent}%`;
+      return 'Scrolled';
+    }
+    case 'click': {
+      // Try to describe what was clicked
+      if (typeof params === 'string') return `Clicked ${params}`;
+      if (params?.selector) return `Clicked ${params.selector}`;
+      if (params?.ref) return `Clicked [ref=${params.ref}]`;
+      if (params?.text) return `Clicked "${params.text}"`;
+      return 'Clicked element';
+    }
+    case 'hover': {
+      if (typeof params === 'string') return `Hovered over ${params}`;
+      if (params?.selector) return `Hovered over ${params.selector}`;
+      return 'Hovered over element';
+    }
+    case 'fill':
+    case 'type': {
+      if (params?.selector) return `Typed in ${params.selector}`;
+      if (params?.label) return `Typed in "${params.label}"`;
+      return 'Typed in input';
+    }
+    case 'press': {
+      return `Pressed ${params || 'key'}`;
+    }
+    default:
+      return '';
+  }
+}
+
+/**
+ * Build command context string for diff summary (Feature 8.1)
+ * Summarizes what a multi-step command did for the diff output
+ * @param {Array<Object>} steps - Array of step definitions
+ * @returns {string} Human-readable summary of the command
+ */
+function buildCommandContext(steps) {
+  const actions = steps.map(step => {
+    const action = STEP_TYPES.find(type => step[type] !== undefined);
+    return action;
+  }).filter(Boolean);
+
+  // Return a summary based on the primary action(s)
+  if (actions.includes('scroll')) return 'Scrolled';
+  if (actions.includes('click')) return 'Clicked';
+  if (actions.includes('hover')) return 'Hovered';
+  if (actions.includes('fill') || actions.includes('type')) return 'Typed';
+  if (actions.includes('press')) return 'Pressed key';
+  if (actions.includes('goto') || actions.includes('openTab')) return 'Navigated';
+  if (actions.includes('select')) return 'Selected';
+  if (actions.includes('drag')) return 'Dragged';
+
+  // Default: list the actions
+  if (actions.length === 1) {
+    return actions[0].charAt(0).toUpperCase() + actions[0].slice(1);
+  }
+  return '';
+}
+
+/**
+ * Capture failure context for debugging (Feature 8)
+ * Gathers page info when a step fails to aid debugging
+ * @param {Object} deps - Dependencies (pageController, etc.)
+ * @returns {Promise<Object>} Context information
+ */
+async function captureFailureContext(deps) {
+  const { pageController } = deps;
+  const context = {};
+
+  try {
+    // Get page title
+    const titleResult = await pageController.session.send('Runtime.evaluate', {
+      expression: 'document.title',
+      returnByValue: true
+    });
+    context.title = titleResult.result.value || '';
+  } catch {
+    context.title = null;
+  }
+
+  try {
+    // Get current URL
+    const urlResult = await pageController.session.send('Runtime.evaluate', {
+      expression: 'window.location.href',
+      returnByValue: true
+    });
+    context.url = urlResult.result.value || '';
+  } catch {
+    context.url = null;
+  }
+
+  try {
+    // Get visible buttons (limit 5)
+    const buttonsResult = await pageController.session.send('Runtime.evaluate', {
+      expression: `
+        (function() {
+          const buttons = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"], [role="button"]'));
+          return buttons
+            .filter(b => {
+              const rect = b.getBoundingClientRect();
+              const style = window.getComputedStyle(b);
+              return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+            })
+            .slice(0, 5)
+            .map(b => ({
+              text: (b.textContent || b.value || '').trim().substring(0, 50),
+              selector: b.id ? '#' + b.id : (b.className ? b.tagName.toLowerCase() + '.' + b.className.split(' ')[0] : b.tagName.toLowerCase())
+            }));
+        })()
+      `,
+      returnByValue: true
+    });
+    context.visibleButtons = buttonsResult.result.value || [];
+  } catch {
+    context.visibleButtons = [];
+  }
+
+  try {
+    // Get visible links (limit 5)
+    const linksResult = await pageController.session.send('Runtime.evaluate', {
+      expression: `
+        (function() {
+          const links = Array.from(document.querySelectorAll('a[href]'));
+          return links
+            .filter(a => {
+              const rect = a.getBoundingClientRect();
+              const style = window.getComputedStyle(a);
+              return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+            })
+            .slice(0, 5)
+            .map(a => ({
+              text: (a.textContent || '').trim().substring(0, 50),
+              href: a.href ? a.href.substring(0, 100) : ''
+            }));
+        })()
+      `,
+      returnByValue: true
+    });
+    context.visibleLinks = linksResult.result.value || [];
+  } catch {
+    context.visibleLinks = [];
+  }
+
+  try {
+    // Get any visible error messages or alerts
+    const errorsResult = await pageController.session.send('Runtime.evaluate', {
+      expression: `
+        (function() {
+          const errorSelectors = [
+            '.error', '.alert', '.warning', '.message',
+            '[role="alert"]', '[role="status"]',
+            '.toast', '.notification'
+          ];
+          const errors = [];
+          for (const sel of errorSelectors) {
+            const els = document.querySelectorAll(sel);
+            for (const el of els) {
+              const rect = el.getBoundingClientRect();
+              const style = window.getComputedStyle(el);
+              if (rect.width > 0 && rect.height > 0 && style.display !== 'none') {
+                const text = (el.textContent || '').trim().substring(0, 100);
+                if (text) errors.push(text);
+              }
+            }
+            if (errors.length >= 3) break;
+          }
+          return errors.slice(0, 3);
+        })()
+      `,
+      returnByValue: true
+    });
+    context.visibleErrors = errorsResult.result.value || [];
+  } catch {
+    context.visibleErrors = [];
+  }
+
+  return context;
+}
 
 /**
  * Validate a single step definition
@@ -121,13 +328,6 @@ function validateStepInternal(step) {
       }
       break;
 
-    case 'delay':
-      // Simple delay step: { "delay": 2000 }
-      if (typeof params !== 'number' || params < 0) {
-        errors.push('delay requires a non-negative number (milliseconds)');
-      }
-      break;
-
     case 'click':
       if (typeof params === 'string') {
         if (params.length === 0) {
@@ -136,12 +336,20 @@ function validateStepInternal(step) {
       } else if (params && typeof params === 'object') {
         // Check for coordinate-based click (FR-064)
         const hasCoordinates = typeof params.x === 'number' && typeof params.y === 'number';
-        if (!params.selector && !params.ref && !hasCoordinates) {
-          errors.push('click requires selector, ref, or x/y coordinates');
+        // Check for text-based click (Feature 5)
+        const hasText = typeof params.text === 'string';
+        // Check for multi-selector fallback (Feature 1)
+        const hasSelectors = Array.isArray(params.selectors);
+        if (!params.selector && !params.ref && !hasCoordinates && !hasText && !hasSelectors) {
+          errors.push('click requires selector, ref, text, selectors array, or x/y coordinates');
         } else if (params.selector && typeof params.selector !== 'string') {
           errors.push('click selector must be a string');
         } else if (params.ref && typeof params.ref !== 'string') {
           errors.push('click ref must be a string');
+        } else if (hasText && params.text.length === 0) {
+          errors.push('click text cannot be empty');
+        } else if (hasSelectors && params.selectors.length === 0) {
+          errors.push('click selectors array cannot be empty');
         } else if (hasCoordinates) {
           if (params.x < 0 || params.y < 0) {
             errors.push('click coordinates must be non-negative');
@@ -154,14 +362,16 @@ function validateStepInternal(step) {
 
     case 'fill':
       if (!params || typeof params !== 'object') {
-        errors.push('fill requires an object with selector/ref and value');
+        errors.push('fill requires an object with selector/ref/label and value');
       } else {
-        if (!params.selector && !params.ref) {
-          errors.push('fill requires selector or ref');
+        if (!params.selector && !params.ref && !params.label) {
+          errors.push('fill requires selector, ref, or label');
         } else if (params.selector && typeof params.selector !== 'string') {
           errors.push('fill selector must be a string');
         } else if (params.ref && typeof params.ref !== 'string') {
           errors.push('fill ref must be a string');
+        } else if (params.label && typeof params.label !== 'string') {
+          errors.push('fill label must be a string');
         }
         if (params.value === undefined) {
           errors.push('fill requires value');
@@ -196,22 +406,6 @@ function validateStepInternal(step) {
     case 'press':
       if (typeof params !== 'string' || params.length === 0) {
         errors.push('press requires a non-empty key string');
-      }
-      break;
-
-    case 'screenshot':
-      if (typeof params === 'string') {
-        if (params.length === 0) {
-          errors.push('screenshot path cannot be empty');
-        }
-      } else if (params && typeof params === 'object') {
-        if (!params.path) {
-          errors.push('screenshot requires path');
-        } else if (typeof params.path !== 'string') {
-          errors.push('screenshot path must be a string');
-        }
-      } else {
-        errors.push('screenshot requires a path string or params object');
       }
       break;
 
@@ -385,6 +579,19 @@ function validateStepInternal(step) {
       }
       break;
 
+    case 'openTab':
+      // openTab can be:
+      // - true: just open a blank tab
+      // - string: open tab and navigate to URL
+      // - object with options: {url: "...", viewport: {...}}
+      if (params !== true && typeof params !== 'string' && (typeof params !== 'object' || params === null)) {
+        errors.push('openTab must be true, a URL string, or an options object');
+      }
+      if (typeof params === 'object' && params !== null && params.url !== undefined && typeof params.url !== 'string') {
+        errors.push('openTab url must be a string');
+      }
+      break;
+
     case 'type':
       if (!params || typeof params !== 'object') {
         errors.push('type requires an object with selector and text');
@@ -512,6 +719,131 @@ function validateStepInternal(step) {
         }
       }
       break;
+
+    case 'formState':
+      if (typeof params !== 'string' && (!params || !params.selector)) {
+        errors.push('formState requires a selector string or object with selector');
+      }
+      break;
+
+    case 'extract':
+      if (typeof params !== 'string' && (!params || !params.selector)) {
+        errors.push('extract requires a selector string or object with selector');
+      }
+      break;
+
+    case 'selectOption':
+      // selectOption: {"selector": "#dropdown", "value": "optionValue"}
+      // or: {"selector": "#dropdown", "label": "Option Text"}
+      // or: {"selector": "#dropdown", "index": 2}
+      if (!params || typeof params !== 'object') {
+        errors.push('selectOption requires an object with selector and value/label/index');
+      } else {
+        if (!params.selector) {
+          errors.push('selectOption requires selector');
+        }
+        if (params.value === undefined && params.label === undefined && params.index === undefined && !params.values) {
+          errors.push('selectOption requires value, label, index, or values');
+        }
+      }
+      break;
+
+    case 'getDom':
+      // getDom: true (full page) or selector string or object with selector
+      if (params !== true && typeof params !== 'string' && (typeof params !== 'object' || params === null)) {
+        errors.push('getDom requires true, a selector string, or an options object');
+      }
+      if (typeof params === 'object' && params !== null && params.selector && typeof params.selector !== 'string') {
+        errors.push('getDom selector must be a string');
+      }
+      break;
+
+    case 'getBox':
+      // getBox: "e1" or ["e1", "e2"] or {"refs": ["e1", "e2"]}
+      if (typeof params === 'string') {
+        if (!/^e\d+$/.test(params)) {
+          errors.push('getBox ref must be in format "eN" (e.g., "e1", "e12")');
+        }
+      } else if (Array.isArray(params)) {
+        if (params.length === 0) {
+          errors.push('getBox refs array cannot be empty');
+        }
+        for (const ref of params) {
+          if (typeof ref !== 'string' || !/^e\d+$/.test(ref)) {
+            errors.push('getBox refs must be strings in format "eN"');
+            break;
+          }
+        }
+      } else if (typeof params === 'object' && params !== null) {
+        if (!params.refs && !params.ref) {
+          errors.push('getBox requires ref or refs');
+        }
+      } else {
+        errors.push('getBox requires a ref string, array of refs, or options object');
+      }
+      break;
+
+    case 'fillActive':
+      // fillActive: "text" or {"value": "text", "clear": true}
+      if (typeof params === 'string') {
+        // Simple string value is fine
+      } else if (typeof params === 'object' && params !== null) {
+        if (params.value === undefined) {
+          errors.push('fillActive requires value');
+        }
+      } else {
+        errors.push('fillActive requires a string value or options object with value');
+      }
+      break;
+
+    case 'refAt':
+      // refAt: {"x": 100, "y": 200}
+      if (!params || typeof params !== 'object') {
+        errors.push('refAt requires an object with x and y coordinates');
+      } else {
+        if (typeof params.x !== 'number') {
+          errors.push('refAt requires x coordinate as a number');
+        }
+        if (typeof params.y !== 'number') {
+          errors.push('refAt requires y coordinate as a number');
+        }
+      }
+      break;
+
+    case 'elementsAt':
+      // elementsAt: [{"x": 100, "y": 200}, {"x": 300, "y": 400}]
+      if (!Array.isArray(params)) {
+        errors.push('elementsAt requires an array of {x, y} coordinates');
+      } else if (params.length === 0) {
+        errors.push('elementsAt array cannot be empty');
+      } else {
+        for (let i = 0; i < params.length; i++) {
+          const coord = params[i];
+          if (!coord || typeof coord !== 'object') {
+            errors.push(`elementsAt[${i}] must be an object with x and y`);
+          } else if (typeof coord.x !== 'number' || typeof coord.y !== 'number') {
+            errors.push(`elementsAt[${i}] requires x and y as numbers`);
+          }
+        }
+      }
+      break;
+
+    case 'elementsNear':
+      // elementsNear: {"x": 100, "y": 200, "radius": 50}
+      if (!params || typeof params !== 'object') {
+        errors.push('elementsNear requires an object with x, y, and optional radius');
+      } else {
+        if (typeof params.x !== 'number') {
+          errors.push('elementsNear requires x coordinate as a number');
+        }
+        if (typeof params.y !== 'number') {
+          errors.push('elementsNear requires y coordinate as a number');
+        }
+        if (params.radius !== undefined && typeof params.radius !== 'number') {
+          errors.push('elementsNear radius must be a number');
+        }
+      }
+      break;
   }
 
   return errors;
@@ -548,25 +880,14 @@ export function validateSteps(steps) {
  * @returns {Promise<Object>}
  */
 export async function executeStep(deps, step, options = {}) {
-  const { pageController, elementLocator, inputEmulator, screenshotCapture } = deps;
-  const startTime = Date.now();
+  const { pageController, elementLocator, inputEmulator } = deps;
   const stepTimeout = options.stepTimeout || 30000;
   const isOptional = step.optional === true;
-  const debugMode = options.debug || false;
-  const debugCapture = debugMode && screenshotCapture
-    ? createDebugCapture(pageController.session, screenshotCapture, options.debugOptions || {})
-    : null;
 
+  // Start with minimal result - only add fields when needed
   const stepResult = {
     action: null,
-    params: null,
-    status: 'passed',
-    duration: 0,
-    error: null,
-    warning: null,
-    screenshot: null,
-    output: null,
-    debug: null
+    status: 'ok'
   };
 
   async function executeStepInternal() {
@@ -581,16 +902,9 @@ export async function executeStep(deps, step, options = {}) {
 
     if (step.goto !== undefined) {
       stepResult.action = 'goto';
-      stepResult.params = { url: step.goto };
       await pageController.navigate(step.goto);
-    } else if (step.delay !== undefined) {
-      // Simple delay step: { "delay": 2000 }
-      stepResult.action = 'delay';
-      stepResult.params = { ms: step.delay };
-      await sleep(step.delay);
     } else if (step.wait !== undefined) {
       stepResult.action = 'wait';
-      stepResult.params = step.wait;
       // Support numeric value for simple delay: { "wait": 2000 }
       if (typeof step.wait === 'number') {
         await sleep(step.wait);
@@ -599,59 +913,40 @@ export async function executeStep(deps, step, options = {}) {
       }
     } else if (step.click !== undefined) {
       stepResult.action = 'click';
-      stepResult.params = step.click;
       const clickResult = await executeClick(elementLocator, inputEmulator, deps.ariaSnapshot, step.click);
       if (clickResult) {
-        // Build output object with all relevant info
-        const output = { clicked: clickResult.clicked };
-
-        // Handle stale ref warning
+        // Only include output for non-trivial results
         if (clickResult.stale || clickResult.warning) {
           stepResult.warning = clickResult.warning;
-          output.stale = clickResult.stale;
+          stepResult.output = { stale: clickResult.stale };
         }
-
-        // Handle verify mode
-        if (typeof step.click === 'object' && step.click.verify) {
-          output.targetReceived = clickResult.targetReceived;
-          if (!clickResult.targetReceived) {
-            stepResult.warning = 'Click may have hit a different element';
-          }
-        }
-
         // Add navigation info (FR-008)
-        if (clickResult.navigated !== undefined) {
-          output.navigated = clickResult.navigated;
-          if (clickResult.newUrl) {
-            output.newUrl = clickResult.newUrl;
-          }
+        if (clickResult.navigated) {
+          stepResult.output = { navigated: true, newUrl: clickResult.newUrl };
         }
-
-        // Add debug info (FR-005)
-        if (clickResult.debug) {
-          output.debug = clickResult.debug;
+        // Add verify mode result
+        if (typeof step.click === 'object' && step.click.verify && !clickResult.targetReceived) {
+          stepResult.warning = 'Click may have hit a different element';
         }
-
-        // Add coordinates for coordinate-based clicks (FR-064)
-        if (clickResult.coordinates) {
-          output.coordinates = clickResult.coordinates;
-        }
-
-        stepResult.output = output;
       }
     } else if (step.fill !== undefined) {
       stepResult.action = 'fill';
-      stepResult.params = step.fill;
       const fillExecutor = createFillExecutor(
         elementLocator.session,
         elementLocator,
         inputEmulator,
         deps.ariaSnapshot
       );
+      // Capture URL before fill for navigation detection
+      const urlBeforeFill = await getCurrentUrl(elementLocator.session);
       await fillExecutor.execute(step.fill);
+      // Check for navigation after fill (some SPAs navigate on input)
+      const urlAfterFill = await getCurrentUrl(elementLocator.session);
+      if (urlAfterFill !== urlBeforeFill) {
+        stepResult.output = { navigated: true, newUrl: urlAfterFill };
+      }
     } else if (step.fillForm !== undefined) {
       stepResult.action = 'fillForm';
-      stepResult.params = step.fillForm;
       const fillExecutor = createFillExecutor(
         elementLocator.session,
         elementLocator,
@@ -661,7 +956,6 @@ export async function executeStep(deps, step, options = {}) {
       stepResult.output = await fillExecutor.executeBatch(step.fillForm);
     } else if (step.press !== undefined) {
       stepResult.action = 'press';
-      stepResult.params = { key: step.press };
       // Validate key name and set warning if unknown
       const keyValidation = keyValidator.validate(step.press);
       if (keyValidation.warning) {
@@ -673,90 +967,85 @@ export async function executeStep(deps, step, options = {}) {
       } else {
         await inputEmulator.press(step.press);
       }
-    } else if (step.screenshot !== undefined) {
-      stepResult.action = 'screenshot';
-      stepResult.params = step.screenshot;
-      const screenshotResult = await executeScreenshot(screenshotCapture, elementLocator, step.screenshot);
-      stepResult.screenshot = screenshotResult.path;
-      stepResult.output = screenshotResult;
     } else if (step.query !== undefined) {
       stepResult.action = 'query';
-      stepResult.params = step.query;
       stepResult.output = await executeQuery(elementLocator, step.query);
     } else if (step.inspect !== undefined) {
       stepResult.action = 'inspect';
-      stepResult.params = step.inspect;
       stepResult.output = await executeInspect(pageController, elementLocator, step.inspect);
     } else if (step.scroll !== undefined) {
       stepResult.action = 'scroll';
-      stepResult.params = step.scroll;
-      stepResult.output = await executeScroll(elementLocator, inputEmulator, pageController, step.scroll);
+      stepResult.output = await executeScroll(elementLocator, inputEmulator, pageController, deps.ariaSnapshot, step.scroll);
     } else if (step.console !== undefined) {
       stepResult.action = 'console';
-      stepResult.params = step.console;
       stepResult.output = await executeConsole(deps.consoleCapture, step.console);
     } else if (step.pdf !== undefined) {
       stepResult.action = 'pdf';
-      stepResult.params = step.pdf;
-      const pdfResult = await executePdf(deps.pdfCapture, elementLocator, step.pdf);
-      stepResult.output = pdfResult;
+      stepResult.output = await executePdf(deps.pdfCapture, elementLocator, step.pdf);
     } else if (step.eval !== undefined) {
       stepResult.action = 'eval';
-      stepResult.params = step.eval;
       stepResult.output = await executeEval(pageController, step.eval);
     } else if (step.snapshot !== undefined) {
       stepResult.action = 'snapshot';
-      stepResult.params = step.snapshot;
       stepResult.output = await executeSnapshot(deps.ariaSnapshot, step.snapshot);
     } else if (step.hover !== undefined) {
       stepResult.action = 'hover';
-      stepResult.params = step.hover;
-      await executeHover(elementLocator, inputEmulator, deps.ariaSnapshot, step.hover);
+      const hoverResult = await executeHover(elementLocator, inputEmulator, deps.ariaSnapshot, step.hover);
+      // Only include output if there's capturedResult
+      if (hoverResult.capturedResult) {
+        stepResult.output = hoverResult.capturedResult;
+      }
     } else if (step.viewport !== undefined) {
       stepResult.action = 'viewport';
-      stepResult.params = step.viewport;
-      const viewportResult = await pageController.setViewport(step.viewport);
-      stepResult.output = viewportResult;
+      stepResult.output = await pageController.setViewport(step.viewport);
     } else if (step.cookies !== undefined) {
       stepResult.action = 'cookies';
-      stepResult.params = step.cookies;
-      stepResult.output = await executeCookies(deps.cookieManager, step.cookies);
+      stepResult.output = await executeCookies(deps.cookieManager, deps.pageController, step.cookies);
     } else if (step.back !== undefined) {
       stepResult.action = 'back';
-      stepResult.params = step.back;
       const backOptions = step.back === true ? {} : step.back;
       const entry = await pageController.goBack(backOptions);
       stepResult.output = entry ? { url: entry.url, title: entry.title } : { noHistory: true };
     } else if (step.forward !== undefined) {
       stepResult.action = 'forward';
-      stepResult.params = step.forward;
       const forwardOptions = step.forward === true ? {} : step.forward;
       const entry = await pageController.goForward(forwardOptions);
       stepResult.output = entry ? { url: entry.url, title: entry.title } : { noHistory: true };
     } else if (step.waitForNavigation !== undefined) {
       stepResult.action = 'waitForNavigation';
-      stepResult.params = step.waitForNavigation;
       await executeWaitForNavigation(pageController, step.waitForNavigation);
     } else if (step.listTabs !== undefined) {
       stepResult.action = 'listTabs';
-      stepResult.params = step.listTabs;
       stepResult.output = await executeListTabs(deps.browser);
     } else if (step.closeTab !== undefined) {
       stepResult.action = 'closeTab';
-      stepResult.params = { targetId: step.closeTab };
       stepResult.output = await executeCloseTab(deps.browser, step.closeTab);
+    } else if (step.openTab !== undefined) {
+      stepResult.action = 'openTab';
+      // openTab is handled in cdp-skill.js before runSteps
+      // This is just for the step result - the tab was already created
+      if (step._openTabHandled) {
+        // Navigate to URL if provided
+        if (step._openTabUrl) {
+          await pageController.navigate(step._openTabUrl);
+        }
+        // Output includes tab alias for reference
+        stepResult.output = { tab: step._openTabAlias };
+      } else {
+        // openTab can only be the first step and is pre-handled
+        throw new Error('openTab must be the first step when no targetId is provided');
+      }
     } else if (step.type !== undefined) {
       stepResult.action = 'type';
-      stepResult.params = step.type;
       const keyboardExecutor = createKeyboardExecutor(
         elementLocator.session,
         elementLocator,
         inputEmulator
       );
+      // type always returns output with typed info
       stepResult.output = await keyboardExecutor.executeType(step.type);
     } else if (step.select !== undefined) {
       stepResult.action = 'select';
-      stepResult.params = step.select;
       const keyboardExecutor = createKeyboardExecutor(
         elementLocator.session,
         elementLocator,
@@ -765,90 +1054,111 @@ export async function executeStep(deps, step, options = {}) {
       stepResult.output = await keyboardExecutor.executeSelect(step.select);
     } else if (step.validate !== undefined) {
       stepResult.action = 'validate';
-      stepResult.params = step.validate;
       stepResult.output = await executeValidate(elementLocator, step.validate);
     } else if (step.submit !== undefined) {
       stepResult.action = 'submit';
-      stepResult.params = step.submit;
       stepResult.output = await executeSubmit(elementLocator, step.submit);
     } else if (step.assert !== undefined) {
       stepResult.action = 'assert';
-      stepResult.params = step.assert;
       stepResult.output = await executeAssert(pageController, elementLocator, step.assert);
     } else if (step.queryAll !== undefined) {
       stepResult.action = 'queryAll';
-      stepResult.params = step.queryAll;
       stepResult.output = await executeQueryAll(elementLocator, step.queryAll);
     } else if (step.switchToFrame !== undefined) {
       stepResult.action = 'switchToFrame';
-      stepResult.params = step.switchToFrame;
       stepResult.output = await pageController.switchToFrame(step.switchToFrame);
     } else if (step.switchToMainFrame !== undefined) {
       stepResult.action = 'switchToMainFrame';
-      stepResult.params = step.switchToMainFrame;
       stepResult.output = await pageController.switchToMainFrame();
     } else if (step.listFrames !== undefined) {
       stepResult.action = 'listFrames';
-      stepResult.params = step.listFrames;
       stepResult.output = await pageController.getFrameTree();
     } else if (step.drag !== undefined) {
       stepResult.action = 'drag';
-      stepResult.params = step.drag;
-      stepResult.output = await executeDrag(elementLocator, inputEmulator, pageController, step.drag);
+      stepResult.output = await executeDrag(elementLocator, inputEmulator, pageController, deps.ariaSnapshot, step.drag);
+    } else if (step.formState !== undefined) {
+      // Feature 12: Form state dump
+      stepResult.action = 'formState';
+      // Create formValidator lazily since it's not in deps
+      const formValidator = createFormValidator(elementLocator.session, elementLocator);
+      // Extract selector - can be string or object with selector property
+      const formSelector = typeof step.formState === 'string' ? step.formState : step.formState.selector;
+      stepResult.output = await formValidator.getFormState(formSelector);
+    } else if (step.extract !== undefined) {
+      // Feature 11: Extract structured data
+      stepResult.action = 'extract';
+      stepResult.output = await executeExtract(deps, step.extract);
+    } else if (step.selectOption !== undefined) {
+      // Native select dropdown - set option by value/label/index
+      stepResult.action = 'selectOption';
+      stepResult.output = await executeSelectOption(elementLocator, step.selectOption);
+    } else if (step.getDom !== undefined) {
+      // Get raw DOM/HTML of page or element
+      stepResult.action = 'getDom';
+      stepResult.output = await executeGetDom(pageController, step.getDom);
+    } else if (step.getBox !== undefined) {
+      // Get bounding box of one or more refs
+      stepResult.action = 'getBox';
+      stepResult.output = await executeGetBox(deps.ariaSnapshot, step.getBox);
+    } else if (step.fillActive !== undefined) {
+      // Fill the currently focused element
+      stepResult.action = 'fillActive';
+      stepResult.output = await executeFillActive(pageController, inputEmulator, step.fillActive);
+    } else if (step.refAt !== undefined) {
+      // Get ref for element at coordinates
+      stepResult.action = 'refAt';
+      stepResult.output = await executeRefAt(session, step.refAt);
+    } else if (step.elementsAt !== undefined) {
+      // Get refs for elements at multiple coordinates
+      stepResult.action = 'elementsAt';
+      stepResult.output = await executeElementsAt(session, step.elementsAt);
+    } else if (step.elementsNear !== undefined) {
+      // Get refs for elements near a coordinate
+      stepResult.action = 'elementsNear';
+      stepResult.output = await executeElementsNear(session, step.elementsNear);
     }
   }
 
+  // Track params for error reporting
+  const definedAction = STEP_TYPES.find(type => step[type] !== undefined);
+  const stepParams = definedAction ? step[definedAction] : null;
+
+  let timeoutId;
   try {
     const stepPromise = executeStepInternal();
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         reject(timeoutError(`Step timed out after ${stepTimeout}ms`, stepTimeout));
       }, stepTimeout);
     });
 
-    // Debug: capture before state
-    if (debugCapture && stepResult.action) {
-      try {
-        stepResult.debug = { before: await debugCapture.captureBefore(stepResult.action, stepResult.params) };
-      } catch (e) {
-        stepResult.debug = { beforeError: e.message };
-      }
-    }
-
     await Promise.race([stepPromise, timeoutPromise]);
-
-    // Debug: capture after state on success
-    if (debugCapture && stepResult.action) {
-      try {
-        stepResult.debug = stepResult.debug || {};
-        stepResult.debug.after = await debugCapture.captureAfter(stepResult.action, stepResult.params, 'passed');
-      } catch (e) {
-        stepResult.debug = stepResult.debug || {};
-        stepResult.debug.afterError = e.message;
-      }
-    }
+    clearTimeout(timeoutId);
   } catch (error) {
-    // Debug: capture after state on failure
-    if (debugCapture && stepResult.action) {
-      try {
-        stepResult.debug = stepResult.debug || {};
-        stepResult.debug.after = await debugCapture.captureAfter(stepResult.action, stepResult.params, 'failed');
-      } catch (e) {
-        stepResult.debug = stepResult.debug || {};
-        stepResult.debug.afterError = e.message;
-      }
+    clearTimeout(timeoutId);
+
+    // Include params in error response for debugging
+    stepResult.params = stepParams;
+
+    // Feature 8: Capture failure context
+    try {
+      stepResult.context = await captureFailureContext(deps);
+    } catch (e) {
+      // Ignore context capture errors
     }
 
     if (isOptional) {
       stepResult.status = 'skipped';
       stepResult.error = `${error.message} (timeout: ${stepTimeout}ms)`;
     } else {
-      stepResult.status = 'failed';
+      stepResult.status = 'error';
       stepResult.error = error.message;
     }
   }
 
-  stepResult.duration = Date.now() - startTime;
+  // Note: Console capture moved to command-level in runSteps()
+  // Step-level console capture removed to reduce redundancy
+
   return stepResult;
 }
 
@@ -941,7 +1251,7 @@ async function _legacyExecuteClick(elementLocator, inputEmulator, ariaSnapshot, 
       return {
         clicked: false,
         stale: true,
-        warning: `Element ref:${ref} is no longer attached to the DOM. Page content may have changed.`
+        warning: `Element ref:${ref} is no longer attached to the DOM. Page content may have changed. Run 'snapshot' again to get fresh refs.`
       };
     }
     // Check if element is visible
@@ -1136,30 +1446,6 @@ async function executeFill(elementLocator, inputEmulator, params) {
   }
 }
 
-async function executeScreenshot(screenshotCapture, elementLocator, params) {
-  const rawPath = typeof params === 'string' ? params : params.path;
-  const options = typeof params === 'object' ? params : {};
-
-  // Resolve path - relative paths go to platform temp directory
-  const format = options.format || 'png';
-  const resolvedPath = await resolveTempPath(rawPath, `.${format}`);
-
-  // Get viewport dimensions before capturing
-  const viewport = await screenshotCapture.getViewportDimensions();
-
-  // Pass elementLocator for element screenshots
-  const savedPath = await screenshotCapture.captureToFile(resolvedPath, options, elementLocator);
-
-  // Return metadata including viewport dimensions
-  return {
-    path: savedPath,
-    viewport,
-    format,
-    fullPage: options.fullPage || false,
-    selector: options.selector || null
-  };
-}
-
 /**
  * Execute a PDF generation step
  * Supports element PDF via selector option (FR-060)
@@ -1227,9 +1513,8 @@ async function executeEval(pageController, params) {
     wrappedExpression = expression;
   }
 
-  // Create the eval promise
-  const evalPromise = pageController.session.send('Runtime.evaluate', {
-    expression: wrappedExpression,
+  // Create the eval promise - use evaluateInFrame to respect frame context (Bug #9 fix)
+  const evalPromise = pageController.evaluateInFrame(wrappedExpression, {
     returnByValue: true,
     awaitPromise
   });
@@ -1237,12 +1522,14 @@ async function executeEval(pageController, params) {
   // Apply timeout if specified (FR-042)
   let result;
   if (evalTimeout !== null && evalTimeout > 0) {
+    let evalTimeoutId;
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => {
+      evalTimeoutId = setTimeout(() => {
         reject(new Error(`Eval timed out after ${evalTimeout}ms`));
       }, evalTimeout);
     });
     result = await Promise.race([evalPromise, timeoutPromise]);
+    clearTimeout(evalTimeoutId);
   } else {
     result = await evalPromise;
   }
@@ -1301,13 +1588,79 @@ async function executeSnapshot(ariaSnapshot, params) {
 /**
  * Execute a hover step - moves mouse over an element to trigger hover events
  * Uses Playwright-style auto-waiting for element to be visible and stable
+ * Feature 13: Supports captureResult to detect new visible elements after hover
  */
 async function executeHover(elementLocator, inputEmulator, ariaSnapshot, params) {
   const selector = typeof params === 'string' ? params : params.selector;
-  const ref = typeof params === 'object' ? params.ref : null;
+  let ref = typeof params === 'object' ? params.ref : null;
   const duration = typeof params === 'object' ? (params.duration || 0) : 0;
+
+  // Detect if string selector looks like a ref (e.g., "e1", "e12", "e123")
+  // This allows {"hover": "e1"} to work the same as {"hover": {"ref": "e1"}}
+  if (!ref && selector && /^e\d+$/.test(selector)) {
+    ref = selector;
+  }
   const force = typeof params === 'object' && params.force === true;
-  const timeout = typeof params === 'object' ? (params.timeout || 30000) : 30000;
+  const timeout = typeof params === 'object' ? (params.timeout || 10000) : 10000; // Reduced from 30s to 10s
+  const captureResult = typeof params === 'object' && params.captureResult === true;
+
+  const session = elementLocator.session;
+  let visibleElementsBefore = [];
+
+  // Feature 13: Capture visible elements before hover
+  if (captureResult) {
+    try {
+      const beforeResult = await session.send('Runtime.evaluate', {
+        expression: `
+          (function() {
+            const selectors = [
+              '[role="menu"]', '[role="listbox"]', '[role="tooltip"]',
+              '.dropdown', '.menu', '.popup', '.tooltip', '.popover',
+              '[class*="dropdown"]', '[class*="menu"]', '[class*="tooltip"]'
+            ];
+            const visible = new Set();
+
+            for (const sel of selectors) {
+              const elements = document.querySelectorAll(sel);
+              for (const el of elements) {
+                const rect = el.getBoundingClientRect();
+                const style = window.getComputedStyle(el);
+                if (rect.width > 0 && rect.height > 0 &&
+                    style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+                  // Capture same structure as after capture for proper comparison
+                  const items = el.querySelectorAll('[role="menuitem"], li, a, button');
+                  const texts = [];
+                  for (const item of items) {
+                    const text = (item.textContent || '').trim();
+                    if (text && text.length < 100) texts.push(text);
+                  }
+                  if (texts.length > 0) {
+                    visible.add(JSON.stringify({
+                      type: el.getAttribute('role') || sel.replace(/[\\[\\]"*=]/g, ''),
+                      items: texts.slice(0, 10)
+                    }));
+                  } else {
+                    const ownText = (el.textContent || '').trim();
+                    if (ownText && ownText.length < 200) {
+                      visible.add(JSON.stringify({
+                        type: el.getAttribute('role') || sel.replace(/[\\[\\]"*=]/g, ''),
+                        text: ownText
+                      }));
+                    }
+                  }
+                }
+              }
+            }
+            return Array.from(visible);
+          })()
+        `,
+        returnByValue: true
+      });
+      visibleElementsBefore = beforeResult.result.value || [];
+    } catch {
+      // Ignore capture errors
+    }
+  }
 
   // Handle hover by ref
   if (ref && ariaSnapshot) {
@@ -1318,7 +1671,12 @@ async function executeHover(elementLocator, inputEmulator, ariaSnapshot, params)
     const x = refInfo.box.x + refInfo.box.width / 2;
     const y = refInfo.box.y + refInfo.box.height / 2;
     await inputEmulator.hover(x, y, { duration });
-    return;
+
+    if (captureResult) {
+      await sleep(100); // Wait for hover effects
+      return await captureHoverResult(session, visibleElementsBefore);
+    }
+    return { hovered: true };
   }
 
   // Use Playwright-style auto-waiting for element to be actionable
@@ -1340,6 +1698,103 @@ async function executeHover(elementLocator, inputEmulator, ariaSnapshot, params)
   }
 
   await inputEmulator.hover(point.x, point.y, { duration });
+
+  // Release objectId to prevent memory leak
+  try {
+    await releaseObject(session, waitResult.objectId);
+  } catch { /* ignore cleanup errors */ }
+
+  // Build result with autoForced flag if applicable
+  const result = { hovered: true };
+  if (waitResult.autoForced) {
+    result.autoForced = true;
+  }
+
+  if (captureResult) {
+    await sleep(100); // Wait for hover effects
+    const captured = await captureHoverResult(session, visibleElementsBefore);
+    return { ...result, ...captured };
+  }
+  return result;
+}
+
+/**
+ * Capture elements that appeared after hover (Feature 13)
+ * @param {Object} session - CDP session
+ * @param {Array} visibleBefore - Elements visible before hover
+ * @returns {Promise<Object>} Hover result with appeared content
+ */
+async function captureHoverResult(session, visibleBefore) {
+  try {
+    const afterResult = await session.send('Runtime.evaluate', {
+      expression: `
+        (function() {
+          const selectors = [
+            '[role="menu"]', '[role="listbox"]', '[role="tooltip"]', '[role="menuitem"]',
+            '.dropdown', '.menu', '.popup', '.tooltip', '.popover',
+            '[class*="dropdown"]', '[class*="menu"]', '[class*="tooltip"]'
+          ];
+          const visibleNow = [];
+
+          for (const sel of selectors) {
+            const elements = document.querySelectorAll(sel);
+            for (const el of elements) {
+              const rect = el.getBoundingClientRect();
+              const style = window.getComputedStyle(el);
+              if (rect.width > 0 && rect.height > 0 &&
+                  style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+                // Get text content of menu items
+                const items = el.querySelectorAll('[role="menuitem"], li, a, button');
+                const texts = [];
+                for (const item of items) {
+                  const text = (item.textContent || '').trim();
+                  if (text && text.length < 100) texts.push(text);
+                }
+                if (texts.length > 0) {
+                  visibleNow.push({
+                    type: el.getAttribute('role') || sel.replace(/[\\[\\]"*=]/g, ''),
+                    items: texts.slice(0, 10)
+                  });
+                } else {
+                  const ownText = (el.textContent || '').trim();
+                  if (ownText && ownText.length < 200) {
+                    visibleNow.push({
+                      type: el.getAttribute('role') || sel.replace(/[\\[\\]"*=]/g, ''),
+                      text: ownText
+                    });
+                  }
+                }
+              }
+            }
+          }
+          return visibleNow;
+        })()
+      `,
+      returnByValue: true
+    });
+
+    const visibleAfter = afterResult.result.value || [];
+
+    // Filter to only new elements (not in before list)
+    // visibleBefore contains JSON strings, visibleAfter contains objects
+    const beforeSet = new Set(visibleBefore);
+    const appeared = visibleAfter.filter(item => !beforeSet.has(JSON.stringify(item)));
+
+    // Return format matching SKILL.md documentation
+    return {
+      hovered: true,
+      capturedResult: {
+        visibleElements: appeared.map(item => ({
+          selector: item.type,
+          text: item.text || (item.items ? item.items.join(', ') : ''),
+          visible: true,
+          ...(item.items ? { itemCount: item.items.length } : {})
+        }))
+      }
+    };
+  } catch {
+    return { hovered: true, capturedResult: { visibleElements: [] } };
+  }
 }
 
 /**
@@ -1350,8 +1805,23 @@ async function executeHover(elementLocator, inputEmulator, ariaSnapshot, params)
  * @param {Object} params - Drag parameters
  * @returns {Promise<Object>} Drag result
  */
-async function executeDrag(elementLocator, inputEmulator, pageController, params) {
+async function executeDrag(elementLocator, inputEmulator, pageController, ariaSnapshot, params) {
   const { source, target, steps = 10, delay = 0 } = params;
+
+  // Helper to get element bounding box by ref
+  async function getRefBox(ref) {
+    if (!ariaSnapshot) {
+      throw new Error('ariaSnapshot is required for ref-based drag');
+    }
+    const refInfo = await ariaSnapshot.getElementByRef(ref);
+    if (!refInfo) {
+      throw elementNotFoundError(`ref:${ref}`, 0);
+    }
+    if (refInfo.stale) {
+      throw new Error(`Element ref:${ref} is no longer attached to the DOM. Run 'snapshot' again to get fresh refs.`);
+    }
+    return refInfo.box;
+  }
 
   // Helper to get element bounding box in current frame context
   async function getElementBox(selector) {
@@ -1381,35 +1851,64 @@ async function executeDrag(elementLocator, inputEmulator, pageController, params
     return result.result.value;
   }
 
-  // Get source coordinates
-  let sourceX, sourceY;
-  if (typeof source === 'object' && typeof source.x === 'number' && typeof source.y === 'number') {
-    sourceX = source.x;
-    sourceY = source.y;
-  } else {
-    const sourceSelector = typeof source === 'string' ? source : source.selector;
-    const box = await getElementBox(sourceSelector);
-    if (!box) {
-      throw elementNotFoundError(sourceSelector, 0);
+  // Helper to resolve selector/ref to box with optional offsets
+  // Supports: string selectors, ref strings, coordinate objects, ref objects with offsets
+  // Examples:
+  //   "#draggable" -> selector
+  //   "e1" -> ref string
+  //   {"x": 100, "y": 200} -> coordinates
+  //   {"ref": "e1", "offsetX": 10, "offsetY": -5} -> ref with offsets
+  async function resolveToBox(spec) {
+    // Direct coordinates
+    if (typeof spec === 'object' && typeof spec.x === 'number' && typeof spec.y === 'number') {
+      return { x: spec.x, y: spec.y, width: 0, height: 0, offsetX: 0, offsetY: 0 };
     }
-    sourceX = box.x + box.width / 2;
-    sourceY = box.y + box.height / 2;
+
+    // Ref object with optional offsets: {"ref": "e1", "offsetX": 10}
+    if (typeof spec === 'object' && spec.ref) {
+      const box = await getRefBox(spec.ref);
+      return {
+        ...box,
+        offsetX: spec.offsetX || 0,
+        offsetY: spec.offsetY || 0
+      };
+    }
+
+    // Selector object: {"selector": "#draggable"}
+    if (typeof spec === 'object' && spec.selector) {
+      const box = await getElementBox(spec.selector);
+      if (!box) {
+        throw elementNotFoundError(spec.selector, 0);
+      }
+      return { ...box, offsetX: 0, offsetY: 0 };
+    }
+
+    // String - could be selector or ref
+    const selectorOrRef = spec;
+
+    // Check if it looks like a ref (e.g., "e1", "e12")
+    if (/^e\d+$/.test(selectorOrRef)) {
+      const box = await getRefBox(selectorOrRef);
+      return { ...box, offsetX: 0, offsetY: 0 };
+    }
+
+    // Treat as CSS selector
+    const box = await getElementBox(selectorOrRef);
+    if (!box) {
+      throw elementNotFoundError(selectorOrRef, 0);
+    }
+    return { ...box, offsetX: 0, offsetY: 0 };
   }
 
-  // Get target coordinates
-  let targetX, targetY;
-  if (typeof target === 'object' && typeof target.x === 'number' && typeof target.y === 'number') {
-    targetX = target.x;
-    targetY = target.y;
-  } else {
-    const targetSelector = typeof target === 'string' ? target : target.selector;
-    const box = await getElementBox(targetSelector);
-    if (!box) {
-      throw elementNotFoundError(targetSelector, 0);
-    }
-    targetX = box.x + box.width / 2;
-    targetY = box.y + box.height / 2;
-  }
+  // Get source coordinates (center + offset)
+  const sourceBox = await resolveToBox(source);
+  const sourceX = sourceBox.x + sourceBox.width / 2 + (sourceBox.offsetX || 0);
+  const sourceY = sourceBox.y + sourceBox.height / 2 + (sourceBox.offsetY || 0);
+
+  // Get target coordinates (center + offset)
+  const targetBox = await resolveToBox(target);
+  const targetX = targetBox.x + targetBox.width / 2 + (targetBox.offsetX || 0);
+  const targetY = targetBox.y + targetBox.height / 2 + (targetBox.offsetY || 0);
 
   // Perform the drag operation using CDP mouse events
   // Move to source
@@ -1510,15 +2009,22 @@ function parseExpiration(expires) {
 
 /**
  * Execute a cookies step - get, set, or clear cookies
+ * By default, only returns cookies for the current tab's domain
  */
-async function executeCookies(cookieManager, params) {
+async function executeCookies(cookieManager, pageController, params) {
   if (!cookieManager) {
     throw new Error('Cookie manager not available');
   }
 
+  // Get current page URL for domain filtering
+  const currentUrl = await getCurrentUrl(pageController.session);
+
   // Determine the action
   if (params.get !== undefined || params.action === 'get') {
-    const urls = Array.isArray(params.get) ? params.get : (params.urls || []);
+    // Default to current page URL if no URLs specified
+    const urls = Array.isArray(params.get) && params.get.length > 0
+      ? params.get
+      : (params.urls && params.urls.length > 0 ? params.urls : [currentUrl]);
     let cookies = await cookieManager.getCookies(urls);
 
     // Filter by name if specified
@@ -1551,8 +2057,10 @@ async function executeCookies(cookieManager, params) {
 
   if (params.clear !== undefined || params.action === 'clear') {
     const urls = Array.isArray(params.clear) ? params.clear : [];
-    const result = await cookieManager.clearCookies(urls);
-    return { action: 'clear', count: result.count };
+    const options = {};
+    if (params.domain) options.domain = params.domain;
+    const result = await cookieManager.clearCookies(urls, options);
+    return { action: 'clear', count: result.count, ...(params.domain ? { domain: params.domain } : {}) };
   }
 
   if (params.delete !== undefined || params.action === 'delete') {
@@ -1571,6 +2079,938 @@ async function executeCookies(cookieManager, params) {
 }
 
 /**
+ * Execute a formState step - dump form field state (Feature 12)
+ * @param {Object} formValidator - Form validator instance
+ * @param {string} selector - CSS selector for the form
+ * @returns {Promise<Object>} Form state
+ */
+async function executeFormState(formValidator, selector) {
+  if (!formValidator) {
+    throw new Error('Form validator not available');
+  }
+
+  const formSelector = typeof selector === 'string' ? selector : selector.selector;
+  if (!formSelector) {
+    throw new Error('formState requires a selector');
+  }
+
+  return formValidator.getFormState(formSelector);
+}
+
+/**
+ * Execute an extract step - extract structured data from tables/lists (Feature 11)
+ * @param {Object} deps - Dependencies
+ * @param {string|Object} params - Selector or options
+ * @returns {Promise<Object>} Extracted data
+ */
+async function executeExtract(deps, params) {
+  const { pageController } = deps;
+  const session = pageController.session;
+
+  const selector = typeof params === 'string' ? params : params.selector;
+  const type = typeof params === 'object' ? params.type : null; // 'table' or 'list'
+  const limit = typeof params === 'object' ? params.limit : 100;
+
+  if (!selector) {
+    throw new Error('extract requires a selector');
+  }
+
+  const result = await session.send('Runtime.evaluate', {
+    expression: `
+      (function() {
+        const selector = ${JSON.stringify(selector)};
+        const typeHint = ${JSON.stringify(type)};
+        const limit = ${limit};
+        const el = document.querySelector(selector);
+
+        if (!el) {
+          return { error: 'Element not found: ' + selector };
+        }
+
+        const tagName = el.tagName.toLowerCase();
+
+        // Auto-detect type if not specified
+        let detectedType = typeHint;
+        if (!detectedType) {
+          if (tagName === 'table') {
+            detectedType = 'table';
+          } else if (tagName === 'ul' || tagName === 'ol' || el.getAttribute('role') === 'list') {
+            detectedType = 'list';
+          } else if (el.querySelector('table')) {
+            detectedType = 'table';
+            // Use the inner table
+          } else if (el.querySelector('ul, ol, [role="list"]')) {
+            detectedType = 'list';
+          } else {
+            // Try to detect based on structure
+            const rows = el.querySelectorAll('[role="row"], tr');
+            if (rows.length > 0) {
+              detectedType = 'table';
+            } else {
+              const items = el.querySelectorAll('[role="listitem"], li');
+              if (items.length > 0) {
+                detectedType = 'list';
+              }
+            }
+          }
+        }
+
+        if (detectedType === 'table') {
+          // Extract table data
+          const tableEl = tagName === 'table' ? el : el.querySelector('table');
+          if (!tableEl) {
+            return { error: 'No table found', type: 'table' };
+          }
+
+          const headers = [];
+          const rows = [];
+
+          // Get headers from thead or first row
+          const headerRow = tableEl.querySelector('thead tr') || tableEl.querySelector('tr');
+          if (headerRow) {
+            const headerCells = headerRow.querySelectorAll('th, td');
+            for (const cell of headerCells) {
+              headers.push((cell.textContent || '').trim());
+            }
+          }
+
+          // Get data rows
+          const dataRows = tableEl.querySelectorAll('tbody tr, tr');
+          let count = 0;
+          for (const row of dataRows) {
+            // Skip header row
+            if (row === headerRow) continue;
+            if (count >= limit) break;
+
+            const cells = row.querySelectorAll('td, th');
+            const rowData = [];
+            for (const cell of cells) {
+              rowData.push((cell.textContent || '').trim());
+            }
+            if (rowData.length > 0) {
+              rows.push(rowData);
+              count++;
+            }
+          }
+
+          return {
+            type: 'table',
+            headers,
+            rows,
+            rowCount: rows.length
+          };
+        }
+
+        if (detectedType === 'list') {
+          // Extract list data
+          const listEl = (tagName === 'ul' || tagName === 'ol') ? el :
+                        el.querySelector('ul, ol, [role="list"]');
+
+          const items = [];
+          const listItems = listEl ?
+            listEl.querySelectorAll(':scope > li, :scope > [role="listitem"]') :
+            el.querySelectorAll('[role="listitem"], li');
+
+          let count = 0;
+          for (const item of listItems) {
+            if (count >= limit) break;
+            const text = (item.textContent || '').trim();
+            if (text) {
+              items.push(text);
+              count++;
+            }
+          }
+
+          return {
+            type: 'list',
+            items,
+            itemCount: items.length
+          };
+        }
+
+        return { error: 'Could not detect data type. Use type: "table" or "list" option.', detectedType };
+      })()
+    `,
+    returnByValue: true
+  });
+
+  if (result.exceptionDetails) {
+    throw new Error('Extract error: ' + result.exceptionDetails.text);
+  }
+
+  const data = result.result.value;
+  if (data.error) {
+    throw new Error(data.error);
+  }
+
+  return data;
+}
+
+/**
+ * Execute a selectOption step - selects option(s) in a native <select> element
+ * Following Puppeteer's approach: set option.selected and dispatch events
+ *
+ * Usage:
+ *   {"selectOption": {"selector": "#dropdown", "value": "optionValue"}}
+ *   {"selectOption": {"selector": "#dropdown", "label": "Option Text"}}
+ *   {"selectOption": {"selector": "#dropdown", "index": 2}}
+ *   {"selectOption": {"selector": "#dropdown", "values": ["a", "b"]}}  // multiple select
+ */
+async function executeSelectOption(elementLocator, params) {
+  const selector = params.selector;
+  const value = params.value;
+  const label = params.label;
+  const index = params.index;
+  const values = params.values; // for multi-select
+
+  if (!selector) {
+    throw new Error('selectOption requires selector');
+  }
+  if (value === undefined && label === undefined && index === undefined && !values) {
+    throw new Error('selectOption requires value, label, index, or values');
+  }
+
+  const element = await elementLocator.findElement(selector);
+  if (!element) {
+    throw elementNotFoundError(selector, 0);
+  }
+
+  try {
+    const result = await elementLocator.session.send('Runtime.callFunctionOn', {
+      objectId: element._handle.objectId,
+      functionDeclaration: `function(matchBy, matchValue, matchValues) {
+        const el = this;
+
+        // Validate element is a select
+        if (!(el instanceof HTMLSelectElement)) {
+          return { error: 'Element is not a <select> element' };
+        }
+
+        const selectedValues = [];
+        const isMultiple = el.multiple;
+        const options = Array.from(el.options);
+
+        // Build match function based on type
+        let matchFn;
+        if (matchBy === 'value') {
+          const valuesToMatch = matchValues ? matchValues : [matchValue];
+          matchFn = (opt) => valuesToMatch.includes(opt.value);
+        } else if (matchBy === 'label') {
+          matchFn = (opt) => opt.textContent.trim() === matchValue || opt.label === matchValue;
+        } else if (matchBy === 'index') {
+          matchFn = (opt, idx) => idx === matchValue;
+        } else {
+          return { error: 'Invalid match type' };
+        }
+
+        // For single-select, deselect all first
+        if (!isMultiple) {
+          for (const option of options) {
+            option.selected = false;
+          }
+        }
+
+        // Select matching options
+        let matched = false;
+        for (let i = 0; i < options.length; i++) {
+          const option = options[i];
+          if (matchFn(option, i)) {
+            option.selected = true;
+            selectedValues.push(option.value);
+            matched = true;
+            if (!isMultiple) break; // Single select stops at first match
+          }
+        }
+
+        if (!matched) {
+          return {
+            error: 'No option matched',
+            matchBy,
+            matchValue: matchValues || matchValue,
+            availableOptions: options.slice(0, 10).map(o => ({ value: o.value, label: o.textContent.trim() }))
+          };
+        }
+
+        // Dispatch events (same as Puppeteer)
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+
+        return {
+          success: true,
+          selected: selectedValues,
+          multiple: isMultiple
+        };
+      }`,
+      arguments: [
+        { value: values ? 'value' : (value !== undefined ? 'value' : (label !== undefined ? 'label' : 'index')) },
+        { value: value !== undefined ? value : (label !== undefined ? label : index) },
+        { value: values || null }
+      ],
+      returnByValue: true
+    });
+
+    const selectResult = result.result.value;
+
+    if (selectResult.error) {
+      const errorMsg = selectResult.error;
+      if (selectResult.availableOptions) {
+        throw new Error(`${errorMsg}. Available options: ${JSON.stringify(selectResult.availableOptions)}`);
+      }
+      throw new Error(errorMsg);
+    }
+
+    return {
+      selected: selectResult.selected,
+      multiple: selectResult.multiple
+    };
+  } finally {
+    await element._handle.dispose();
+  }
+}
+
+/**
+ * Execute a getDom step - get raw HTML of page or element
+ * @param {Object} pageController - Page controller
+ * @param {boolean|string|Object} params - true for full page, selector string, or options object
+ * @returns {Promise<Object>} DOM content
+ */
+async function executeGetDom(pageController, params) {
+  const session = pageController.session;
+
+  // Determine selector - null means full page
+  let selector = null;
+  let outer = true; // include element's own tag
+
+  if (params === true) {
+    selector = null; // full page
+  } else if (typeof params === 'string') {
+    selector = params;
+  } else if (typeof params === 'object' && params !== null) {
+    selector = params.selector || null;
+    if (params.outer === false) outer = false;
+  }
+
+  const expression = selector
+    ? `(function() {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return { error: 'Element not found: ${selector}' };
+        return {
+          html: ${outer} ? el.outerHTML : el.innerHTML,
+          tagName: el.tagName.toLowerCase(),
+          selector: ${JSON.stringify(selector)}
+        };
+      })()`
+    : `(function() {
+        return {
+          html: document.documentElement.outerHTML,
+          tagName: 'html'
+        };
+      })()`;
+
+  const result = await session.send('Runtime.evaluate', {
+    expression,
+    returnByValue: true
+  });
+
+  if (result.exceptionDetails) {
+    throw new Error(`getDom error: ${result.exceptionDetails.text}`);
+  }
+
+  const data = result.result.value;
+  if (data.error) {
+    throw new Error(data.error);
+  }
+
+  return {
+    html: data.html,
+    tagName: data.tagName,
+    selector: data.selector || null,
+    length: data.html.length
+  };
+}
+
+/**
+ * Execute a getBox step - get bounding box of one or more refs
+ * @param {Object} ariaSnapshot - ARIA snapshot instance
+ * @param {string|string[]|Object} params - ref, array of refs, or options object
+ * @returns {Promise<Object>} Bounding box info
+ */
+async function executeGetBox(ariaSnapshot, params) {
+  if (!ariaSnapshot) {
+    throw new Error('ariaSnapshot is required for getBox');
+  }
+
+  // Normalize params to array of refs
+  let refs;
+  if (typeof params === 'string') {
+    refs = [params];
+  } else if (Array.isArray(params)) {
+    refs = params;
+  } else if (typeof params === 'object' && params !== null) {
+    refs = params.refs || (params.ref ? [params.ref] : []);
+  } else {
+    throw new Error('getBox requires ref(s)');
+  }
+
+  if (refs.length === 0) {
+    throw new Error('getBox requires at least one ref');
+  }
+
+  const results = {};
+
+  for (const ref of refs) {
+    try {
+      const refInfo = await ariaSnapshot.getElementByRef(ref);
+      if (!refInfo) {
+        results[ref] = { error: 'not found' };
+      } else if (refInfo.stale) {
+        results[ref] = { error: 'stale', message: 'Element no longer in DOM' };
+      } else if (!refInfo.isVisible) {
+        results[ref] = { error: 'hidden', box: refInfo.box };
+      } else {
+        results[ref] = {
+          x: refInfo.box.x,
+          y: refInfo.box.y,
+          width: refInfo.box.width,
+          height: refInfo.box.height,
+          center: {
+            x: Math.round(refInfo.box.x + refInfo.box.width / 2),
+            y: Math.round(refInfo.box.y + refInfo.box.height / 2)
+          }
+        };
+      }
+    } catch (e) {
+      results[ref] = { error: e.message };
+    }
+  }
+
+  // If single ref, return just the box info (not wrapped in object)
+  if (refs.length === 1) {
+    return results[refs[0]];
+  }
+
+  return results;
+}
+
+/**
+ * Execute a fillActive step - fill the currently focused element
+ * @param {Object} pageController - Page controller
+ * @param {Object} inputEmulator - Input emulator for typing
+ * @param {string|Object} params - Value string or options object
+ * @returns {Promise<Object>} Result with filled element info
+ */
+async function executeFillActive(pageController, inputEmulator, params) {
+  const session = pageController.session;
+
+  // Parse params
+  const value = typeof params === 'string' ? params : params.value;
+  const clear = typeof params === 'object' ? params.clear !== false : true;
+
+  // Check if there's an active element and if it's editable
+  const checkResult = await session.send('Runtime.evaluate', {
+    expression: `(function() {
+      const el = document.activeElement;
+      if (!el || el === document.body || el === document.documentElement) {
+        return { error: 'No element is focused' };
+      }
+
+      const tag = el.tagName;
+      const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      const isContentEditable = el.isContentEditable;
+
+      if (!isInput && !isContentEditable) {
+        return { error: 'Focused element is not editable', tag: tag };
+      }
+
+      // Check if disabled or readonly
+      if (el.disabled) {
+        return { error: 'Focused element is disabled', tag: tag };
+      }
+      if (el.readOnly) {
+        return { error: 'Focused element is readonly', tag: tag };
+      }
+
+      // Build selector for reporting
+      let selector = tag.toLowerCase();
+      if (el.id) {
+        selector = '#' + el.id;
+      } else if (el.name) {
+        selector = '[name="' + el.name + '"]';
+      }
+
+      return {
+        editable: true,
+        tag: tag,
+        type: tag === 'INPUT' ? (el.type || 'text') : null,
+        selector: selector,
+        valueBefore: el.value || ''
+      };
+    })()`,
+    returnByValue: true
+  });
+
+  if (checkResult.exceptionDetails) {
+    throw new Error(`fillActive error: ${checkResult.exceptionDetails.text}`);
+  }
+
+  const check = checkResult.result.value;
+  if (check.error) {
+    throw new Error(check.error);
+  }
+
+  // Clear existing content if requested
+  if (clear) {
+    await inputEmulator.selectAll();
+  }
+
+  // Type the new value
+  await inputEmulator.type(String(value));
+
+  return {
+    filled: true,
+    tag: check.tag,
+    type: check.type,
+    selector: check.selector,
+    valueBefore: check.valueBefore,
+    valueAfter: value
+  };
+}
+
+/**
+ * Execute a refAt step - get or create a ref for the element at given coordinates
+ * Uses document.elementFromPoint to find the element, then assigns/retrieves a ref
+ */
+async function executeRefAt(session, params) {
+  const { x, y } = params;
+
+  const result = await session.send('Runtime.evaluate', {
+    expression: `(function() {
+      const x = ${x};
+      const y = ${y};
+
+      // Get element at point
+      const el = document.elementFromPoint(x, y);
+      if (!el) {
+        return { error: 'No element at coordinates (' + x + ', ' + y + ')' };
+      }
+
+      // Initialize refs map if needed
+      if (!window.__ariaRefs) {
+        window.__ariaRefs = new Map();
+      }
+      if (!window.__ariaRefCounter) {
+        window.__ariaRefCounter = 0;
+      }
+
+      // Helper to generate a selector for an element
+      function generateSelector(el) {
+        if (el.id) return '#' + CSS.escape(el.id);
+
+        // Try unique attributes
+        for (const attr of ['data-testid', 'data-test-id', 'data-cy', 'name']) {
+          if (el.hasAttribute(attr)) {
+            const value = el.getAttribute(attr);
+            const selector = '[' + attr + '="' + value.replace(/"/g, '\\\\"') + '"]';
+            if (document.querySelectorAll(selector).length === 1) return selector;
+          }
+        }
+
+        // Build path
+        const path = [];
+        let current = el;
+        while (current && current !== document.body && path.length < 5) {
+          let selector = current.tagName.toLowerCase();
+          if (current.id) {
+            selector = '#' + CSS.escape(current.id);
+            path.unshift(selector);
+            break;
+          }
+          const parent = current.parentElement;
+          if (parent) {
+            const siblings = Array.from(parent.children).filter(c => c.tagName === current.tagName);
+            if (siblings.length > 1) {
+              const index = siblings.indexOf(current) + 1;
+              selector += ':nth-of-type(' + index + ')';
+            }
+          }
+          path.unshift(selector);
+          current = parent;
+        }
+        return path.join(' > ');
+      }
+
+      // Helper to check if element is clickable
+      function isClickable(el) {
+        const tag = el.tagName;
+        if (tag === 'BUTTON' || tag === 'A' || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
+          return true;
+        }
+        const role = el.getAttribute('role');
+        if (role === 'button' || role === 'link' || role === 'tab' || role === 'menuitem' || role === 'checkbox' || role === 'radio') {
+          return true;
+        }
+        if (el.onclick || el.hasAttribute('onclick')) return true;
+        const style = window.getComputedStyle(el);
+        if (style.cursor === 'pointer') return true;
+        return false;
+      }
+
+      // Check if element already has a ref
+      for (const [ref, refEl] of window.__ariaRefs) {
+        if (refEl === el) {
+          const rect = el.getBoundingClientRect();
+          return {
+            ref: ref,
+            existing: true,
+            tag: el.tagName,
+            selector: generateSelector(el),
+            clickable: isClickable(el),
+            role: el.getAttribute('role') || null,
+            name: el.getAttribute('aria-label') || el.textContent?.trim().substring(0, 50) || null,
+            box: {
+              x: Math.round(rect.x),
+              y: Math.round(rect.y),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height)
+            }
+          };
+        }
+      }
+
+      // Create new ref
+      window.__ariaRefCounter++;
+      const ref = 'e' + window.__ariaRefCounter;
+      window.__ariaRefs.set(ref, el);
+
+      const rect = el.getBoundingClientRect();
+      return {
+        ref: ref,
+        existing: false,
+        tag: el.tagName,
+        selector: generateSelector(el),
+        clickable: isClickable(el),
+        role: el.getAttribute('role') || null,
+        name: el.getAttribute('aria-label') || el.textContent?.trim().substring(0, 50) || null,
+        box: {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height)
+        }
+      };
+    })()`,
+    returnByValue: true
+  });
+
+  if (result.exceptionDetails) {
+    throw new Error(`refAt error: ${result.exceptionDetails.text}`);
+  }
+
+  const value = result.result.value;
+  if (value.error) {
+    throw new Error(value.error);
+  }
+
+  return value;
+}
+
+/**
+ * Execute an elementsAt step - get refs for elements at multiple coordinates
+ */
+async function executeElementsAt(session, coords) {
+  const result = await session.send('Runtime.evaluate', {
+    expression: `(function() {
+      const coords = ${JSON.stringify(coords)};
+
+      // Initialize refs map if needed
+      if (!window.__ariaRefs) {
+        window.__ariaRefs = new Map();
+      }
+      if (!window.__ariaRefCounter) {
+        window.__ariaRefCounter = 0;
+      }
+
+      // Helper to get or create ref for element
+      function getOrCreateRef(el) {
+        if (!el) return null;
+
+        // Check if element already has a ref
+        for (const [ref, refEl] of window.__ariaRefs) {
+          if (refEl === el) {
+            return { ref, existing: true };
+          }
+        }
+
+        // Create new ref
+        window.__ariaRefCounter++;
+        const ref = 'e' + window.__ariaRefCounter;
+        window.__ariaRefs.set(ref, el);
+        return { ref, existing: false };
+      }
+
+      // Helper to generate a selector for an element
+      function generateSelector(el) {
+        if (el.id) return '#' + CSS.escape(el.id);
+
+        // Try unique attributes
+        for (const attr of ['data-testid', 'data-test-id', 'data-cy', 'name']) {
+          if (el.hasAttribute(attr)) {
+            const value = el.getAttribute(attr);
+            const selector = '[' + attr + '="' + value.replace(/"/g, '\\\\"') + '"]';
+            if (document.querySelectorAll(selector).length === 1) return selector;
+          }
+        }
+
+        // Build path
+        const path = [];
+        let current = el;
+        while (current && current !== document.body && path.length < 5) {
+          let selector = current.tagName.toLowerCase();
+          if (current.id) {
+            selector = '#' + CSS.escape(current.id);
+            path.unshift(selector);
+            break;
+          }
+          const parent = current.parentElement;
+          if (parent) {
+            const siblings = Array.from(parent.children).filter(c => c.tagName === current.tagName);
+            if (siblings.length > 1) {
+              const index = siblings.indexOf(current) + 1;
+              selector += ':nth-of-type(' + index + ')';
+            }
+          }
+          path.unshift(selector);
+          current = parent;
+        }
+        return path.join(' > ');
+      }
+
+      // Helper to check if element is clickable
+      function isClickable(el) {
+        const tag = el.tagName;
+        // Obviously clickable elements
+        if (tag === 'BUTTON' || tag === 'A' || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
+          return true;
+        }
+        // Role-based
+        const role = el.getAttribute('role');
+        if (role === 'button' || role === 'link' || role === 'tab' || role === 'menuitem' || role === 'checkbox' || role === 'radio') {
+          return true;
+        }
+        // Event listeners or cursor
+        if (el.onclick || el.hasAttribute('onclick')) return true;
+        const style = window.getComputedStyle(el);
+        if (style.cursor === 'pointer') return true;
+        return false;
+      }
+
+      // Helper to build element info
+      function buildElementInfo(el, refInfo) {
+        if (!el) return null;
+        const rect = el.getBoundingClientRect();
+        return {
+          ref: refInfo.ref,
+          existing: refInfo.existing,
+          tag: el.tagName,
+          selector: generateSelector(el),
+          clickable: isClickable(el),
+          role: el.getAttribute('role') || null,
+          name: el.getAttribute('aria-label') || el.textContent?.trim().substring(0, 50) || null,
+          box: {
+            x: Math.round(rect.x),
+            y: Math.round(rect.y),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height)
+          }
+        };
+      }
+
+      const results = [];
+      for (const coord of coords) {
+        const el = document.elementFromPoint(coord.x, coord.y);
+        if (!el) {
+          results.push({ x: coord.x, y: coord.y, error: 'No element at this coordinate' });
+        } else {
+          const refInfo = getOrCreateRef(el);
+          const info = buildElementInfo(el, refInfo);
+          info.x = coord.x;
+          info.y = coord.y;
+          results.push(info);
+        }
+      }
+
+      return { elements: results, count: results.filter(r => !r.error).length };
+    })()`,
+    returnByValue: true
+  });
+
+  if (result.exceptionDetails) {
+    throw new Error(`elementsAt error: ${result.exceptionDetails.text}`);
+  }
+
+  return result.result.value;
+}
+
+/**
+ * Execute an elementsNear step - get refs for all elements near a coordinate
+ */
+async function executeElementsNear(session, params) {
+  const { x, y, radius = 50, limit = 20 } = params;
+
+  const result = await session.send('Runtime.evaluate', {
+    expression: `(function() {
+      const centerX = ${x};
+      const centerY = ${y};
+      const radius = ${radius};
+      const limit = ${limit};
+
+      // Initialize refs map if needed
+      if (!window.__ariaRefs) {
+        window.__ariaRefs = new Map();
+      }
+      if (!window.__ariaRefCounter) {
+        window.__ariaRefCounter = 0;
+      }
+
+      // Helper to get or create ref for element
+      function getOrCreateRef(el) {
+        // Check if element already has a ref
+        for (const [ref, refEl] of window.__ariaRefs) {
+          if (refEl === el) {
+            return { ref, existing: true };
+          }
+        }
+
+        // Create new ref
+        window.__ariaRefCounter++;
+        const ref = 'e' + window.__ariaRefCounter;
+        window.__ariaRefs.set(ref, el);
+        return { ref, existing: false };
+      }
+
+      // Helper to generate a selector for an element
+      function generateSelector(el) {
+        if (el.id) return '#' + CSS.escape(el.id);
+
+        // Try unique attributes
+        for (const attr of ['data-testid', 'data-test-id', 'data-cy', 'name']) {
+          if (el.hasAttribute(attr)) {
+            const value = el.getAttribute(attr);
+            const selector = '[' + attr + '="' + value.replace(/"/g, '\\\\"') + '"]';
+            if (document.querySelectorAll(selector).length === 1) return selector;
+          }
+        }
+
+        // Build path
+        const path = [];
+        let current = el;
+        while (current && current !== document.body && path.length < 5) {
+          let selector = current.tagName.toLowerCase();
+          if (current.id) {
+            selector = '#' + CSS.escape(current.id);
+            path.unshift(selector);
+            break;
+          }
+          const parent = current.parentElement;
+          if (parent) {
+            const siblings = Array.from(parent.children).filter(c => c.tagName === current.tagName);
+            if (siblings.length > 1) {
+              const index = siblings.indexOf(current) + 1;
+              selector += ':nth-of-type(' + index + ')';
+            }
+          }
+          path.unshift(selector);
+          current = parent;
+        }
+        return path.join(' > ');
+      }
+
+      // Helper to check if element is clickable
+      function isClickable(el) {
+        const tag = el.tagName;
+        // Obviously clickable elements
+        if (tag === 'BUTTON' || tag === 'A' || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
+          return true;
+        }
+        // Role-based
+        const role = el.getAttribute('role');
+        if (role === 'button' || role === 'link' || role === 'tab' || role === 'menuitem' || role === 'checkbox' || role === 'radio') {
+          return true;
+        }
+        // Event listeners or cursor
+        if (el.onclick || el.hasAttribute('onclick')) return true;
+        const style = window.getComputedStyle(el);
+        if (style.cursor === 'pointer') return true;
+        return false;
+      }
+
+      // Get all elements and filter by distance from center
+      const allElements = document.querySelectorAll('*');
+      const nearbyElements = [];
+
+      for (const el of allElements) {
+        // Skip non-visible elements
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') continue;
+
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+
+        // Calculate center of element
+        const elCenterX = rect.x + rect.width / 2;
+        const elCenterY = rect.y + rect.height / 2;
+
+        // Calculate distance from target point
+        const distance = Math.sqrt(
+          Math.pow(elCenterX - centerX, 2) + Math.pow(elCenterY - centerY, 2)
+        );
+
+        if (distance <= radius) {
+          nearbyElements.push({ el, distance, rect });
+        }
+      }
+
+      // Sort by distance (closest first) and limit
+      nearbyElements.sort((a, b) => a.distance - b.distance);
+      const limited = nearbyElements.slice(0, limit);
+
+      // Build results
+      const results = limited.map(({ el, distance, rect }) => {
+        const refInfo = getOrCreateRef(el);
+        return {
+          ref: refInfo.ref,
+          existing: refInfo.existing,
+          tag: el.tagName,
+          selector: generateSelector(el),
+          clickable: isClickable(el),
+          role: el.getAttribute('role') || null,
+          name: el.getAttribute('aria-label') || el.textContent?.trim().substring(0, 50) || null,
+          distance: Math.round(distance),
+          box: {
+            x: Math.round(rect.x),
+            y: Math.round(rect.y),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height)
+          }
+        };
+      });
+
+      return {
+        center: { x: centerX, y: centerY },
+        radius: radius,
+        count: results.length,
+        elements: results
+      };
+    })()`,
+    returnByValue: true
+  });
+
+  if (result.exceptionDetails) {
+    throw new Error(`elementsNear error: ${result.exceptionDetails.text}`);
+  }
+
+  return result.result.value;
+}
 
 /**
  * Execute a query step - finds elements and returns info about them
@@ -1588,7 +3028,9 @@ async function executeQuery(elementLocator, params) {
     return executeRoleQuery(elementLocator, params);
   }
 
-  const selector = typeof params === 'string' ? params : params.selector;
+  // Trim selector to avoid whitespace issues
+  const rawSelector = typeof params === 'string' ? params : params.selector;
+  const selector = typeof rawSelector === 'string' ? rawSelector.trim() : rawSelector;
   const limit = (typeof params === 'object' && params.limit) || 10;
   const output = (typeof params === 'object' && params.output) || 'text';
   const clean = typeof params === 'object' && params.clean === true;
@@ -1833,7 +3275,32 @@ async function executeConsole(consoleCapture, params) {
 /**
  * Execute a scroll step
  */
-async function executeScroll(elementLocator, inputEmulator, pageController, params) {
+async function executeScroll(elementLocator, inputEmulator, pageController, ariaSnapshot, params) {
+  // Helper to scroll to element by ref
+  async function scrollToRef(ref) {
+    if (!ariaSnapshot) {
+      throw new Error('ariaSnapshot is required for ref-based scroll');
+    }
+    const refInfo = await ariaSnapshot.getElementByRef(ref);
+    if (!refInfo) {
+      throw elementNotFoundError(`ref:${ref}`, 0);
+    }
+    if (refInfo.stale) {
+      throw new Error(`Element ref:${ref} is no longer attached to the DOM. Run 'snapshot' again to get fresh refs.`);
+    }
+    // Scroll to element using its coordinates
+    await pageController.session.send('Runtime.evaluate', {
+      expression: `
+        (function() {
+          const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
+          if (el && el.scrollIntoView) {
+            el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          }
+        })()
+      `
+    });
+  }
+
   if (typeof params === 'string') {
     // Direction-based scroll
     switch (params) {
@@ -1854,16 +3321,25 @@ async function executeScroll(elementLocator, inputEmulator, pageController, para
         await inputEmulator.scroll(0, 300, 400, 300);
         break;
       default:
-        // Treat as selector - scroll element into view
-        const el = await elementLocator.querySelector(params);
-        if (!el) {
-          throw elementNotFoundError(params, 0);
+        // Check if it looks like a ref (e.g., "e1", "e12")
+        if (/^e\d+$/.test(params)) {
+          await scrollToRef(params);
+        } else {
+          // Treat as selector - scroll element into view
+          const el = await elementLocator.querySelector(params);
+          if (!el) {
+            throw elementNotFoundError(params, 0);
+          }
+          await el.scrollIntoView();
+          await el.dispose();
         }
-        await el.scrollIntoView();
-        await el.dispose();
     }
   } else if (params && typeof params === 'object') {
-    if (params.selector) {
+    // Check for ref first
+    const ref = params.ref || (params.selector && /^e\d+$/.test(params.selector) ? params.selector : null);
+    if (ref) {
+      await scrollToRef(ref);
+    } else if (params.selector) {
       // Scroll to element
       const el = await elementLocator.querySelector(params.selector);
       if (!el) {
@@ -1894,13 +3370,49 @@ async function executeScroll(elementLocator, inputEmulator, pageController, para
 }
 
 /**
+ * Format command-level console messages
+ * Dedupes consecutive identical messages and filters to errors/warnings
+ * @param {Object} consoleCapture - Console capture instance
+ * @param {number} messageCountBefore - Number of messages before command started
+ * @returns {Object|null} Console summary or null if no relevant messages
+ */
+function formatCommandConsole(consoleCapture, messageCountBefore) {
+  if (!consoleCapture) return null;
+
+  const allMessages = consoleCapture.getMessages();
+  const newMessages = allMessages.slice(messageCountBefore);
+
+  // Filter to errors and warnings only
+  const relevant = newMessages.filter(m =>
+    m.level === 'error' || m.level === 'warning'
+  );
+
+  // Dedupe consecutive identical messages
+  const deduped = relevant.filter((m, i) =>
+    i === 0 || m.text !== relevant[i - 1].text
+  );
+
+  if (deduped.length === 0) return null;
+
+  return {
+    errors: deduped.filter(m => m.level === 'error').length,
+    warnings: deduped.filter(m => m.level === 'warning').length,
+    messages: deduped.map(m => ({
+      level: m.level,
+      text: m.text,
+      source: m.url ? `${m.url.split('/').pop()}:${m.line}` : undefined
+    }))
+  };
+}
+
+/**
  * Run an array of test steps
  * @param {Object} deps - Dependencies
  * @param {Array<Object>} steps - Array of step definitions
  * @param {Object} [options] - Execution options
  * @param {boolean} [options.stopOnError=true] - Stop on first error
  * @param {number} [options.stepTimeout=30000] - Timeout per step
- * @returns {Promise<{status: string, steps: Array, errors: Array, screenshots: Array}>}
+ * @returns {Promise<{status: string, steps: Array, errors: Array}>}
  */
 export async function runSteps(deps, steps, options = {}) {
   const validation = validateSteps(steps);
@@ -1910,31 +3422,34 @@ export async function runSteps(deps, steps, options = {}) {
 
   const stopOnError = options.stopOnError !== false;
   const result = {
-    status: 'passed',
+    status: 'ok',
     steps: [],
-    errors: [],
-    screenshots: [],
-    outputs: []
+    errors: []
   };
+
+  // Capture console message count before command starts
+  const consoleCountBefore = deps.consoleCapture ? deps.consoleCapture.getMessages().length : 0;
+
+  // Feature 8.1: Capture BEFORE state at command start (for diff baseline)
+  let beforeUrl, beforeViewport, beforeSnapshot;
+  const contextCapture = deps.pageController ? createContextCapture(deps.pageController.session) : null;
+
+  if (deps.ariaSnapshot && contextCapture) {
+    try {
+      beforeUrl = await getCurrentUrl(deps.pageController.session);
+      // Capture viewport-only snapshot for command-level diff
+      beforeViewport = await deps.ariaSnapshot.generate({ mode: 'ai', viewportOnly: true });
+    } catch {
+      // Ignore initial snapshot errors - will just skip diff comparison
+    }
+  }
 
   for (const step of steps) {
     const stepResult = await executeStep(deps, step, options);
     result.steps.push(stepResult);
 
-    if (stepResult.screenshot) {
-      result.screenshots.push(stepResult.screenshot);
-    }
-
-    if (stepResult.output) {
-      result.outputs.push({
-        step: result.steps.length,
-        action: stepResult.action,
-        output: stepResult.output
-      });
-    }
-
-    if (stepResult.status === 'failed') {
-      result.status = 'failed';
+    if (stepResult.status === 'error') {
+      result.status = 'error';
       result.errors.push({
         step: result.steps.length,
         action: stepResult.action,
@@ -1946,6 +3461,56 @@ export async function runSteps(deps, steps, options = {}) {
       }
     }
     // 'skipped' (optional) steps don't fail the run
+  }
+
+  // Wait for async console messages after steps complete
+  if (deps.consoleCapture) {
+    await sleep(250);
+    const consoleSummary = formatCommandConsole(deps.consoleCapture, consoleCountBefore);
+    if (consoleSummary) {
+      result.console = consoleSummary;
+    }
+  }
+
+  // Feature 8.1: Capture AFTER state and compute command-level diff
+  if (deps.ariaSnapshot && contextCapture && beforeViewport) {
+    try {
+      const afterUrl = await getCurrentUrl(deps.pageController.session);
+      const afterContext = await contextCapture.captureContext();
+
+      // Capture both viewport and full page snapshots
+      const afterViewport = await deps.ariaSnapshot.generate({ mode: 'ai', viewportOnly: true });
+      const afterFull = await deps.ariaSnapshot.generate({ mode: 'ai', viewportOnly: false });
+
+      const navigated = contextCapture.isNavigation(beforeUrl, afterUrl);
+
+      // Save full page snapshot to file (use tabAlias for filename)
+      const fullSnapshotPath = await resolveTempPath(`${options.tabAlias || 'command'}.after.yaml`, '.yaml');
+      await fs.writeFile(fullSnapshotPath, afterFull.yaml || '', 'utf8');
+
+      // Add command-level results
+      result.navigated = navigated;
+      result.fullSnapshot = fullSnapshotPath;
+      result.context = afterContext;
+
+      // Always include viewport snapshot inline
+      result.viewportSnapshot = afterViewport.yaml;
+      result.truncated = afterViewport.truncated || false;
+
+      // For same-page interactions, compute viewport diff
+      if (!navigated && beforeViewport?.yaml) {
+        const differ = createSnapshotDiffer();
+        const viewportDiff = differ.computeDiff(beforeViewport.yaml, afterViewport.yaml);
+
+        // Report changes if any significant changes found
+        if (differ.hasSignificantChanges(viewportDiff)) {
+          const actionContext = buildCommandContext(steps);
+          result.changes = differ.formatDiff(viewportDiff, { actionContext });
+        }
+      }
+    } catch (e) {
+      result.viewportSnapshotError = e.message;
+    }
   }
 
   return result;

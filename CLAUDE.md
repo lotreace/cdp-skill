@@ -1,5 +1,9 @@
 # CDP Browser Automation - Project Instructions
 
+## Project Goal
+
+**Make this project amazingly effective** - the CDP skill should be the most reliable, efficient, and intuitive browser automation tool for Claude Code agents. Every feature should reduce round trips, provide clear feedback, and just work.
+
 ## Code Style
 
 **This repository uses a FUNCTIONAL programming style, not OOP.**
@@ -41,6 +45,10 @@ Common utilities should be in `src/utils.js`:
 ## Testing Notes
 
 **Do not use example.com for testing** - it doesn't route anywhere useful. Use real websites like google.com, wikipedia.org, or dedicated test sites.
+
+## Documentation
+
+After any code change affecting how agents use the JS code, make sure that `SKILL.md` is up to date. This can be done at the end of the implementation.
 
 ## Memory Management
 

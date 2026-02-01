@@ -325,6 +325,10 @@ describe('Integration: TestRunner with Mocks', () => {
       if (method === 'Runtime.evaluate' && params?.expression?.includes('innerWidth')) {
         return { result: { value: { width: 1920, height: 1080 } } };
       }
+      // Handle Runtime.callFunctionOn for ActionabilityChecker - attached check
+      if (method === 'Runtime.callFunctionOn' && params?.functionDeclaration?.includes('isConnected')) {
+        return { result: { value: { matches: true, received: 'attached' } } };
+      }
       // Handle Runtime.callFunctionOn for ActionabilityChecker - visible check
       if (method === 'Runtime.callFunctionOn' && params?.functionDeclaration?.includes('visibility')) {
         return { result: { value: { matches: true, received: 'visible' } } };
@@ -380,11 +384,16 @@ describe('Integration: TestRunner with Mocks', () => {
       getViewportDimensions: async () => ({ width: 1920, height: 1080 })
     };
 
+    const mockConsoleCapture = {
+      getMessages: () => []
+    };
+
     const runner = createTestRunner({
       pageController: mockPageController,
       elementLocator: mockElementLocator,
       inputEmulator: mockInputEmulator,
-      screenshotCapture: mockScreenshotCapture
+      screenshotCapture: mockScreenshotCapture,
+      consoleCapture: mockConsoleCapture
     });
 
     const result = await runner.run([
@@ -392,14 +401,12 @@ describe('Integration: TestRunner with Mocks', () => {
       { wait: '#main' },
       { click: '#button' },
       { fill: { selector: '#input', value: 'test' } },
-      { press: 'Enter' },
-      { screenshot: '/tmp/test.png' }
+      { press: 'Enter' }
     ]);
 
-    assert.strictEqual(result.status, 'passed');
-    assert.strictEqual(result.steps.length, 6);
+    assert.strictEqual(result.status, 'ok');
+    assert.strictEqual(result.steps.length, 5);
     assert.strictEqual(result.errors.length, 0);
-    assert.strictEqual(result.screenshots.length, 1);
   });
 });
 

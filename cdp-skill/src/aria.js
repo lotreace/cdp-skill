@@ -472,7 +472,11 @@ export function createRoleQueryExecutor(session, elementLocator) {
 // The snapshot script runs entirely in the browser context
 const SNAPSHOT_SCRIPT = `
 (function generateAriaSnapshot(rootSelector, options) {
-  const { mode = 'ai', maxDepth = 50, maxElements = 0, includeText = false, includeFrames = false } = options || {};
+  const { mode = 'ai', maxDepth = 50, maxElements = 0, includeText = false, includeFrames = false, viewportOnly = false, pierceShadow = false } = options || {};
+
+  // Viewport dimensions for viewport-only mode
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
 
   // Element counter for maxElements limit
   let elementCount = 0;
@@ -598,10 +602,23 @@ const SNAPSHOT_SCRIPT = `
     return false;
   }
 
+  function isInViewport(el) {
+    const rect = el.getBoundingClientRect();
+    // Element is in viewport if any part of it is visible
+    return rect.bottom > 0 && rect.top < viewportHeight &&
+           rect.right > 0 && rect.left < viewportWidth;
+  }
+
+  // Container tags that may have scrollable content outside their bounding rect
+  const CONTAINER_TAGS = new Set(['BODY', 'HTML', 'MAIN', 'ARTICLE', 'SECTION', 'NAV', 'HEADER', 'FOOTER', 'ASIDE', 'DIV', 'FORM']);
+
   function isVisible(el) {
     if (isHiddenForAria(el)) return false;
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return false;
+    // In viewportOnly mode, check if element is in viewport
+    // But allow container elements through - they may have children in viewport
+    if (viewportOnly && !CONTAINER_TAGS.has(el.tagName) && !isInViewport(el)) return false;
     return true;
   }
 
@@ -959,9 +976,9 @@ const SNAPSHOT_SCRIPT = `
     if (required === true) node.required = true;
 
     // Add ref for interactable elements in AI mode
+    // Note: box info is stored in refs map for internal lookups, not in output tree
     if (mode === 'ai' && visible && isInteractable(el, role)) {
       node.ref = generateRef(el, role);
-      node.box = getBoundingBox(el);
     }
 
     // Add name attribute for form elements
@@ -1015,8 +1032,8 @@ const SNAPSHOT_SCRIPT = `
       }
     }
 
-    // Handle shadow DOM
-    if (el.shadowRoot) {
+    // Handle shadow DOM (only when pierceShadow is enabled)
+    if (pierceShadow && el.shadowRoot) {
       for (const child of el.shadowRoot.childNodes) {
         if (child.nodeType === Node.ELEMENT_NODE) {
           const node = buildAriaNode(child, depth + 1, parentRole);
@@ -1153,19 +1170,10 @@ const SNAPSHOT_SCRIPT = `
     return { tree: null, yaml: '', refs: {} };
   }
 
-  // Build refs map for output
+  // Build refs map for output (selector only, box info available via getElementByRef)
   const refs = {};
   for (const [ref, el] of refElements) {
-    const rect = el.getBoundingClientRect();
-    refs[ref] = {
-      selector: generateSelector(el),
-      box: {
-        x: Math.round(rect.x),
-        y: Math.round(rect.y),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height)
-      }
-    };
+    refs[ref] = generateSelector(el);
   }
 
   function generateSelector(el) {
@@ -1214,13 +1222,7 @@ const SNAPSHOT_SCRIPT = `
     tree,
     yaml,
     refs,
-    stats: {
-      totalRefs: refCounter,
-      totalElements: elementCount,
-      maxDepth: maxDepth,
-      maxElements: maxElements,
-      limitReached: limitReached
-    }
+    truncated: limitReached
   };
 })
 `;
@@ -1240,13 +1242,15 @@ export function createAriaSnapshot(session) {
    * @param {number} options.maxElements - Maximum elements to include (default: unlimited)
    * @param {boolean} options.includeText - Include static text nodes in output (default: false for ai mode)
    * @param {boolean} options.includeFrames - Include same-origin iframe content (default: false)
+   * @param {boolean} options.viewportOnly - Only include elements visible in viewport (default: false)
+   * @param {boolean} options.pierceShadow - Traverse into open shadow DOM trees (default: false)
    * @returns {Promise<Object>} Snapshot result with tree, yaml, and refs
    */
   async function generate(options = {}) {
-    const { root = null, mode = 'ai', maxDepth = 50, maxElements = 0, includeText = false, includeFrames = false } = options;
+    const { root = null, mode = 'ai', maxDepth = 50, maxElements = 0, includeText = false, includeFrames = false, viewportOnly = false, pierceShadow = false } = options;
 
     const result = await session.send('Runtime.evaluate', {
-      expression: `(${SNAPSHOT_SCRIPT})(${JSON.stringify(root)}, ${JSON.stringify({ mode, maxDepth, maxElements, includeText, includeFrames })})`,
+      expression: `(${SNAPSHOT_SCRIPT})(${JSON.stringify(root)}, ${JSON.stringify({ mode, maxDepth, maxElements, includeText, includeFrames, viewportOnly, pierceShadow })})`,
       returnByValue: true,
       awaitPromise: false
     });

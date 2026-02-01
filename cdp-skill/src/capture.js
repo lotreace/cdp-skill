@@ -136,6 +136,16 @@ export function createConsoleCapture(session, options = {}) {
     return [...messages];
   }
 
+  function getMessagesSince(timestamp) {
+    return messages.filter(m => m.timestamp && m.timestamp >= timestamp);
+  }
+
+  function getMessagesBetween(startTimestamp, endTimestamp) {
+    return messages.filter(m =>
+      m.timestamp && m.timestamp >= startTimestamp && m.timestamp <= endTimestamp
+    );
+  }
+
   function getMessagesByLevel(levels) {
     const levelSet = new Set(Array.isArray(levels) ? levels : [levels]);
     return messages.filter(m => levelSet.has(m.level));
@@ -170,6 +180,8 @@ export function createConsoleCapture(session, options = {}) {
     startCapture,
     stopCapture,
     getMessages,
+    getMessagesSince,
+    getMessagesBetween,
     getMessagesByLevel,
     getMessagesByType,
     getErrors,
@@ -1238,23 +1250,36 @@ export function createEvalSerializer() {
         };
       }
 
-      // Handle arrays
+      // Handle arrays - recursively serialize each element
       if (Array.isArray(value)) {
-        try {
-          return { type: 'array', value: JSON.parse(JSON.stringify(value)) };
-        } catch (e) {
-          return { type: 'array', length: value.length, repr: '[Array with circular references]' };
+        const items = [];
+        const len = Math.min(value.length, 100); // Limit to 100 items
+        for (let i = 0; i < len; i++) {
+          items.push(arguments.callee(value[i])); // Recursive call
         }
+        return {
+          type: 'array',
+          length: value.length,
+          items: items,
+          truncated: value.length > 100
+        };
       }
 
-      // Handle plain objects
+      // Handle plain objects - recursively serialize values
       if (type === 'object') {
-        try {
-          return { type: 'object', value: JSON.parse(JSON.stringify(value)) };
-        } catch (e) {
-          const keys = Object.keys(value).slice(0, 20);
-          return { type: 'object', keys: keys, repr: '[Object with circular references]' };
+        const keys = Object.keys(value);
+        const entries = {};
+        const len = Math.min(keys.length, 50); // Limit to 50 keys
+        for (let i = 0; i < len; i++) {
+          const k = keys[i];
+          entries[k] = arguments.callee(value[k]); // Recursive call
         }
+        return {
+          type: 'object',
+          keys: keys.length,
+          entries: entries,
+          truncated: keys.length > 50
+        };
       }
 
       return { type: 'unknown', repr: String(value) };
@@ -1328,7 +1353,23 @@ export function createEvalSerializer() {
         result.innerHeight = serialized.innerHeight;
         break;
       case 'array':
-        result.length = Array.isArray(serialized.value) ? serialized.value.length : serialized.length;
+        result.length = serialized.length;
+        if (serialized.items) {
+          // Recursively process each item
+          result.items = serialized.items.map(item => processResult(item));
+        }
+        if (serialized.truncated) result.truncated = true;
+        break;
+      case 'object':
+        result.keys = serialized.keys;
+        if (serialized.entries) {
+          // Recursively process each entry value
+          result.entries = {};
+          for (const [k, v] of Object.entries(serialized.entries)) {
+            result.entries[k] = processResult(v);
+          }
+        }
+        if (serialized.truncated) result.truncated = true;
         break;
     }
 

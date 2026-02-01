@@ -18,7 +18,9 @@ export {
   createBrowser,
   findChromePath,
   launchChrome,
-  getChromeStatus
+  getChromeStatus,
+  isChromeProcessRunning,
+  createNewTab
 } from './cdp.js';
 
 // ============================================================================
