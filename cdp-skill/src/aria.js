@@ -1238,6 +1238,7 @@ export function createAriaSnapshot(session) {
    * @param {Object} options - Snapshot options
    * @param {string} options.root - CSS selector or role selector (e.g., "role=main") for root element
    * @param {string} options.mode - 'ai' for agent-friendly output, 'full' for complete tree
+   * @param {string} options.detail - Detail level: 'summary', 'interactive', or 'full' (default: 'full')
    * @param {number} options.maxDepth - Maximum tree depth (default: 50)
    * @param {number} options.maxElements - Maximum elements to include (default: unlimited)
    * @param {boolean} options.includeText - Include static text nodes in output (default: false for ai mode)
@@ -1247,10 +1248,10 @@ export function createAriaSnapshot(session) {
    * @returns {Promise<Object>} Snapshot result with tree, yaml, and refs
    */
   async function generate(options = {}) {
-    const { root = null, mode = 'ai', maxDepth = 50, maxElements = 0, includeText = false, includeFrames = false, viewportOnly = false, pierceShadow = false } = options;
+    const { root = null, mode = 'ai', detail = 'full', maxDepth = 50, maxElements = 0, includeText = false, includeFrames = false, viewportOnly = false, pierceShadow = false } = options;
 
     const result = await session.send('Runtime.evaluate', {
-      expression: `(${SNAPSHOT_SCRIPT})(${JSON.stringify(root)}, ${JSON.stringify({ mode, maxDepth, maxElements, includeText, includeFrames, viewportOnly, pierceShadow })})`,
+      expression: `(${SNAPSHOT_SCRIPT})(${JSON.stringify(root)}, ${JSON.stringify({ mode, detail, maxDepth, maxElements, includeText, includeFrames, viewportOnly, pierceShadow })})`,
       returnByValue: true,
       awaitPromise: false
     });
@@ -1259,7 +1260,186 @@ export function createAriaSnapshot(session) {
       throw new Error(`Snapshot generation failed: ${result.exceptionDetails.text}`);
     }
 
-    return result.result.value;
+    const snapshotResult = result.result.value;
+
+    // Handle detail levels post-processing
+    if (detail === 'summary') {
+      return generateSummaryView(snapshotResult);
+    } else if (detail === 'interactive') {
+      return generateInteractiveView(snapshotResult);
+    }
+
+    return snapshotResult;
+  }
+
+  /**
+   * Generate a summary view of the snapshot
+   * Shows landmarks and interactive element counts
+   */
+  function generateSummaryView(snapshot) {
+    if (!snapshot || !snapshot.tree) {
+      return { ...snapshot, detail: 'summary' };
+    }
+
+    const landmarks = [];
+    let totalElements = 0;
+    let interactiveElements = 0;
+    let viewportElements = 0;
+
+    const LANDMARK_ROLES = ['main', 'navigation', 'banner', 'contentinfo', 'complementary', 'search', 'form', 'region'];
+    const INTERACTIVE_ROLES = ['button', 'checkbox', 'combobox', 'link', 'listbox', 'menuitem', 'option', 'radio', 'searchbox', 'slider', 'spinbutton', 'switch', 'tab', 'textbox', 'treeitem'];
+
+    function walkTree(node, depth = 0) {
+      if (!node) return;
+      totalElements++;
+
+      const role = node.role || '';
+      const isInteractive = INTERACTIVE_ROLES.includes(role);
+      const isLandmark = LANDMARK_ROLES.includes(role);
+
+      if (isInteractive) {
+        interactiveElements++;
+      }
+
+      if (node.box) {
+        viewportElements++;
+      }
+
+      if (isLandmark) {
+        const landmark = {
+          role,
+          name: node.name || null,
+          interactiveCount: countInteractive(node),
+          children: getChildRoles(node)
+        };
+        landmarks.push(landmark);
+      }
+
+      if (node.children && Array.isArray(node.children)) {
+        for (const child of node.children) {
+          walkTree(child, depth + 1);
+        }
+      }
+    }
+
+    function countInteractive(node) {
+      let count = 0;
+      function walk(n) {
+        if (!n) return;
+        if (INTERACTIVE_ROLES.includes(n.role)) count++;
+        if (n.children) n.children.forEach(walk);
+      }
+      if (node.children) node.children.forEach(walk);
+      return count;
+    }
+
+    function getChildRoles(node) {
+      const roles = [];
+      if (node.children) {
+        for (const child of node.children) {
+          if (child.role && !['staticText', 'generic'].includes(child.role)) {
+            roles.push(child.role);
+          }
+        }
+      }
+      return roles.slice(0, 5); // Limit to 5
+    }
+
+    walkTree(snapshot.tree);
+
+    // Generate summary YAML
+    const yamlLines = [];
+    yamlLines.push('# Snapshot Summary');
+    yamlLines.push(`# Total elements: ${totalElements}`);
+    yamlLines.push(`# Interactive elements: ${interactiveElements}`);
+    yamlLines.push(`# Viewport elements: ${viewportElements}`);
+    yamlLines.push('');
+    yamlLines.push('landmarks:');
+    for (const lm of landmarks) {
+      yamlLines.push(`  - role: ${lm.role}`);
+      if (lm.name) yamlLines.push(`    name: "${lm.name}"`);
+      yamlLines.push(`    interactiveCount: ${lm.interactiveCount}`);
+      if (lm.children.length > 0) {
+        yamlLines.push(`    children: [${lm.children.join(', ')}]`);
+      }
+    }
+
+    return {
+      yaml: yamlLines.join('\n'),
+      refs: snapshot.refs,
+      detail: 'summary',
+      stats: {
+        totalElements,
+        interactiveElements,
+        viewportElements,
+        landmarkCount: landmarks.length
+      },
+      landmarks
+    };
+  }
+
+  /**
+   * Generate an interactive-only view of the snapshot
+   * Shows only actionable elements with their paths
+   */
+  function generateInteractiveView(snapshot) {
+    if (!snapshot || !snapshot.tree) {
+      return { ...snapshot, detail: 'interactive' };
+    }
+
+    const INTERACTIVE_ROLES = ['button', 'checkbox', 'combobox', 'link', 'listbox', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'option', 'radio', 'searchbox', 'slider', 'spinbutton', 'switch', 'tab', 'textbox', 'treeitem'];
+    const elements = [];
+
+    function walkTree(node, path = []) {
+      if (!node) return;
+
+      const role = node.role || '';
+      const isInteractive = INTERACTIVE_ROLES.includes(role);
+
+      if (isInteractive) {
+        const el = {
+          role,
+          name: node.name || '',
+          ref: node.ref || null,
+          path: path.join(' > ')
+        };
+        if (node.checked !== undefined) el.checked = node.checked;
+        if (node.disabled) el.disabled = true;
+        if (node.expanded !== undefined) el.expanded = node.expanded;
+        if (node.value) el.value = node.value;
+        elements.push(el);
+      }
+
+      if (node.children && Array.isArray(node.children)) {
+        const newPath = role && !['staticText', 'generic'].includes(role) ? [...path, role] : path;
+        for (const child of node.children) {
+          walkTree(child, newPath);
+        }
+      }
+    }
+
+    walkTree(snapshot.tree);
+
+    // Generate compact YAML for interactive elements
+    const yamlLines = elements.map(el => {
+      let line = `- ${el.role} "${el.name}"`;
+      if (el.ref) line += ` [ref=${el.ref}]`;
+      if (el.checked !== undefined) line += el.checked ? ' [checked]' : '';
+      if (el.disabled) line += ' [disabled]';
+      if (el.expanded !== undefined) line += el.expanded ? ' [expanded]' : ' [collapsed]';
+      line += `: path=${el.path}`;
+      return line;
+    });
+
+    return {
+      yaml: yamlLines.join('\n'),
+      refs: snapshot.refs,
+      detail: 'interactive',
+      stats: {
+        interactiveCount: elements.length
+      },
+      elements
+    };
   }
 
   /**

@@ -42,8 +42,37 @@ export function validateStepInternal(step) {
 
   switch (action) {
     case 'goto':
-      if (typeof params !== 'string' || params.length === 0) {
-        errors.push('goto requires a non-empty URL string');
+      // Support both string URL and object format with options
+      if (typeof params === 'string') {
+        if (params.length === 0) {
+          errors.push('goto requires a non-empty URL string');
+        }
+      } else if (params && typeof params === 'object') {
+        if (!params.url || typeof params.url !== 'string') {
+          errors.push('goto requires a non-empty url property');
+        }
+        // Validate waitUntil if provided
+        if (params.waitUntil !== undefined) {
+          const validWaitUntil = ['commit', 'domcontentloaded', 'load', 'networkidle'];
+          if (!validWaitUntil.includes(params.waitUntil)) {
+            errors.push(`goto waitUntil must be one of: ${validWaitUntil.join(', ')}`);
+          }
+        }
+      } else {
+        errors.push('goto requires a URL string or object with url property');
+      }
+      break;
+
+    case 'reload':
+      // reload can be boolean true or object with options
+      if (params !== true && typeof params !== 'object') {
+        errors.push('reload requires true or params object');
+      }
+      if (typeof params === 'object' && params.waitUntil !== undefined) {
+        const validWaitUntil = ['commit', 'domcontentloaded', 'load', 'networkidle'];
+        if (!validWaitUntil.includes(params.waitUntil)) {
+          errors.push(`reload waitUntil must be one of: ${validWaitUntil.join(', ')}`);
+        }
       }
       break;
 
@@ -261,8 +290,45 @@ export function validateStepInternal(step) {
       if (params !== true && params !== false && typeof params !== 'object') {
         errors.push('snapshot requires true or params object');
       }
-      if (typeof params === 'object' && params.mode && !['ai', 'full'].includes(params.mode)) {
-        errors.push('snapshot mode must be "ai" or "full"');
+      if (typeof params === 'object') {
+        if (params.mode && !['ai', 'full'].includes(params.mode)) {
+          errors.push('snapshot mode must be "ai" or "full"');
+        }
+        if (params.detail && !['summary', 'interactive', 'full'].includes(params.detail)) {
+          errors.push('snapshot detail must be "summary", "interactive", or "full"');
+        }
+        if (params.inlineLimit !== undefined && (typeof params.inlineLimit !== 'number' || params.inlineLimit < 0)) {
+          errors.push('snapshot inlineLimit must be a non-negative number');
+        }
+      }
+      break;
+
+    case 'snapshotSearch':
+      // snapshotSearch requires at least one search criterion
+      if (!params || typeof params !== 'object') {
+        errors.push('snapshotSearch requires an object with search parameters');
+      } else {
+        const hasText = params.text !== undefined;
+        const hasPattern = params.pattern !== undefined;
+        const hasRole = params.role !== undefined;
+        if (!hasText && !hasPattern && !hasRole) {
+          errors.push('snapshotSearch requires at least one of: text, pattern, or role');
+        }
+        if (hasText && typeof params.text !== 'string') {
+          errors.push('snapshotSearch text must be a string');
+        }
+        if (hasPattern && typeof params.pattern !== 'string') {
+          errors.push('snapshotSearch pattern must be a string (regex)');
+        }
+        if (hasRole && typeof params.role !== 'string') {
+          errors.push('snapshotSearch role must be a string');
+        }
+        if (params.limit !== undefined && (typeof params.limit !== 'number' || params.limit < 1)) {
+          errors.push('snapshotSearch limit must be a positive number');
+        }
+        if (params.context !== undefined && (typeof params.context !== 'number' || params.context < 0)) {
+          errors.push('snapshotSearch context must be a non-negative number');
+        }
       }
       break;
 

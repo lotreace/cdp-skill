@@ -48,7 +48,7 @@ import { validateSteps } from './step-validator.js';
 import { executeWait, executeWaitForNavigation, executeScroll } from './execute-navigation.js';
 import { executeClick, executeHover, executeDrag } from './execute-interaction.js';
 import { executeFillActive, executeSelectOption } from './execute-input.js';
-import { executeSnapshot, executeQuery, executeQueryAll, executeInspect, executeGetDom, executeGetBox, executeRefAt, executeElementsAt, executeElementsNear } from './execute-query.js';
+import { executeSnapshot, executeSnapshotSearch, executeQuery, executeQueryAll, executeInspect, executeGetDom, executeGetBox, executeRefAt, executeElementsAt, executeElementsNear } from './execute-query.js';
 import { executeValidate, executeSubmit, executeExtract } from './execute-form.js';
 import { executePdf, executeEval, executeCookies, executeListTabs, executeCloseTab, executeConsole, formatCommandConsole } from './execute-browser.js';
 
@@ -82,7 +82,14 @@ export async function executeStep(deps, step, options = {}) {
 
     if (step.goto !== undefined) {
       stepResult.action = 'goto';
-      await pageController.navigate(step.goto);
+      // Support both string URL and object format
+      const url = typeof step.goto === 'string' ? step.goto : step.goto.url;
+      const gotoOptions = typeof step.goto === 'object' ? step.goto : {};
+      await pageController.navigate(url, gotoOptions);
+    } else if (step.reload !== undefined) {
+      stepResult.action = 'reload';
+      const reloadOptions = step.reload === true ? {} : step.reload;
+      await pageController.reload(reloadOptions);
     } else if (step.wait !== undefined) {
       stepResult.action = 'wait';
       if (typeof step.wait === 'number') {
@@ -169,7 +176,10 @@ export async function executeStep(deps, step, options = {}) {
       stepResult.output = await executeEval(pageController, step.eval);
     } else if (step.snapshot !== undefined) {
       stepResult.action = 'snapshot';
-      stepResult.output = await executeSnapshot(deps.ariaSnapshot, step.snapshot);
+      stepResult.output = await executeSnapshot(deps.ariaSnapshot, step.snapshot, { tabAlias: options.tabAlias, inlineLimit: options.inlineLimit });
+    } else if (step.snapshotSearch !== undefined) {
+      stepResult.action = 'snapshotSearch';
+      stepResult.output = await executeSnapshotSearch(deps.ariaSnapshot, step.snapshotSearch);
     } else if (step.hover !== undefined) {
       stepResult.action = 'hover';
       const hoverResult = await executeHover(elementLocator, inputEmulator, deps.ariaSnapshot, step.hover);
@@ -302,7 +312,17 @@ export async function executeStep(deps, step, options = {}) {
     stepResult.params = stepParams;
 
     try {
-      stepResult.context = await captureFailureContext(deps);
+      // Extract selector or text from params for near-match suggestions
+      const contextOptions = {};
+      if (stepParams) {
+        if (typeof stepParams === 'string') {
+          contextOptions.failedSelector = stepParams;
+        } else if (typeof stepParams === 'object') {
+          contextOptions.failedSelector = stepParams.selector || stepParams.ref;
+          contextOptions.failedText = stepParams.text;
+        }
+      }
+      stepResult.context = await captureFailureContext(deps, contextOptions);
     } catch (e) {
       // Ignore context capture errors
     }

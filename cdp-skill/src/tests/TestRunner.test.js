@@ -513,7 +513,7 @@ describe('TestRunner', () => {
 
       const result = testRunner.validateSteps(steps);
       assert.strictEqual(result.valid, false);
-      assert.ok(result.errors[0].errors[0].includes('non-empty URL'));
+      assert.ok(result.errors[0].errors[0].includes('non-empty'));
     });
 
     it('should return errors for non-string goto', () => {
@@ -521,7 +521,8 @@ describe('TestRunner', () => {
 
       const result = testRunner.validateSteps(steps);
       assert.strictEqual(result.valid, false);
-      assert.ok(result.errors[0].errors[0].includes('non-empty URL'));
+      // Now accepts both string and object format
+      assert.ok(result.errors[0].errors[0].includes('URL string') || result.errors[0].errors[0].includes('url property'));
     });
 
     it('should return errors for empty wait selector', () => {

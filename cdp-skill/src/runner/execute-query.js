@@ -20,18 +20,45 @@
  */
 
 import { createQueryOutputProcessor, createRoleQueryExecutor } from '../aria.js';
-import { elementNotFoundError } from '../utils.js';
+import { elementNotFoundError, resolveTempPath } from '../utils.js';
+import fs from 'fs/promises';
 
-export async function executeSnapshot(ariaSnapshot, params) {
+// Default inline limit - safe for Codex (10K) with margin
+const DEFAULT_INLINE_LIMIT = 9000;
+
+export async function executeSnapshot(ariaSnapshot, params, options = {}) {
   if (!ariaSnapshot) {
     throw new Error('Aria snapshot not available');
   }
 
-  const options = params === true ? {} : params;
-  const result = await ariaSnapshot.generate(options);
+  const snapshotOptions = params === true ? {} : (params || {});
+  const result = await ariaSnapshot.generate(snapshotOptions);
 
   if (result.error) {
     throw new Error(result.error);
+  }
+
+  // Determine inline limit from params, options, or default
+  const inlineLimit = snapshotOptions.inlineLimit ?? options.inlineLimit ?? DEFAULT_INLINE_LIMIT;
+  const yaml = result.yaml || '';
+  const snapshotSize = yaml.length;
+
+  // Check if snapshot exceeds inline limit
+  if (inlineLimit > 0 && snapshotSize > inlineLimit) {
+    // Save to file instead of returning inline
+    const tabAlias = options.tabAlias || 'snapshot';
+    const snapshotPath = await resolveTempPath(`${tabAlias}.snapshot.yaml`, '.yaml');
+    await fs.writeFile(snapshotPath, yaml, 'utf8');
+
+    return {
+      yaml: null,
+      refs: result.refs,
+      stats: result.stats,
+      artifacts: { snapshot: snapshotPath },
+      snapshotSize,
+      truncatedInline: true,
+      message: `Snapshot too large for inline (${snapshotSize} bytes > ${inlineLimit} limit). Saved to ${snapshotPath}`
+    };
   }
 
   return {
@@ -768,4 +795,141 @@ export async function executeQueryAll(elementLocator, params) {
   }
 
   return results;
+}
+
+/**
+ * Execute a snapshotSearch step - search within accessibility tree
+ * Returns only matching branches instead of full tree
+ *
+ * @param {Object} ariaSnapshot - ARIA snapshot instance
+ * @param {Object} params - Search parameters
+ * @param {string} [params.text] - Fuzzy text match in names/values
+ * @param {string} [params.pattern] - Regex pattern for matching
+ * @param {string} [params.role] - Filter by ARIA role
+ * @param {boolean} [params.exact] - Use exact text match (default: false)
+ * @param {number} [params.limit] - Max results (default: 10)
+ * @param {number} [params.context] - Include N parent levels for context (default: 2)
+ * @returns {Promise<Object>} Search results with matching elements
+ */
+export async function executeSnapshotSearch(ariaSnapshot, params) {
+  if (!ariaSnapshot) {
+    throw new Error('Aria snapshot not available');
+  }
+
+  const {
+    text,
+    pattern,
+    role,
+    exact = false,
+    limit = 10,
+    context = 2,
+    near // Optional: {x, y, radius} for coordinate-based filtering
+  } = params;
+
+  // Generate full snapshot tree (in memory)
+  const snapshot = await ariaSnapshot.generate({ mode: 'ai' });
+
+  if (snapshot.error) {
+    throw new Error(snapshot.error);
+  }
+
+  // Parse the YAML tree and search for matches
+  const matches = [];
+  let searchedElements = 0;
+
+  // Search function that walks the tree
+  function searchNode(node, path = [], depth = 0) {
+    if (!node || typeof node !== 'object') return;
+    searchedElements++;
+
+    const nodeName = node.name || '';
+    const nodeRole = node.role || '';
+    const nodeRef = node.ref || null;
+    const nodeValue = node.value || '';
+    const nodeBox = node.box || null;
+
+    // Check if this node matches the search criteria
+    let isMatch = true;
+
+    // Role filter
+    if (role && nodeRole !== role) {
+      isMatch = false;
+    }
+
+    // Text filter
+    if (text && isMatch) {
+      const searchText = text.toLowerCase();
+      const combinedText = `${nodeName} ${nodeValue}`.toLowerCase();
+      if (exact) {
+        isMatch = combinedText === searchText || nodeName.toLowerCase() === searchText;
+      } else {
+        isMatch = combinedText.includes(searchText);
+      }
+    }
+
+    // Pattern filter (regex)
+    if (pattern && isMatch) {
+      try {
+        const regex = new RegExp(pattern, 'i');
+        const combinedText = `${nodeName} ${nodeValue}`;
+        isMatch = regex.test(combinedText);
+      } catch (e) {
+        // Invalid regex
+        isMatch = false;
+      }
+    }
+
+    // Near coordinates filter
+    if (near && isMatch && nodeBox) {
+      const { x: centerX, y: centerY, radius = 100 } = near;
+      const boxCenterX = nodeBox.x + nodeBox.width / 2;
+      const boxCenterY = nodeBox.y + nodeBox.height / 2;
+      const distance = Math.sqrt(Math.pow(boxCenterX - centerX, 2) + Math.pow(boxCenterY - centerY, 2));
+      isMatch = distance <= radius;
+    }
+
+    // If this node matches, add it to results
+    if (isMatch && matches.length < limit) {
+      const match = {
+        path: path.join(' > '),
+        role: nodeRole,
+        name: nodeName
+      };
+
+      if (nodeRef) match.ref = nodeRef;
+      if (nodeValue) match.value = nodeValue;
+      if (nodeBox) match.box = nodeBox;
+
+      matches.push(match);
+    }
+
+    // Recurse into children
+    if (node.children && Array.isArray(node.children)) {
+      const newPath = nodeRole ? [...path, nodeRole] : path;
+      for (const child of node.children) {
+        if (matches.length >= limit) break;
+        searchNode(child, newPath, depth + 1);
+      }
+    }
+  }
+
+  // Parse the snapshot tree from the result
+  // The snapshot is returned as a tree structure, search it
+  if (snapshot.tree) {
+    searchNode(snapshot.tree);
+  }
+
+  return {
+    matches,
+    matchCount: matches.length,
+    searchedElements,
+    criteria: {
+      text: text || null,
+      pattern: pattern || null,
+      role: role || null,
+      exact,
+      limit,
+      near: near || null
+    }
+  };
 }

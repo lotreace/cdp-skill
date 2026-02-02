@@ -14,18 +14,19 @@
 
 export const STEP_TYPES = [
   'goto', 'wait', 'click', 'fill', 'fillForm', 'press', 'query', 'queryAll',
-  'inspect', 'scroll', 'console', 'pdf', 'eval', 'snapshot', 'hover', 'viewport',
-  'cookies', 'back', 'forward', 'waitForNavigation', 'listTabs', 'closeTab',
-  'openTab', 'type', 'select', 'selectOption', 'validate', 'submit', 'assert',
-  'switchToFrame', 'switchToMainFrame', 'listFrames', 'drag', 'formState',
-  'extract', 'getDom', 'getBox', 'fillActive', 'refAt', 'elementsAt', 'elementsNear'
+  'inspect', 'scroll', 'console', 'pdf', 'eval', 'snapshot', 'snapshotSearch',
+  'hover', 'viewport', 'cookies', 'back', 'forward', 'waitForNavigation', 'listTabs',
+  'closeTab', 'openTab', 'type', 'select', 'selectOption', 'validate', 'submit',
+  'assert', 'switchToFrame', 'switchToMainFrame', 'listFrames', 'drag', 'formState',
+  'extract', 'getDom', 'getBox', 'fillActive', 'refAt', 'elementsAt', 'elementsNear',
+  'reload'
 ];
 
 // Visual actions that trigger auto-screenshot
 // Actions that should capture a screenshot - anything that interacts with or queries the visible page
 export const VISUAL_ACTIONS = [
-  'goto', 'click', 'fill', 'fillForm', 'type', 'hover', 'press', 'scroll', 'wait',  // interactions
-  'snapshot', 'query', 'queryAll', 'inspect', 'eval', 'extract', 'formState',  // queries
+  'goto', 'reload', 'click', 'fill', 'fillForm', 'type', 'hover', 'press', 'scroll', 'wait',  // interactions
+  'snapshot', 'snapshotSearch', 'query', 'queryAll', 'inspect', 'eval', 'extract', 'formState',  // queries
   'drag', 'select', 'selectOption', 'validate', 'submit', 'assert',  // other page interactions
   'openTab'  // navigation actions - behave like goto for auto-snapshot
 ];
@@ -107,10 +108,14 @@ export function buildCommandContext(steps) {
  * Capture failure context for debugging
  * Gathers page info when a step fails to aid debugging
  * @param {Object} deps - Dependencies (pageController, etc.)
+ * @param {Object} [options] - Optional context options
+ * @param {string} [options.failedSelector] - The selector that failed to find
+ * @param {string} [options.failedText] - The text that failed to match
  * @returns {Promise<Object>} Context information
  */
-export async function captureFailureContext(deps) {
+export async function captureFailureContext(deps, options = {}) {
   const { pageController } = deps;
+  const { failedSelector, failedText } = options;
   const context = {};
 
   try {
@@ -136,7 +141,28 @@ export async function captureFailureContext(deps) {
   }
 
   try {
-    // Get visible buttons (limit 5)
+    // Get scroll position
+    const scrollResult = await pageController.session.send('Runtime.evaluate', {
+      expression: `({
+        x: window.scrollX || document.documentElement.scrollLeft,
+        y: window.scrollY || document.documentElement.scrollTop,
+        maxY: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) - window.innerHeight
+      })`,
+      returnByValue: true
+    });
+    const scroll = scrollResult.result.value;
+    context.scrollPosition = {
+      x: scroll.x,
+      y: scroll.y,
+      maxY: scroll.maxY,
+      percentY: scroll.maxY > 0 ? Math.round((scroll.y / scroll.maxY) * 100) : 0
+    };
+  } catch {
+    context.scrollPosition = null;
+  }
+
+  try {
+    // Get visible buttons with refs (limit 8)
     const buttonsResult = await pageController.session.send('Runtime.evaluate', {
       expression: `
         (function() {
@@ -147,11 +173,25 @@ export async function captureFailureContext(deps) {
               const style = window.getComputedStyle(b);
               return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
             })
-            .slice(0, 5)
-            .map(b => ({
-              text: (b.textContent || b.value || '').trim().substring(0, 50),
-              selector: b.id ? '#' + b.id : (b.className ? b.tagName.toLowerCase() + '.' + b.className.split(' ')[0] : b.tagName.toLowerCase())
-            }));
+            .slice(0, 8)
+            .map(b => {
+              const text = (b.textContent || b.value || '').trim().substring(0, 50);
+              let selector = b.id ? '#' + b.id : null;
+              if (!selector && b.className && typeof b.className === 'string') {
+                selector = b.tagName.toLowerCase() + '.' + b.className.split(' ')[0];
+              }
+              if (!selector) {
+                selector = b.tagName.toLowerCase();
+              }
+              // Check if element has a ref
+              let ref = null;
+              if (window.__ariaRefs) {
+                for (const [r, el] of window.__ariaRefs) {
+                  if (el === b) { ref = r; break; }
+                }
+              }
+              return { text, selector, ref };
+            });
         })()
       `,
       returnByValue: true
@@ -218,6 +258,77 @@ export async function captureFailureContext(deps) {
     context.visibleErrors = errorsResult.result.value || [];
   } catch {
     context.visibleErrors = [];
+  }
+
+  // If a selector or text was provided, find near matches
+  if (failedSelector || failedText) {
+    try {
+      const searchTerm = failedText || failedSelector;
+      const nearMatchesResult = await pageController.session.send('Runtime.evaluate', {
+        expression: `
+          (function() {
+            const searchTerm = ${JSON.stringify(searchTerm)}.toLowerCase();
+            const candidates = [];
+
+            // Search for elements with similar text or attributes
+            const allElements = document.querySelectorAll('button, a, input, [role="button"], [role="link"], [role="tab"], [role="menuitem"]');
+
+            for (const el of allElements) {
+              const rect = el.getBoundingClientRect();
+              const style = window.getComputedStyle(el);
+              if (rect.width === 0 || rect.height === 0 || style.display === 'none' || style.visibility === 'hidden') continue;
+
+              const text = (el.textContent || el.value || el.getAttribute('aria-label') || '').trim();
+              const textLower = text.toLowerCase();
+
+              // Calculate similarity score
+              let score = 0;
+              if (textLower === searchTerm) score = 100;
+              else if (textLower.includes(searchTerm)) score = 80;
+              else if (searchTerm.includes(textLower) && textLower.length > 2) score = 70;
+              else {
+                // Levenshtein-like partial match
+                const words = searchTerm.split(/\\s+/);
+                for (const word of words) {
+                  if (word.length > 2 && textLower.includes(word)) score = Math.max(score, 50);
+                }
+              }
+
+              if (score > 0) {
+                let selector = el.id ? '#' + el.id : null;
+                if (!selector && el.className && typeof el.className === 'string') {
+                  selector = el.tagName.toLowerCase() + '.' + el.className.split(' ')[0];
+                }
+                if (!selector) selector = el.tagName.toLowerCase();
+
+                // Check for ref
+                let ref = null;
+                if (window.__ariaRefs) {
+                  for (const [r, refEl] of window.__ariaRefs) {
+                    if (refEl === el) { ref = r; break; }
+                  }
+                }
+
+                candidates.push({
+                  text: text.substring(0, 50),
+                  selector,
+                  ref,
+                  score
+                });
+              }
+            }
+
+            // Sort by score and return top 5
+            candidates.sort((a, b) => b.score - a.score);
+            return candidates.slice(0, 5);
+          })()
+        `,
+        returnByValue: true
+      });
+      context.nearMatches = nearMatchesResult.result.value || [];
+    } catch {
+      context.nearMatches = [];
+    }
   }
 
   return context;

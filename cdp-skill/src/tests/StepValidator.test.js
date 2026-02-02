@@ -39,12 +39,23 @@ describe('StepValidator', () => {
 
       it('should reject empty goto URL', () => {
         const errors = validateStepInternal({ goto: '' });
-        assert.ok(errors.some(e => e.includes('non-empty URL')));
+        assert.ok(errors.some(e => e.includes('non-empty')));
       });
 
       it('should reject non-string goto', () => {
         const errors = validateStepInternal({ goto: 123 });
-        assert.ok(errors.some(e => e.includes('non-empty URL')));
+        // Now accepts both string and object format, so check for url property error
+        assert.ok(errors.some(e => e.includes('URL string') || e.includes('url property')));
+      });
+
+      it('should accept object goto with url', () => {
+        const errors = validateStepInternal({ goto: { url: 'https://example.com' } });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should reject object goto without url', () => {
+        const errors = validateStepInternal({ goto: { waitUntil: 'load' } });
+        assert.ok(errors.some(e => e.includes('url property')));
       });
     });
 

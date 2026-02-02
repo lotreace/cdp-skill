@@ -146,7 +146,7 @@ Exit code: `0` = ok, `1` = error.
 
 Error types: `PARSE`, `VALIDATION`, `CONNECTION`, `EXECUTION`
 
-**Failure context** - When a step fails, the step result includes page state to aid debugging:
+**Failure context** - When a step fails, the step result includes enhanced diagnostics to aid debugging:
 ```json
 {
   "steps": [{
@@ -157,8 +157,17 @@ Error types: `PARSE`, `VALIDATION`, `CONNECTION`, `EXECUTION`
     "context": {
       "url": "https://example.com/page",
       "title": "Example Page",
-      "visibleButtons": ["Submit", "Cancel"],
-      "visibleLinks": [{"text": "Home", "href": "..."}]
+      "scrollPosition": {"x": 0, "y": 1200, "maxY": 5000, "percentY": 24},
+      "visibleButtons": [
+        {"text": "Submit", "selector": "#submit-btn", "ref": "e4"},
+        {"text": "Cancel", "selector": "button.cancel", "ref": "e5"}
+      ],
+      "visibleLinks": [{"text": "Home", "href": "..."}],
+      "visibleErrors": ["Please fill in all required fields"],
+      "nearMatches": [
+        {"text": "Submit Form", "selector": "button.submit-form", "ref": "e12", "score": 70},
+        {"text": "Submit Feedback", "selector": "#feedback-submit", "ref": "e15", "score": 50}
+      ]
     }
   }],
   "errors": [{"step": 1, "action": "click", "error": "Element not found"}]
@@ -314,7 +323,16 @@ If Chrome cannot be found: `{running: false, launched: false, error: "Chrome not
 **goto** - Navigate to URL
 ```json
 {"goto": "https://google.com"}
+{"goto": {"url": "https://google.com", "waitUntil": "networkidle"}}
 ```
+Options (object format): `url`, `waitUntil` (commit|domcontentloaded|load|networkidle)
+
+**reload** - Reload current page
+```json
+{"reload": true}
+{"reload": {"waitUntil": "networkidle"}}
+```
+Options: `waitUntil` (commit|domcontentloaded|load|networkidle)
 
 **back** / **forward** - History navigation
 ```json
@@ -889,8 +907,10 @@ Returns typed results:
 {"snapshot": {"root": "role=main", "includeText": true}}
 {"snapshot": {"includeFrames": true}}
 {"snapshot": {"pierceShadow": true}}
+{"snapshot": {"detail": "interactive"}}
+{"snapshot": {"inlineLimit": 28000}}
 ```
-Options: `mode` (ai|full), `root` (CSS selector or "role=X"), `maxDepth`, `maxElements`, `includeText`, `includeFrames`, `pierceShadow`
+Options: `mode` (ai|full), `detail` (summary|interactive|full), `root` (CSS selector or "role=X"), `maxDepth`, `maxElements`, `includeText`, `includeFrames`, `pierceShadow`, `viewportOnly`, `inlineLimit`
 
 Returns YAML with: role, "name", states (`[checked]`, `[disabled]`, `[expanded]`, `[required]`, `[invalid]`, `[level=N]`), `[name=fieldName]` for form inputs, `[ref=eN]` for clicking.
 
@@ -903,11 +923,66 @@ Returns YAML with: role, "name", states (`[checked]`, `[disabled]`, `[expanded]`
   - button "Submit" [ref=e4]
 ```
 
+**Detail levels** control how much information is returned:
+- `"full"` (default): Complete accessibility tree
+- `"interactive"`: Only actionable elements (buttons, links, inputs) with their paths
+- `"summary"`: Landmark overview with interactive element counts
+
+```json
+{"snapshot": {"detail": "summary"}}
+```
+Returns:
+```yaml
+# Snapshot Summary
+# Total elements: 1847
+# Interactive elements: 67
+# Viewport elements: 23
+
+landmarks:
+  - role: main
+    interactiveCount: 47
+    children: [form, navigation, article]
+```
+
+**Large snapshot handling**: Snapshots over 9KB (configurable via `inlineLimit`) are automatically saved to a file:
+```json
+{
+  "yaml": null,
+  "artifacts": {"snapshot": "/tmp/cdp-skill/t1.snapshot.yaml"},
+  "snapshotSize": 125000,
+  "truncatedInline": true
+}
+```
+
 Use `includeText: true` to capture static text (error messages, etc.). Elements with `role="alert"` or `role="status"` always include text.
 
 Use `includeFrames: true` to include same-origin iframe content in the snapshot. Cross-origin iframes are marked with `crossOrigin: true`.
 
 Use `pierceShadow: true` to traverse into open Shadow DOM trees. This is useful for web components that use Shadow DOM to encapsulate their internal structure.
+
+**snapshotSearch** - Search within accessibility tree
+```json
+{"snapshotSearch": {"text": "Submit"}}
+{"snapshotSearch": {"text": "Submit", "role": "button"}}
+{"snapshotSearch": {"pattern": "^Save.*draft$", "role": "button"}}
+{"snapshotSearch": {"role": "button", "limit": 20}}
+{"snapshotSearch": {"text": "Edit", "near": {"x": 500, "y": 300, "radius": 100}}}
+```
+Options: `text` (fuzzy match), `pattern` (regex), `role`, `exact` (boolean), `limit` (default: 10), `context` (parent levels), `near` ({x, y, radius})
+
+Returns only matching elements without the full tree:
+```json
+{
+  "matches": [
+    {"path": "main > form > button", "ref": "e47", "name": "Submit Form", "role": "button"},
+    {"path": "dialog > button", "ref": "e89", "name": "Submit Feedback", "role": "button"}
+  ],
+  "matchCount": 2,
+  "searchedElements": 1847
+}
+```
+
+Use `snapshotSearch` to find specific elements without loading the entire accessibility tree - especially useful for large SPAs.
 
 
 ### Viewport & Device Emulation
