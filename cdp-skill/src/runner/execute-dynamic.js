@@ -1,17 +1,15 @@
 /**
  * Dynamic Step Executors
- * Agent-generated JS execution, polling, pipelines, and site manifest management
+ * Agent-generated JS execution, polling, pipelines, and site profile management
  *
  * EXPORTS:
  * - executePageFunction(pageController, params) → Promise<Object>
  * - executePoll(pageController, params) → Promise<Object>
  * - executePipeline(pageController, params) → Promise<Object>
  * - compilePipeline(steps) → string
- * - executeWriteSiteManifest(params) → Promise<Object>
- * - loadSiteManifest(domain) → Promise<string|null>
- * - runLightAutoFit(pageController, url) → Promise<Object|null>
- * - LIGHT_FIT_SCRIPT → string
- * - generateLightManifest(domain, detection) → string
+ * - executeWriteSiteProfile(params) → Promise<Object>
+ * - executeReadSiteProfile(params) → Promise<Object>
+ * - loadSiteProfile(domain) → Promise<string|null>
  *
  * DEPENDENCIES:
  * - ../capture/eval-serializer.js: createEvalSerializer
@@ -354,7 +352,7 @@ export async function executePipeline(pageController, params) {
 }
 
 // ---------------------------------------------------------------------------
-// Site Manifests
+// Site Profiles
 // ---------------------------------------------------------------------------
 
 /**
@@ -372,164 +370,56 @@ function sanitizeDomain(domain) {
 }
 
 /**
- * Load a site manifest for the given domain.
+ * Load a site profile for the given domain.
  *
  * @param {string} domain - hostname (e.g. "github.com")
- * @returns {Promise<string|null>} manifest markdown or null
+ * @returns {Promise<string|null>} profile markdown or null
  */
-export async function loadSiteManifest(domain) {
+export async function loadSiteProfile(domain) {
   const clean = sanitizeDomain(domain);
-  const manifestPath = path.join(SITES_DIR, `${clean}.md`);
+  const profilePath = path.join(SITES_DIR, `${clean}.md`);
   try {
-    return await fs.readFile(manifestPath, 'utf8');
+    return await fs.readFile(profilePath, 'utf8');
   } catch {
     return null;
   }
 }
 
 /**
- * Write or update a site manifest.
+ * Write or update a site profile.
  *
  * @param {Object} params - {domain, content}
  * @returns {Promise<Object>} {written, path}
  */
-export async function executeWriteSiteManifest(params) {
+export async function executeWriteSiteProfile(params) {
   if (!params || !params.domain || !params.content) {
-    throw new Error('writeSiteManifest requires domain and content');
+    throw new Error('writeSiteProfile requires domain and content');
   }
 
   const clean = sanitizeDomain(params.domain);
   await ensureSitesDir();
-  const manifestPath = path.join(SITES_DIR, `${clean}.md`);
-  await fs.writeFile(manifestPath, params.content, 'utf8');
+  const profilePath = path.join(SITES_DIR, `${clean}.md`);
+  await fs.writeFile(profilePath, params.content, 'utf8');
 
-  return { written: true, path: manifestPath, domain: params.domain };
+  return { written: true, path: profilePath, domain: params.domain };
 }
 
-// ---------------------------------------------------------------------------
-// Light Auto-Fit
-// ---------------------------------------------------------------------------
-
 /**
- * Detection script run in browser on first visit to an unknown domain.
- */
-export const LIGHT_FIT_SCRIPT = `() => {
-  const detect = {};
-  if (window.React || window.__REACT_DEVTOOLS_GLOBAL_HOOK__) detect.react = true;
-  if (window.__NEXT_DATA__) detect.nextjs = true;
-  if (window.Vue || window.__VUE__) detect.vue = true;
-  if (window.ng || window.getAllAngularRootElements) detect.angular = true;
-  if (window.__svelte || window.__SVELTE_HMR) detect.svelte = true;
-  if (window.jQuery || window.$?.fn?.jquery) detect.jquery = true;
-  if (window.Turbo || window.Turbolinks) detect.turbo = true;
-  if (window.htmx) detect.htmx = true;
-  if (window.__NUXT__) detect.nuxt = true;
-  if (window.__remixContext) detect.remix = true;
-
-  const main = document.querySelector('main, [role="main"]');
-  detect.hasMain = !!main;
-  detect.mainSelector = main ? (main.id ? '#' + main.id : main.tagName.toLowerCase()) : null;
-
-  detect.usesPushState = !!window.history.pushState;
-  detect.hasServiceWorker = !!navigator.serviceWorker?.controller;
-
-  detect.title = document.title;
-  detect.metaGenerator = document.querySelector('meta[name="generator"]')?.content || null;
-  detect.bodyChildCount = document.body?.children.length || 0;
-  detect.interactiveCount = document.querySelectorAll('a,button,input,select,textarea').length;
-
-  return detect;
-}`;
-
-/**
- * Generate a light manifest markdown from detection results.
+ * Read a site profile without navigating.
  *
- * @param {string} domain
- * @param {Object} detection
- * @returns {string} markdown content
+ * @param {string|Object} params - domain string or {domain}
+ * @returns {Promise<Object>} {found, domain, content} or {found: false, domain}
  */
-export function generateLightManifest(domain, detection) {
-  const frameworks = [];
-  if (detection.react) frameworks.push('React');
-  if (detection.nextjs) frameworks.push('Next.js');
-  if (detection.vue) frameworks.push('Vue');
-  if (detection.nuxt) frameworks.push('Nuxt');
-  if (detection.angular) frameworks.push('Angular');
-  if (detection.svelte) frameworks.push('Svelte');
-  if (detection.jquery) frameworks.push('jQuery');
-  if (detection.turbo) frameworks.push('Turbo');
-  if (detection.htmx) frameworks.push('htmx');
-  if (detection.remix) frameworks.push('Remix');
-
-  const date = new Date().toISOString().split('T')[0];
-  const fingerprint = `bc${detection.bodyChildCount}-ic${detection.interactiveCount}`;
-
-  let md = `# ${domain}\nFitted: ${date} (light)  |  Fingerprint: ${fingerprint}\n\n`;
-
-  md += '## Environment\n';
-  if (frameworks.length > 0) {
-    md += `- Frameworks: ${frameworks.join(', ')}\n`;
-  } else {
-    md += '- No major framework detected\n';
+export async function executeReadSiteProfile(params) {
+  const domain = typeof params === 'string' ? params : params?.domain;
+  if (!domain || typeof domain !== 'string') {
+    throw new Error('readSiteProfile requires a domain string');
   }
 
-  if (detection.usesPushState) md += '- SPA with pushState navigation\n';
-  if (detection.hasServiceWorker) md += '- Service Worker active\n';
-  if (detection.metaGenerator) md += `- Generator: ${detection.metaGenerator}\n`;
-
-  md += '\n## Regions\n';
-  if (detection.hasMain) {
-    md += `- mainContent: \`${detection.mainSelector}\`\n`;
-  } else {
-    md += '- No <main> or [role="main"] detected\n';
+  const content = await loadSiteProfile(domain);
+  if (content) {
+    return { found: true, domain, content };
   }
-
-  md += '\n## Notes\nLight fit only. Run full fit for strategies and recipes.\n';
-
-  return md;
+  return { found: false, domain };
 }
 
-/**
- * Run light auto-fit for a URL. Returns detection info if manifest was created,
- * or null if a manifest already existed.
- *
- * @param {Object} pageController
- * @param {string} url - the navigated URL
- * @returns {Promise<Object|null>} {domain, level, frameworks} or null
- */
-export async function runLightAutoFit(pageController, url) {
-  let domain;
-  try {
-    domain = sanitizeDomain(new URL(url).hostname);
-  } catch {
-    return null;
-  }
-
-  const existing = await loadSiteManifest(domain);
-  if (existing) return null;
-
-  // Run detection in browser
-  const expression = `(${LIGHT_FIT_SCRIPT})()`;
-  const result = await pageController.evaluateInFrame(expression, {
-    returnByValue: true,
-    awaitPromise: false
-  });
-
-  if (result.exceptionDetails || !result.result.value) {
-    return null;
-  }
-
-  const detection = result.result.value;
-  const manifest = generateLightManifest(domain, detection);
-
-  await ensureSitesDir();
-  const manifestPath = path.join(SITES_DIR, `${domain}.md`);
-  await fs.writeFile(manifestPath, manifest, 'utf8');
-
-  const frameworks = [];
-  for (const key of ['react', 'nextjs', 'vue', 'nuxt', 'angular', 'svelte', 'jquery', 'turbo', 'htmx', 'remix']) {
-    if (detection[key]) frameworks.push(key);
-  }
-
-  return { domain, level: 'light', frameworks };
-}

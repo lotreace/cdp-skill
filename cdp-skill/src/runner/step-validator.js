@@ -753,16 +753,30 @@ export function validateStepInternal(step) {
       }
       break;
 
-    case 'writeSiteManifest':
+    case 'writeSiteProfile':
       if (!params || typeof params !== 'object') {
-        errors.push('writeSiteManifest requires an object with domain and content');
+        errors.push('writeSiteProfile requires an object with domain and content');
       } else {
         if (!params.domain || typeof params.domain !== 'string') {
-          errors.push('writeSiteManifest requires a non-empty domain string');
+          errors.push('writeSiteProfile requires a non-empty domain string');
         }
         if (!params.content || typeof params.content !== 'string') {
-          errors.push('writeSiteManifest requires a non-empty content string');
+          errors.push('writeSiteProfile requires a non-empty content string');
         }
+      }
+      break;
+
+    case 'readSiteProfile':
+      if (typeof params === 'string') {
+        if (params.length === 0) {
+          errors.push('readSiteProfile requires a non-empty domain string');
+        }
+      } else if (params && typeof params === 'object') {
+        if (!params.domain || typeof params.domain !== 'string') {
+          errors.push('readSiteProfile requires a non-empty domain string');
+        }
+      } else {
+        errors.push('readSiteProfile requires a domain string or object with domain');
       }
       break;
   }

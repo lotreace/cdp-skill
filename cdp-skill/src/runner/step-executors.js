@@ -51,7 +51,7 @@ import { executeFillActive, executeSelectOption } from './execute-input.js';
 import { executeSnapshot, executeSnapshotSearch, executeQuery, executeQueryAll, executeInspect, executeGetDom, executeGetBox, executeRefAt, executeElementsAt, executeElementsNear } from './execute-query.js';
 import { executeValidate, executeSubmit, executeExtract } from './execute-form.js';
 import { executePdf, executeEval, executeCookies, executeListTabs, executeCloseTab, executeConsole, formatCommandConsole } from './execute-browser.js';
-import { executePageFunction, executePoll, executePipeline, executeWriteSiteManifest, loadSiteManifest, runLightAutoFit } from './execute-dynamic.js';
+import { executePageFunction, executePoll, executePipeline, executeWriteSiteProfile, executeReadSiteProfile, loadSiteProfile } from './execute-dynamic.js';
 
 const keyValidator = createKeyValidator();
 
@@ -101,23 +101,22 @@ export async function executeStep(deps, step, options = {}) {
       const gotoOptions = typeof step.goto === 'object' ? step.goto : {};
       await pageController.navigate(url, gotoOptions);
 
-      // Site manifest: load existing or run light auto-fit
+      // Site profile: load existing or signal that none exists
       try {
         const currentUrl = await pageController.evaluateInFrame('window.location.href', { returnByValue: true });
         const resolvedUrl = currentUrl.result?.value || url;
         const domain = new URL(resolvedUrl).hostname.replace(/^www\./, '');
 
-        const existingManifest = await loadSiteManifest(domain);
-        if (existingManifest) {
-          stepResult.siteManifest = existingManifest;
+        const existingProfile = await loadSiteProfile(domain);
+        if (existingProfile) {
+          stepResult.siteProfile = existingProfile;
         } else {
-          const fitResult = await runLightAutoFit(pageController, resolvedUrl);
-          if (fitResult) {
-            stepResult.fitted = fitResult;
-          }
+          stepResult.profileAvailable = false;
+          stepResult.profileDomain = domain;
+          stepResult.hint = `Unknown site: ${domain}. No site profile exists. Create one with writeSiteProfile after exploring the site (snapshot, pageFunction, snapshotSearch). This speeds up all future visits.`;
         }
       } catch {
-        // Manifest/fit errors are non-fatal
+        // Profile errors are non-fatal
       }
     } else if (step.reload !== undefined) {
       stepResult.action = 'reload';
@@ -249,6 +248,24 @@ export async function executeStep(deps, step, options = {}) {
       if (step._openTabHandled) {
         if (step._openTabUrl) {
           await pageController.navigate(step._openTabUrl);
+
+          // Site profile check (same as goto)
+          try {
+            const currentUrl = await pageController.evaluateInFrame('window.location.href', { returnByValue: true });
+            const resolvedUrl = currentUrl.result?.value || step._openTabUrl;
+            const domain = new URL(resolvedUrl).hostname.replace(/^www\./, '');
+
+            const existingProfile = await loadSiteProfile(domain);
+            if (existingProfile) {
+              stepResult.siteProfile = existingProfile;
+            } else {
+              stepResult.profileAvailable = false;
+              stepResult.profileDomain = domain;
+              stepResult.hint = `Unknown site: ${domain}. No site profile exists. Create one with writeSiteProfile after exploring the site (snapshot, pageFunction, snapshotSearch). This speeds up all future visits.`;
+            }
+          } catch {
+            // Profile errors are non-fatal
+          }
         }
         stepResult.output = { tab: step._openTabAlias };
       } else {
@@ -332,9 +349,12 @@ export async function executeStep(deps, step, options = {}) {
     } else if (step.pipeline !== undefined) {
       stepResult.action = 'pipeline';
       stepResult.output = await executePipeline(pageController, step.pipeline);
-    } else if (step.writeSiteManifest !== undefined) {
-      stepResult.action = 'writeSiteManifest';
-      stepResult.output = await executeWriteSiteManifest(step.writeSiteManifest);
+    } else if (step.writeSiteProfile !== undefined) {
+      stepResult.action = 'writeSiteProfile';
+      stepResult.output = await executeWriteSiteProfile(step.writeSiteProfile);
+    } else if (step.readSiteProfile !== undefined) {
+      stepResult.action = 'readSiteProfile';
+      stepResult.output = await executeReadSiteProfile(step.readSiteProfile);
     }
 
     // Process hooks on action steps (settledWhen, observe)

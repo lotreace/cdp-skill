@@ -586,10 +586,32 @@ async function main() {
       screenshotPath = null;
     }
 
+    // Bubble up site profile info from goto/openTab steps to top level
+    let siteProfile = undefined;
+    let actionRequired = undefined;
+    for (const step of result.steps) {
+      if (step.siteProfile) {
+        siteProfile = step.siteProfile;
+        delete step.siteProfile;
+      } else if (step.profileAvailable === false) {
+        actionRequired = {
+          action: 'createSiteProfile',
+          domain: step.profileDomain,
+          message: `STOP: No site profile for "${step.profileDomain}". You MUST create one before doing anything else. Run these steps now: (1) snapshot — see page structure, (2) pageFunction — detect framework/routing, (3) writeSiteProfile — save what you learned. Then continue your task. Skipping this causes unreliable automation.`
+        };
+        delete step.profileAvailable;
+        delete step.profileDomain;
+        delete step.hint;
+      }
+    }
+
     // Build streamlined output
     const output = {
       status: result.status,
       tab: getTabAlias(session.targetId) || registerTab(session.targetId),
+      // Site profile — prominent, right after status/tab
+      siteProfile,
+      actionRequired,
       // Command-level auto-snapshot results
       navigated: result.navigated,
       fullSnapshot: result.fullSnapshot,
@@ -606,6 +628,8 @@ async function main() {
     };
 
     // Remove null/undefined fields for compactness
+    if (!output.siteProfile) delete output.siteProfile;
+    if (!output.actionRequired) delete output.actionRequired;
     if (output.navigated === undefined) delete output.navigated;
     if (!output.fullSnapshot) delete output.fullSnapshot;
     if (!output.context) delete output.context;

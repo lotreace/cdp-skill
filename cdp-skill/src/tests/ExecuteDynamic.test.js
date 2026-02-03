@@ -9,11 +9,8 @@ import {
   executePoll,
   compilePipeline,
   executePipeline,
-  executeWriteSiteManifest,
-  loadSiteManifest,
-  generateLightManifest,
-  runLightAutoFit,
-  LIGHT_FIT_SCRIPT
+  executeWriteSiteProfile,
+  loadSiteProfile
 } from '../runner/execute-dynamic.js';
 
 import { validateStepInternal, validateSteps } from '../runner/step-validator.js';
@@ -50,11 +47,11 @@ function createMockPageController(evalReturnValue, opts = {}) {
   };
 }
 
-// Patch SITES_DIR for manifest tests by overriding environment
+// Patch SITES_DIR for profile tests by overriding environment
 // We use a temp directory to avoid polluting ~/.cdp-skill/sites/
 const REAL_SITES_DIR = path.join(os.homedir(), '.cdp-skill', 'sites');
 
-async function cleanupTestManifests(domains) {
+async function cleanupTestProfiles(domains) {
   for (const domain of domains) {
     const clean = domain.replace(/^www\./, '').replace(/[^a-zA-Z0-9.\-]/g, '_');
     try {
@@ -473,20 +470,20 @@ describe('executePipeline', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests: executeWriteSiteManifest and loadSiteManifest
+// Tests: executeWriteSiteProfile and loadSiteProfile
 // ---------------------------------------------------------------------------
 
-describe('executeWriteSiteManifest', () => {
+describe('executeWriteSiteProfile', () => {
   const testDomain = `test-dyn-${Date.now()}.example.com`;
 
   afterEach(async () => {
-    await cleanupTestManifests([testDomain]);
+    await cleanupTestProfiles([testDomain]);
   });
 
-  it('should write a manifest file', async () => {
-    const result = await executeWriteSiteManifest({
+  it('should write a profile file', async () => {
+    const result = await executeWriteSiteProfile({
       domain: testDomain,
-      content: '# Test manifest\nContent here.'
+      content: '# Test profile\nContent here.'
     });
 
     assert.strictEqual(result.written, true);
@@ -495,291 +492,57 @@ describe('executeWriteSiteManifest', () => {
 
     // Verify file was written
     const content = await fs.readFile(result.path, 'utf8');
-    assert.strictEqual(content, '# Test manifest\nContent here.');
+    assert.strictEqual(content, '# Test profile\nContent here.');
   });
 
   it('should require domain', async () => {
     await assert.rejects(
-      () => executeWriteSiteManifest({ content: 'test' }),
+      () => executeWriteSiteProfile({ content: 'test' }),
       { message: /requires domain and content/ }
     );
   });
 
   it('should require content', async () => {
     await assert.rejects(
-      () => executeWriteSiteManifest({ domain: 'example.com' }),
+      () => executeWriteSiteProfile({ domain: 'example.com' }),
       { message: /requires domain and content/ }
     );
   });
 
   it('should throw on missing params', async () => {
     await assert.rejects(
-      () => executeWriteSiteManifest(null),
+      () => executeWriteSiteProfile(null),
       { message: /requires domain and content/ }
     );
   });
 });
 
-describe('loadSiteManifest', () => {
+describe('loadSiteProfile', () => {
   const testDomain = `test-load-${Date.now()}.example.com`;
 
   afterEach(async () => {
-    await cleanupTestManifests([testDomain]);
+    await cleanupTestProfiles([testDomain]);
   });
 
-  it('should return null when no manifest exists', async () => {
-    const result = await loadSiteManifest('nonexistent-domain-xyz-12345.com');
+  it('should return null when no profile exists', async () => {
+    const result = await loadSiteProfile('nonexistent-domain-xyz-12345.com');
     assert.strictEqual(result, null);
   });
 
-  it('should return content when manifest exists', async () => {
-    // First write a manifest
-    await executeWriteSiteManifest({
+  it('should return content when profile exists', async () => {
+    // First write a profile
+    await executeWriteSiteProfile({
       domain: testDomain,
       content: '# Loaded content'
     });
 
-    const result = await loadSiteManifest(testDomain);
+    const result = await loadSiteProfile(testDomain);
     assert.strictEqual(result, '# Loaded content');
   });
 });
 
-// ---------------------------------------------------------------------------
-// Tests: generateLightManifest
-// ---------------------------------------------------------------------------
 
-describe('generateLightManifest', () => {
-  it('should generate markdown with detected frameworks', () => {
-    const detection = {
-      react: true,
-      nextjs: true,
-      bodyChildCount: 10,
-      interactiveCount: 25,
-      usesPushState: true,
-      hasMain: true,
-      mainSelector: '#root'
-    };
 
-    const md = generateLightManifest('example.com', detection);
-
-    assert.ok(md.includes('# example.com'));
-    assert.ok(md.includes('Fitted:'));
-    assert.ok(md.includes('light'));
-    assert.ok(md.includes('Fingerprint: bc10-ic25'));
-    assert.ok(md.includes('React'));
-    assert.ok(md.includes('Next.js'));
-    assert.ok(md.includes('SPA with pushState'));
-    assert.ok(md.includes('mainContent: `#root`'));
-  });
-
-  it('should generate markdown with no frameworks', () => {
-    const detection = {
-      bodyChildCount: 5,
-      interactiveCount: 3,
-      hasMain: false,
-      mainSelector: null
-    };
-
-    const md = generateLightManifest('plain.com', detection);
-
-    assert.ok(md.includes('# plain.com'));
-    assert.ok(md.includes('No major framework'));
-    assert.ok(md.includes('No <main>'));
-    assert.ok(md.includes('Fingerprint: bc5-ic3'));
-  });
-
-  it('should include all recognized frameworks', () => {
-    const detection = {
-      react: true,
-      vue: true,
-      angular: true,
-      svelte: true,
-      jquery: true,
-      turbo: true,
-      htmx: true,
-      nuxt: true,
-      remix: true,
-      bodyChildCount: 1,
-      interactiveCount: 1,
-      hasMain: false,
-      mainSelector: null
-    };
-
-    const md = generateLightManifest('multi.com', detection);
-
-    assert.ok(md.includes('React'));
-    assert.ok(md.includes('Vue'));
-    assert.ok(md.includes('Angular'));
-    assert.ok(md.includes('Svelte'));
-    assert.ok(md.includes('jQuery'));
-    assert.ok(md.includes('Turbo'));
-    assert.ok(md.includes('htmx'));
-    assert.ok(md.includes('Nuxt'));
-    assert.ok(md.includes('Remix'));
-  });
-
-  it('should include service worker info', () => {
-    const detection = {
-      hasServiceWorker: true,
-      bodyChildCount: 1,
-      interactiveCount: 1,
-      hasMain: false,
-      mainSelector: null
-    };
-
-    const md = generateLightManifest('sw.com', detection);
-    assert.ok(md.includes('Service Worker'));
-  });
-
-  it('should include generator meta', () => {
-    const detection = {
-      metaGenerator: 'WordPress 6.0',
-      bodyChildCount: 1,
-      interactiveCount: 1,
-      hasMain: false,
-      mainSelector: null
-    };
-
-    const md = generateLightManifest('wp.com', detection);
-    assert.ok(md.includes('Generator: WordPress 6.0'));
-  });
-
-  it('should include date in format YYYY-MM-DD', () => {
-    const detection = {
-      bodyChildCount: 0,
-      interactiveCount: 0,
-      hasMain: false,
-      mainSelector: null
-    };
-
-    const md = generateLightManifest('date.com', detection);
-    const datePattern = /\d{4}-\d{2}-\d{2}/;
-    assert.ok(datePattern.test(md));
-  });
-
-  it('should include notes section', () => {
-    const detection = {
-      bodyChildCount: 0,
-      interactiveCount: 0,
-      hasMain: false,
-      mainSelector: null
-    };
-
-    const md = generateLightManifest('notes.com', detection);
-    assert.ok(md.includes('## Notes'));
-    assert.ok(md.includes('Light fit only'));
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Tests: runLightAutoFit
-// ---------------------------------------------------------------------------
-
-describe('runLightAutoFit', () => {
-  const testDomain = `autofit-${Date.now()}.example.com`;
-
-  afterEach(async () => {
-    await cleanupTestManifests([testDomain]);
-    mock.reset();
-  });
-
-  it('should return null when manifest already exists', async () => {
-    // Write a manifest first
-    await executeWriteSiteManifest({
-      domain: testDomain,
-      content: '# existing'
-    });
-
-    const pc = createMockPageController({});
-    const result = await runLightAutoFit(pc, `https://${testDomain}/page`);
-
-    assert.strictEqual(result, null);
-    // evaluateInFrame should NOT have been called since manifest exists
-    assert.strictEqual(pc.evaluateInFrame.mock.calls.length, 0);
-  });
-
-  it('should create manifest and return detection info on first visit', async () => {
-    const uniqueDomain = `autofit-new-${Date.now()}.example.com`;
-    const detection = {
-      react: true,
-      bodyChildCount: 12,
-      interactiveCount: 30,
-      hasMain: true,
-      mainSelector: '#app',
-      usesPushState: true,
-      title: 'Test App'
-    };
-
-    const pc = {
-      evaluateInFrame: mock.fn(() => Promise.resolve({
-        result: { value: detection },
-        exceptionDetails: undefined
-      }))
-    };
-
-    const result = await runLightAutoFit(pc, `https://${uniqueDomain}/`);
-
-    assert.ok(result);
-    assert.ok(result.domain);
-    assert.strictEqual(result.level, 'light');
-    assert.ok(result.frameworks.includes('react'));
-
-    // Verify the manifest was written
-    const manifest = await loadSiteManifest(result.domain);
-    assert.ok(manifest);
-    assert.ok(manifest.includes('React'));
-
-    // Cleanup
-    await cleanupTestManifests([uniqueDomain]);
-  });
-
-  it('should handle invalid URLs gracefully', async () => {
-    const pc = createMockPageController({});
-    const result = await runLightAutoFit(pc, 'not-a-valid-url');
-
-    assert.strictEqual(result, null);
-  });
-
-  it('should return null when browser detection fails', async () => {
-    const uniqueDomain = `autofit-fail-${Date.now()}.example.com`;
-    const pc = createMockPageController(undefined, { exception: 'eval error' });
-
-    const result = await runLightAutoFit(pc, `https://${uniqueDomain}/`);
-
-    assert.strictEqual(result, null);
-  });
-
-  it('should return null when detection returns no value', async () => {
-    const uniqueDomain = `autofit-noval-${Date.now()}.example.com`;
-    const pc = {
-      evaluateInFrame: mock.fn(() => Promise.resolve({
-        result: { value: null },
-        exceptionDetails: undefined
-      }))
-    };
-
-    const result = await runLightAutoFit(pc, `https://${uniqueDomain}/`);
-    assert.strictEqual(result, null);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Tests: LIGHT_FIT_SCRIPT
-// ---------------------------------------------------------------------------
-
-describe('LIGHT_FIT_SCRIPT', () => {
-  it('should be a non-empty string', () => {
-    assert.ok(typeof LIGHT_FIT_SCRIPT === 'string');
-    assert.ok(LIGHT_FIT_SCRIPT.length > 0);
-  });
-
-  it('should detect common frameworks', () => {
-    assert.ok(LIGHT_FIT_SCRIPT.includes('React'));
-    assert.ok(LIGHT_FIT_SCRIPT.includes('Vue'));
-    assert.ok(LIGHT_FIT_SCRIPT.includes('Angular'));
-    assert.ok(LIGHT_FIT_SCRIPT.includes('jQuery'));
-  });
-});
 
 // ---------------------------------------------------------------------------
 // Tests: StepValidator - Dynamic step types
@@ -957,30 +720,30 @@ describe('StepValidator - pipeline validation', () => {
   });
 });
 
-describe('StepValidator - writeSiteManifest validation', () => {
+describe('StepValidator - writeSiteProfile validation', () => {
   it('should accept valid params', () => {
     const errors = validateStepInternal({
-      writeSiteManifest: { domain: 'example.com', content: '# manifest' }
+      writeSiteProfile: { domain: 'example.com', content: '# profile' }
     });
     assert.strictEqual(errors.length, 0);
   });
 
   it('should reject missing domain', () => {
     const errors = validateStepInternal({
-      writeSiteManifest: { content: '# manifest' }
+      writeSiteProfile: { content: '# profile' }
     });
     assert.ok(errors.some(e => e.includes('non-empty domain string')));
   });
 
   it('should reject missing content', () => {
     const errors = validateStepInternal({
-      writeSiteManifest: { domain: 'example.com' }
+      writeSiteProfile: { domain: 'example.com' }
     });
     assert.ok(errors.some(e => e.includes('non-empty content string')));
   });
 
   it('should reject non-object params', () => {
-    const errors = validateStepInternal({ writeSiteManifest: 'test' });
+    const errors = validateStepInternal({ writeSiteProfile: 'test' });
     assert.ok(errors.some(e => e.includes('requires an object')));
   });
 });
@@ -1056,8 +819,8 @@ describe('STEP_TYPES includes dynamic steps', () => {
     assert.ok(STEP_TYPES.includes('pipeline'));
   });
 
-  it('should include writeSiteManifest', () => {
-    assert.ok(STEP_TYPES.includes('writeSiteManifest'));
+  it('should include writeSiteProfile', () => {
+    assert.ok(STEP_TYPES.includes('writeSiteProfile'));
   });
 });
 
@@ -1140,18 +903,18 @@ describe('step-executors dispatch for dynamic steps', () => {
     assert.ok(result.output.completed);
   });
 
-  it('should dispatch writeSiteManifest step', async () => {
+  it('should dispatch writeSiteProfile step', async () => {
     const uniqueDomain = `dispatch-test-${Date.now()}.example.com`;
     const result = await executeStep(mockDeps, {
-      writeSiteManifest: { domain: uniqueDomain, content: '# test' }
+      writeSiteProfile: { domain: uniqueDomain, content: '# test' }
     });
 
-    assert.strictEqual(result.action, 'writeSiteManifest');
+    assert.strictEqual(result.action, 'writeSiteProfile');
     assert.strictEqual(result.status, 'ok');
     assert.ok(result.output.written);
 
     // Cleanup
-    await cleanupTestManifests([uniqueDomain]);
+    await cleanupTestProfiles([uniqueDomain]);
   });
 });
 
@@ -1315,7 +1078,7 @@ describe('step-executors hooks', () => {
   });
 });
 
-describe('step-executors goto manifest integration', () => {
+describe('step-executors goto profile integration', () => {
   let mockDeps;
   const testDomain = `goto-test-${Date.now()}.example.com`;
 
@@ -1330,25 +1093,14 @@ describe('step-executors goto manifest integration', () => {
     mockDeps = {
       pageController: {
         evaluateInFrame: mock.fn((expr, opts) => {
-          // For the URL check in goto
           if (expr === 'window.location.href') {
             return Promise.resolve({
               result: { value: `https://${testDomain}/page` },
               exceptionDetails: undefined
             });
           }
-          // For light auto-fit detection
           return Promise.resolve({
-            result: {
-              value: {
-                react: true,
-                bodyChildCount: 5,
-                interactiveCount: 10,
-                hasMain: true,
-                mainSelector: 'main',
-                title: 'Test'
-              }
-            },
+            result: { value: null },
             exceptionDetails: undefined
           });
         }),
@@ -1365,35 +1117,36 @@ describe('step-executors goto manifest integration', () => {
   });
 
   afterEach(async () => {
-    await cleanupTestManifests([testDomain]);
+    await cleanupTestProfiles([testDomain]);
     mock.reset();
   });
 
-  it('should load existing manifest on goto', async () => {
-    // Write a manifest first
-    await executeWriteSiteManifest({
+  it('should load existing profile on goto', async () => {
+    // Write a profile first
+    await executeWriteSiteProfile({
       domain: testDomain,
-      content: '# Pre-existing manifest'
+      content: '# Pre-existing profile'
     });
 
     const result = await executeStep(mockDeps, { goto: `https://${testDomain}/page` });
 
     assert.strictEqual(result.action, 'goto');
     assert.strictEqual(result.status, 'ok');
-    assert.ok(result.siteManifest);
-    assert.ok(result.siteManifest.includes('Pre-existing manifest'));
+    assert.ok(result.siteProfile);
+    assert.ok(result.siteProfile.includes('Pre-existing profile'));
   });
 
-  it('should run light auto-fit on goto for unknown domain', async () => {
-    // Make sure no manifest exists
-    await cleanupTestManifests([testDomain]);
+  it('should return profileAvailable false on goto for unknown domain', async () => {
+    // Make sure no profile exists
+    await cleanupTestProfiles([testDomain]);
 
     const result = await executeStep(mockDeps, { goto: `https://${testDomain}/page` });
 
     assert.strictEqual(result.action, 'goto');
     assert.strictEqual(result.status, 'ok');
-    // Should have created a fit
-    assert.ok(result.fitted || result.siteManifest);
+    assert.strictEqual(result.profileAvailable, false);
+    assert.strictEqual(result.profileDomain, testDomain);
+
   });
 });
 
@@ -1408,7 +1161,7 @@ describe('validateSteps for dynamic steps', () => {
       { pageFunction: '() => document.title' },
       { poll: { fn: '() => true', timeout: 5000 } },
       { pipeline: [{ find: '#btn', click: true }] },
-      { writeSiteManifest: { domain: 'example.com', content: '# test' } }
+      { writeSiteProfile: { domain: 'example.com', content: '# test' } }
     ]);
     assert.strictEqual(result.valid, true);
     assert.strictEqual(result.errors.length, 0);
@@ -1419,7 +1172,7 @@ describe('validateSteps for dynamic steps', () => {
       { pageFunction: '' },
       { poll: { interval: 100 } },
       { pipeline: [] },
-      { writeSiteManifest: { domain: 'x' } }
+      { writeSiteProfile: { domain: 'x' } }
     ]);
     assert.strictEqual(result.valid, false);
     assert.strictEqual(result.errors.length, 4);

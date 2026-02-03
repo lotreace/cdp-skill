@@ -19,7 +19,7 @@ export const STEP_TYPES = [
   'closeTab', 'openTab', 'type', 'select', 'selectOption', 'validate', 'submit',
   'assert', 'switchToFrame', 'switchToMainFrame', 'listFrames', 'drag', 'formState',
   'extract', 'getDom', 'getBox', 'fillActive', 'refAt', 'elementsAt', 'elementsNear',
-  'reload', 'pageFunction', 'poll', 'pipeline', 'writeSiteManifest'
+  'reload', 'pageFunction', 'poll', 'pipeline', 'writeSiteProfile', 'readSiteProfile'
 ];
 
 // Visual actions that trigger auto-screenshot
