@@ -51,6 +51,7 @@ import { executeFillActive, executeSelectOption } from './execute-input.js';
 import { executeSnapshot, executeSnapshotSearch, executeQuery, executeQueryAll, executeInspect, executeGetDom, executeGetBox, executeRefAt, executeElementsAt, executeElementsNear } from './execute-query.js';
 import { executeValidate, executeSubmit, executeExtract } from './execute-form.js';
 import { executePdf, executeEval, executeCookies, executeListTabs, executeCloseTab, executeConsole, formatCommandConsole } from './execute-browser.js';
+import { executePageFunction, executePoll, executePipeline, executeWriteSiteManifest, loadSiteManifest, runLightAutoFit } from './execute-dynamic.js';
 
 const keyValidator = createKeyValidator();
 
@@ -80,12 +81,44 @@ export async function executeStep(deps, step, options = {}) {
       throw new Error(`Ambiguous step: multiple actions defined (${definedActions.join(', ')}). Each step must have exactly one action.`);
     }
 
+    // readyWhen hook: poll before action executes (on action steps with object params)
+    const actionKey = definedActions[0];
+    const actionValue = step[actionKey];
+    if (actionValue && typeof actionValue === 'object' && actionValue.readyWhen) {
+      const readyResult = await executePoll(pageController, {
+        fn: actionValue.readyWhen,
+        timeout: options.stepTimeout || 30000
+      });
+      if (!readyResult.resolved) {
+        throw new Error(`readyWhen did not resolve within timeout`);
+      }
+    }
+
     if (step.goto !== undefined) {
       stepResult.action = 'goto';
       // Support both string URL and object format
       const url = typeof step.goto === 'string' ? step.goto : step.goto.url;
       const gotoOptions = typeof step.goto === 'object' ? step.goto : {};
       await pageController.navigate(url, gotoOptions);
+
+      // Site manifest: load existing or run light auto-fit
+      try {
+        const currentUrl = await pageController.evaluateInFrame('window.location.href', { returnByValue: true });
+        const resolvedUrl = currentUrl.result?.value || url;
+        const domain = new URL(resolvedUrl).hostname.replace(/^www\./, '');
+
+        const existingManifest = await loadSiteManifest(domain);
+        if (existingManifest) {
+          stepResult.siteManifest = existingManifest;
+        } else {
+          const fitResult = await runLightAutoFit(pageController, resolvedUrl);
+          if (fitResult) {
+            stepResult.fitted = fitResult;
+          }
+        }
+      } catch {
+        // Manifest/fit errors are non-fatal
+      }
     } else if (step.reload !== undefined) {
       stepResult.action = 'reload';
       const reloadOptions = step.reload === true ? {} : step.reload;
@@ -290,6 +323,37 @@ export async function executeStep(deps, step, options = {}) {
     } else if (step.elementsNear !== undefined) {
       stepResult.action = 'elementsNear';
       stepResult.output = await executeElementsNear(pageController.session, step.elementsNear);
+    } else if (step.pageFunction !== undefined) {
+      stepResult.action = 'pageFunction';
+      stepResult.output = await executePageFunction(pageController, step.pageFunction);
+    } else if (step.poll !== undefined) {
+      stepResult.action = 'poll';
+      stepResult.output = await executePoll(pageController, step.poll);
+    } else if (step.pipeline !== undefined) {
+      stepResult.action = 'pipeline';
+      stepResult.output = await executePipeline(pageController, step.pipeline);
+    } else if (step.writeSiteManifest !== undefined) {
+      stepResult.action = 'writeSiteManifest';
+      stepResult.output = await executeWriteSiteManifest(step.writeSiteManifest);
+    }
+
+    // Process hooks on action steps (settledWhen, observe)
+    // readyWhen is handled before the action via actionability — for now settledWhen and observe run post-action
+    const actionParams = step[stepResult.action];
+    if (actionParams && typeof actionParams === 'object') {
+      if (actionParams.settledWhen) {
+        const settledResult = await executePoll(pageController, {
+          fn: actionParams.settledWhen,
+          timeout: stepTimeout || 30000
+        });
+        if (!settledResult.resolved) {
+          stepResult.warning = (stepResult.warning || '') + ' settledWhen timed out without resolving';
+        }
+      }
+
+      if (actionParams.observe) {
+        stepResult.observation = await executePageFunction(pageController, actionParams.observe);
+      }
     }
   }
 

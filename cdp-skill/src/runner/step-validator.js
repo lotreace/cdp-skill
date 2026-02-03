@@ -676,6 +676,108 @@ export function validateStepInternal(step) {
         }
       }
       break;
+
+    case 'pageFunction':
+      // pageFunction: "() => document.title" or {fn, refs, timeout}
+      if (typeof params === 'string') {
+        if (params.length === 0) {
+          errors.push('pageFunction requires a non-empty function string');
+        }
+      } else if (params && typeof params === 'object') {
+        if (!params.fn || typeof params.fn !== 'string') {
+          errors.push('pageFunction requires a non-empty fn string');
+        }
+        if (params.refs !== undefined && typeof params.refs !== 'boolean') {
+          errors.push('pageFunction refs must be a boolean');
+        }
+        if (params.timeout !== undefined && (typeof params.timeout !== 'number' || params.timeout < 0)) {
+          errors.push('pageFunction timeout must be a non-negative number');
+        }
+      } else {
+        errors.push('pageFunction requires a function string or params object');
+      }
+      break;
+
+    case 'poll':
+      // poll: "() => condition" or {fn, interval, timeout}
+      if (typeof params === 'string') {
+        if (params.length === 0) {
+          errors.push('poll requires a non-empty function string');
+        }
+      } else if (params && typeof params === 'object') {
+        if (!params.fn || typeof params.fn !== 'string') {
+          errors.push('poll requires a non-empty fn string');
+        }
+        if (params.interval !== undefined && (typeof params.interval !== 'number' || params.interval < 0)) {
+          errors.push('poll interval must be a non-negative number');
+        }
+        if (params.timeout !== undefined && (typeof params.timeout !== 'number' || params.timeout < 0)) {
+          errors.push('poll timeout must be a non-negative number');
+        }
+      } else {
+        errors.push('poll requires a function string or params object');
+      }
+      break;
+
+    case 'pipeline':
+      // pipeline: [{find, fill}, ...] or {steps, timeout}
+      {
+        const pipelineSteps = Array.isArray(params) ? params : (params && params.steps);
+        if (!Array.isArray(pipelineSteps) || pipelineSteps.length === 0) {
+          errors.push('pipeline requires a non-empty array of micro-operations');
+        } else {
+          for (let pi = 0; pi < pipelineSteps.length; pi++) {
+            const op = pipelineSteps[pi];
+            if (!op || typeof op !== 'object') {
+              errors.push(`pipeline step ${pi}: must be an object`);
+              continue;
+            }
+            const hasMicroOp = op.find || op.waitFor || op.sleep !== undefined || op.return;
+            if (!hasMicroOp) {
+              errors.push(`pipeline step ${pi}: unrecognized micro-op (need find, waitFor, sleep, or return)`);
+            }
+            if (op.find) {
+              const hasAction = op.fill !== undefined || op.click !== undefined ||
+                op.type !== undefined || op.check !== undefined || op.select !== undefined;
+              if (!hasAction) {
+                errors.push(`pipeline step ${pi}: find requires an action (fill, click, type, check, or select)`);
+              }
+            }
+          }
+        }
+        if (!Array.isArray(params) && params && params.timeout !== undefined) {
+          if (typeof params.timeout !== 'number' || params.timeout < 0) {
+            errors.push('pipeline timeout must be a non-negative number');
+          }
+        }
+      }
+      break;
+
+    case 'writeSiteManifest':
+      if (!params || typeof params !== 'object') {
+        errors.push('writeSiteManifest requires an object with domain and content');
+      } else {
+        if (!params.domain || typeof params.domain !== 'string') {
+          errors.push('writeSiteManifest requires a non-empty domain string');
+        }
+        if (!params.content || typeof params.content !== 'string') {
+          errors.push('writeSiteManifest requires a non-empty content string');
+        }
+      }
+      break;
+  }
+
+  // Validate hooks on action steps (readyWhen, settledWhen, observe)
+  if (typeof params === 'object' && params !== null) {
+    if (params.readyWhen !== undefined && typeof params.readyWhen !== 'string') {
+      errors.push('readyWhen must be a function string');
+    }
+    if (params.settledWhen !== undefined && typeof params.settledWhen !== 'string') {
+      errors.push('settledWhen must be a function string');
+    }
+    if (params.observe !== undefined && typeof params.observe !== 'string') {
+      errors.push('observe must be a function string');
+    }
   }
 
   return errors;

@@ -886,6 +886,180 @@ Returns: `{path, fileSize, fileSizeFormatted, pageCount, dimensions, validation?
 **Note:** Relative paths are saved to the platform temp directory (`$TMPDIR/cdp-skill/` on macOS/Linux, `%TEMP%\cdp-skill\` on Windows).
 
 
+### Dynamic Browser Execution
+
+**pageFunction** - Run agent-generated JavaScript in the browser
+```json
+{"pageFunction": "() => document.title"}
+{"pageFunction": "(document) => [...document.querySelectorAll('.item')].map(i => ({text: i.textContent, href: i.href}))"}
+```
+
+Object form with options:
+```json
+{"pageFunction": {"fn": "(refs) => refs.size", "refs": true}}
+{"pageFunction": {"fn": "() => document.querySelectorAll('button').length", "timeout": 5000}}
+```
+Options: `fn` (function string), `refs` (pass `window.__ariaRefs` as first argument), `timeout` (ms)
+
+Differences from `eval`:
+- Function is auto-wrapped as IIFE — no need for `(function(){...})()`
+- `refs: true` passes the aria ref map as the first argument
+- Return value is auto-serialized (handles DOMRect, NodeList, Map, etc.)
+- Runs in current frame context (respects `switchToFrame`)
+- Errors include the function source for debugging
+
+Returns: Serialized value (same type system as `eval`)
+
+**poll** - Wait for a condition by polling a predicate
+```json
+{"poll": "() => document.querySelector('.loaded') !== null"}
+{"poll": "() => document.readyState === 'complete'"}
+```
+
+Object form with options:
+```json
+{"poll": {"fn": "() => !document.querySelector('.spinner') && document.querySelector('.results')?.children.length > 0", "interval": 100, "timeout": 10000}}
+```
+Options: `fn` (predicate string), `interval` (ms, default: 100), `timeout` (ms, default: 30000)
+
+Returns:
+- On success: `{resolved: true, value: <result>, elapsed: <ms>}`
+- On timeout: `{resolved: false, elapsed: <ms>, lastValue: <result>}`
+
+Use `poll` when you need to wait for a custom condition that the built-in `wait` step doesn't cover.
+
+**pipeline** - Multi-step browser-side transaction (zero roundtrips)
+```json
+{"pipeline": [
+  {"find": "#username", "fill": "admin"},
+  {"find": "#password", "fill": "secret_sauce"},
+  {"find": "#login-button", "click": true},
+  {"waitFor": "() => location.pathname.includes('/inventory')"},
+  {"sleep": 500},
+  {"return": "() => document.querySelector('.title')?.textContent"}
+]}
+```
+
+Object form with timeout:
+```json
+{"pipeline": {"steps": [...], "timeout": 15000}}
+```
+
+Micro-operations:
+- `find` + `fill` — querySelector + set value + dispatch events (uses native setter for React compatibility)
+- `find` + `click` — querySelector + el.click()
+- `find` + `type` — querySelector + focus + keydown/keypress/input/keyup per char
+- `find` + `check` — querySelector + set checked + dispatch events
+- `find` + `select` — querySelector on `<select>` + set value
+- `waitFor` — poll predicate until truthy (default timeout: 10s)
+- `sleep` — setTimeout delay (ms)
+- `return` — evaluate function and collect return value
+
+Returns:
+- On success: `{completed: true, steps: <count>, results: [...]}`
+- On error: `{completed: false, failedAt: <index>, error: <message>, results: [...]}`
+
+The entire pipeline compiles into a single async JS function and executes via one CDP call — no network roundtrips between micro-ops. Use this for multi-step flows like login forms where latency matters.
+
+
+### Action Hooks
+
+Optional parameters on action steps (`click`, `fill`, `press`, `hover`, `drag`, `selectOption`, `scroll`) to customize the step lifecycle:
+
+**readyWhen** - Custom pre-action readiness check
+```json
+{"click": {"ref": "s1e5", "readyWhen": "() => !document.querySelector('.loading')"}}
+{"fill": {"selector": "#email", "value": "test@test.com", "readyWhen": "() => document.querySelector('#email').offsetHeight > 0"}}
+```
+Polled until truthy before the action executes. Replaces/augments default actionability checks.
+
+**settledWhen** - Custom post-action settlement check
+```json
+{"click": {"ref": "s1e5", "settledWhen": "() => document.querySelector('.results')?.children.length > 0"}}
+{"click": {"selector": "#nav-link", "settledWhen": "() => location.href.includes('/results')"}}
+```
+Polled until truthy after the action completes. Use this instead of separate `poll`/`wait` steps when you know what the action should produce.
+
+**observe** - Capture data after settlement
+```json
+{"click": {"ref": "s1e5", "observe": "() => ({url: location.href, count: document.querySelectorAll('.item').length})"}}
+```
+Runs after the action (and after `settledWhen` if present). Return value appears in `result.observation`. Use this to capture post-action state without a separate step.
+
+Hooks can be combined:
+```json
+{"click": {
+  "ref": "s1e5",
+  "readyWhen": "() => !document.querySelector('.loading')",
+  "settledWhen": "() => document.querySelectorAll('.result').length > 0",
+  "observe": "() => document.querySelectorAll('.result').length"
+}}
+```
+
+
+### Site Manifests
+
+Per-domain knowledge files at `~/.cdp-skill/sites/{domain}.md` that capture how a site works.
+
+**Light auto-fit** runs automatically on first `goto` to an unknown domain. It detects frameworks (React, Next.js, Vue, Angular, Svelte, jQuery, Turbo, htmx, Nuxt, Remix), content regions, and SPA signals. The `goto` response includes:
+- `fitted: {domain, level: "light", frameworks: [...]}` — when a new manifest was created
+- `siteManifest: "..."` — markdown content of existing manifest (on subsequent visits)
+
+**writeSiteManifest** - Write or update a site manifest
+```json
+{"writeSiteManifest": {"domain": "github.com", "content": "# github.com\nFitted: 2024-02-03 (full)\n\n## Environment\n..."}}
+```
+
+Returns: `{written: true, path: "...", domain: "..."}`
+
+**Full fitting process** (agent-driven):
+1. Navigate to site — read light-fit manifest from `goto` response
+2. Use `pageFunction` to explore JS internals, test strategies
+3. Use `snapshot` + `snapshotSearch` to map page structure
+4. Use `poll` to test readiness detection approaches
+5. Write comprehensive manifest via `writeSiteManifest`
+
+**Manifest template**:
+```markdown
+# example.com
+Fitted: 2024-02-03 (full)  |  Fingerprint: <hash>
+
+## Environment
+- React 18.x, Next.js (SSR)
+- SPA with pushState navigation
+- Has <main> element: #__next > main
+
+## Quirks
+- Turbo intercepts link clicks — use settledWhen with URL check
+- File tree uses virtualization — only visible rows in DOM
+
+## Strategies
+### fill (React controlled inputs)
+\`\`\`js
+(el, value) => {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+  setter.call(el, value);
+  el.dispatchEvent(new Event('input', {bubbles: true}));
+}
+\`\`\`
+
+## Regions
+- mainContent: `main, [role="main"]`
+- navigation: `.nav-bar`
+
+## Recipes
+### Login
+\`\`\`json
+{"pipeline": [
+  {"find": "#username", "fill": "{{user}}"},
+  {"find": "#password", "fill": "{{pass}}"},
+  {"find": "#login", "click": true},
+  {"waitFor": "() => location.pathname !== '/login'"}
+]}
+\`\`\`
+```
+
+
 ### JavaScript Execution
 
 **eval** - Execute JS in page context
