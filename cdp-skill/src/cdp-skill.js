@@ -593,15 +593,16 @@ async function main() {
       // Command-level auto-snapshot results
       navigated: result.navigated,
       fullSnapshot: result.fullSnapshot,
+      screenshot: screenshotPath,
       context: result.context,
       changes: result.changes,
-      viewportSnapshot: result.viewportSnapshot,
-      truncated: result.truncated,
-      screenshot: screenshotPath,
       // Command-level console (errors/warnings only)
       console: result.console,
       steps: result.steps,
-      errors: result.errors
+      errors: result.errors,
+      // Viewport snapshot at the end (can be large)
+      viewportSnapshot: result.viewportSnapshot,
+      truncated: result.truncated
     };
 
     // Remove null/undefined fields for compactness

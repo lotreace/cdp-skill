@@ -19,9 +19,9 @@ export function createSnapshotDiffer() {
 
     const lines = yaml.split('\n');
     for (const line of lines) {
-      // Match lines like: - button "Submit" [ref=e1]
-      // Or: - heading "Title" [level=1] [ref=e2]
-      const refMatch = line.match(/\[ref=(e\d+)\]/);
+      // Match lines like: - button "Submit" [ref=s1e1]
+      // Or: - heading "Title" [level=1] [ref=s2e3]
+      const refMatch = line.match(/\[ref=(s\d+e\d+)\]/);
       if (refMatch) {
         const ref = refMatch[1];
 
@@ -126,16 +126,16 @@ export function createSnapshotDiffer() {
   }
 
   /**
-   * Extract ref from a line like "- link \"text\" [ref=e42]"
+   * Extract ref from a line like "- link \"text\" [ref=s1e42]"
    */
   function extractRef(line) {
-    const match = line.match(/\[ref=(e\d+)\]/);
+    const match = line.match(/\[ref=(s\d+e\d+)\]/);
     return match ? match[1] : null;
   }
 
   /**
-   * Format refs as a compact range or list
-   * e.g., [e1, e2, e3, e5] -> "e1-e3, e5"
+   * Format refs as a compact list
+   * e.g., [s1e1, s1e2, s1e5] -> "s1e1, s1e2, s1e5"
    */
   function formatRefs(lines, maxRefs = 10) {
     const refs = lines.map(extractRef).filter(Boolean);

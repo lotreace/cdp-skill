@@ -117,7 +117,7 @@ Config options:
   },
   "screenshot": "/tmp/cdp-skill/t1.after.png",
   "fullSnapshot": "/tmp/cdp-skill/t1.after.yaml",
-  "viewportSnapshot": "- heading \"Title\" [level=1]\n- button \"Submit\" [ref=e1]\n...",
+  "viewportSnapshot": "- heading \"Title\" [level=1]\n- button \"Submit\" [ref=s1e1]\n...",
   "steps": [{"action": "goto", "status": "ok"}]
 }
 ```
@@ -159,14 +159,14 @@ Error types: `PARSE`, `VALIDATION`, `CONNECTION`, `EXECUTION`
       "title": "Example Page",
       "scrollPosition": {"x": 0, "y": 1200, "maxY": 5000, "percentY": 24},
       "visibleButtons": [
-        {"text": "Submit", "selector": "#submit-btn", "ref": "e4"},
-        {"text": "Cancel", "selector": "button.cancel", "ref": "e5"}
+        {"text": "Submit", "selector": "#submit-btn", "ref": "s1e4"},
+        {"text": "Cancel", "selector": "button.cancel", "ref": "s1e5"}
       ],
       "visibleLinks": [{"text": "Home", "href": "..."}],
       "visibleErrors": ["Please fill in all required fields"],
       "nearMatches": [
-        {"text": "Submit Form", "selector": "button.submit-form", "ref": "e12", "score": 70},
-        {"text": "Submit Feedback", "selector": "#feedback-submit", "ref": "e15", "score": 50}
+        {"text": "Submit Form", "selector": "button.submit-form", "ref": "s1e12", "score": 70},
+        {"text": "Submit Feedback", "selector": "#feedback-submit", "ref": "s1e15", "score": 50}
       ]
     }
   }],
@@ -192,7 +192,7 @@ Commands automatically capture page context and accessibility snapshot at the en
   },
   "screenshot": "/tmp/cdp-skill/t1.after.png",
   "fullSnapshot": "/tmp/cdp-skill/t1.after.yaml",
-  "viewportSnapshot": "- heading \"New Page\" [level=1]\n- button \"Submit\" [ref=e1]\n...",
+  "viewportSnapshot": "- heading \"New Page\" [level=1]\n- button \"Submit\" [ref=s1e1]\n...",
   "steps": [{"action": "click", "status": "ok"}]
 }
 ```
@@ -211,10 +211,10 @@ Commands automatically capture page context and accessibility snapshot at the en
   "screenshot": "/tmp/cdp-skill/t1.after.png",
   "fullSnapshot": "/tmp/cdp-skill/t1.after.yaml",
   "changes": {
-    "summary": "Clicked. 3 added (e120, e121, e122), 1 removed (e1).",
-    "added": ["- link \"New Link\" [ref=e120]"],
-    "removed": ["- link \"Old Link\" [ref=e1]"],
-    "changed": [{"ref": "e5", "field": "expanded", "from": false, "to": true}]
+    "summary": "Clicked. 3 added (s1e120, s1e121, s1e122), 1 removed (s1e1).",
+    "added": ["- link \"New Link\" [ref=s1e120]"],
+    "removed": ["- link \"Old Link\" [ref=s1e1]"],
+    "changed": [{"ref": "s1e5", "field": "expanded", "from": false, "to": true}]
   },
   "steps": [{"action": "click", "status": "ok"}]
 }
@@ -275,16 +275,33 @@ All interaction actions (`click`, `fill`, `hover`, `type`) automatically wait fo
 
 ## Element References
 
-The `snapshot` step returns an accessibility tree with refs like `[ref=e4]`. Use refs in subsequent actions:
+The `snapshot` step returns an accessibility tree with versioned refs like `[ref=s1e4]`. The format is `s{snapshotId}e{elementNumber}`:
 
 ```json
 {"steps":[{"snapshot": true}]}
-// Response includes: - button "Submit" [ref=e4]
+// Response includes:
+// - snapshotId: "s1"
+// - yaml: "- button \"Submit\" [ref=s1e4]"
 
-{"config":{"tab":"t1"},"steps":[{"click":{"ref":"e4"}}]}
+{"config":{"tab":"t1"},"steps":[{"click":"s1e4"}]}
 ```
 
 Refs work with: `click`, `fill`, `hover`.
+
+**Versioned Refs**: Each snapshot increments the snapshot ID. This allows refs to remain valid even across page changes:
+- `s1e4` = element 4 from snapshot 1
+- `s2e10` = element 10 from snapshot 2
+
+Refs from earlier snapshots remain valid as long as the element is still in the DOM.
+
+**Ref Resilience (Auto Re-Resolution)**: When a ref's original element is no longer in the DOM (e.g., after a React re-render or lazy-load replacement), the system automatically attempts to re-find the element using stored metadata:
+
+1. Looks up the CSS selector, ARIA role, and accessible name saved when the ref was created
+2. Queries the DOM for an element matching that selector
+3. Verifies the candidate has the same role and name (prevents wrong-element matches)
+4. If a match is found, the ref is transparently updated and the action proceeds
+
+This means refs survive common SPA scenarios like component re-renders, virtual DOM reconciliation, and lazy-loaded content replacements. The response includes `reResolved: true` when a ref was re-found via fallback. If re-resolution fails, the ref is reported as stale with a suggestion to re-snapshot.
 
 
 ## Step Reference
@@ -414,7 +431,7 @@ Returns: `{frameId, url, name}`
 ```json
 {"click": "#submit"}
 {"click": {"selector": "#btn", "verify": true}}
-{"click": {"ref": "e4"}}
+{"click": {"ref": "s1e4"}}
 {"click": {"x": 450, "y": 200}}
 ```
 Options: `selector`, `ref`, `x`/`y`, `force`, `debug`, `timeout`, `jsClick`, `nativeOnly`
@@ -430,7 +447,7 @@ Clicks are automatically verified - if CDP mouse events don't reach the target e
 **click** - Force JavaScript click
 ```json
 {"click": {"selector": "#submit", "jsClick": true}}
-{"click": {"ref": "e4", "jsClick": true}}
+{"click": {"ref": "s1e4", "jsClick": true}}
 ```
 Use `jsClick: true` to skip CDP and use JavaScript `element.click()` directly.
 
@@ -442,7 +459,7 @@ Use `nativeOnly: true` to disable the automatic jsClick fallback. The click will
 
 **click** - Multi-selector fallback
 ```json
-{"click": {"selectors": ["[ref=e4]", "#submit", {"role": "button", "name": "Submit"}]}}
+{"click": {"selectors": ["[ref=s1e4]", "#submit", {"role": "button", "name": "Submit"}]}}
 ```
 Tries each selector in order until one succeeds. Accepts CSS selectors, refs, or role-based objects.
 
@@ -492,7 +509,7 @@ This helps identify overlays, modals, or loading spinners blocking the target el
 **fill** - Fill input (clears first)
 ```json
 {"fill": {"selector": "#email", "value": "user@example.com"}}
-{"fill": {"ref": "e3", "value": "text"}}
+{"fill": {"ref": "s1e3", "value": "text"}}
 ```
 Options: `selector`, `ref`, `value`, `clear` (default: true), `react`, `force`, `timeout`
 
@@ -570,13 +587,13 @@ Returns:
 **drag** - Drag element from source to target
 ```json
 {"drag": {"source": "#draggable", "target": "#dropzone"}}
-{"drag": {"source": {"ref": "e1"}, "target": {"ref": "e5"}}}
-{"drag": {"source": {"ref": "e1", "offsetX": 20}, "target": {"ref": "e5", "offsetY": -10}}}
+{"drag": {"source": {"ref": "s1e1"}, "target": {"ref": "s1e5"}}}
+{"drag": {"source": {"ref": "s1e1", "offsetX": 20}, "target": {"ref": "s1e5", "offsetY": -10}}}
 {"drag": {"source": {"x": 100, "y": 100}, "target": {"x": 300, "y": 200}}}
 {"drag": {"source": "#item", "target": "#container", "steps": 20, "delay": 10}}
 ```
 Options:
-- `source`/`target`: selector string, ref string (`"e1"`), ref object with offsets (`{"ref": "e1", "offsetX": 10, "offsetY": -5}`), or coordinates (`{x, y}`)
+- `source`/`target`: selector string, ref string (`"s1e1"`), ref object with offsets (`{"ref": "s1e1", "offsetX": 10, "offsetY": -5}`), or coordinates (`{x, y}`)
 - `offsetX`/`offsetY`: offset from element center (default: 0)
 - `steps` (default: 10), `delay` (ms, default: 0)
 
@@ -661,9 +678,9 @@ Returns: `{html, tagName, selector, length}`
 
 **getBox** - Get bounding box and position of refs
 ```json
-{"getBox": "e1"}
-{"getBox": ["e1", "e2", "e3"]}
-{"getBox": {"refs": ["e1", "e5"]}}
+{"getBox": "s1e1"}
+{"getBox": ["s1e1", "s1e2", "s2e3"]}
+{"getBox": {"refs": ["s1e1", "s1e5"]}}
 ```
 
 Single ref returns:
@@ -674,9 +691,9 @@ Single ref returns:
 Multiple refs return object keyed by ref:
 ```json
 {
-  "e1": {"x": 100, "y": 200, "width": 150, "height": 40, "center": {"x": 175, "y": 220}},
-  "e2": {"error": "stale", "message": "Element no longer in DOM"},
-  "e3": {"error": "hidden", "box": {"x": 0, "y": 0, "width": 100, "height": 50}}
+  "s1e1": {"x": 100, "y": 200, "width": 150, "height": 40, "center": {"x": 175, "y": 220}},
+  "s1e2": {"error": "stale", "message": "Element no longer in DOM"},
+  "s2e3": {"error": "hidden", "box": {"x": 0, "y": 0, "width": 100, "height": 50}}
 }
 ```
 
@@ -690,7 +707,7 @@ Finds the element at the given viewport coordinates and returns/creates a ref fo
 Returns:
 ```json
 {
-  "ref": "e5",
+  "ref": "s1e5",
   "existing": false,
   "tag": "BUTTON",
   "selector": "#submit-btn",
@@ -713,8 +730,8 @@ Returns:
 {
   "count": 3,
   "elements": [
-    {"x": 100, "y": 200, "ref": "e1", "tag": "BUTTON", "selector": "#btn1", "clickable": true, ...},
-    {"x": 300, "y": 400, "ref": "e2", "tag": "DIV", "selector": "div.card", "clickable": false, ...},
+    {"x": 100, "y": 200, "ref": "s1e1", "tag": "BUTTON", "selector": "#btn1", "clickable": true, ...},
+    {"x": 300, "y": 400, "ref": "s1e2", "tag": "DIV", "selector": "div.card", "clickable": false, ...},
     {"x": 500, "y": 150, "error": "No element at this coordinate"}
   ]
 }
@@ -738,8 +755,8 @@ Returns:
   "radius": 50,
   "count": 5,
   "elements": [
-    {"ref": "e1", "tag": "BUTTON", "selector": "#nearby-btn", "clickable": true, "distance": 12, ...},
-    {"ref": "e2", "tag": "SPAN", "selector": "span.label", "clickable": false, "distance": 28, ...}
+    {"ref": "s1e1", "tag": "BUTTON", "selector": "#nearby-btn", "clickable": true, "distance": 12, ...},
+    {"ref": "s1e2", "tag": "SPAN", "selector": "span.label", "clickable": false, "distance": 28, ...}
   ]
 }
 ```
@@ -909,19 +926,45 @@ Returns typed results:
 {"snapshot": {"pierceShadow": true}}
 {"snapshot": {"detail": "interactive"}}
 {"snapshot": {"inlineLimit": 28000}}
+{"snapshot": {"since": "s1"}}
 ```
-Options: `mode` (ai|full), `detail` (summary|interactive|full), `root` (CSS selector or "role=X"), `maxDepth`, `maxElements`, `includeText`, `includeFrames`, `pierceShadow`, `viewportOnly`, `inlineLimit`
+Options: `mode` (ai|full), `detail` (summary|interactive|full), `root` (CSS selector or "role=X"), `maxDepth`, `maxElements`, `includeText`, `includeFrames`, `pierceShadow`, `viewportOnly`, `inlineLimit`, `since`
 
-Returns YAML with: role, "name", states (`[checked]`, `[disabled]`, `[expanded]`, `[required]`, `[invalid]`, `[level=N]`), `[name=fieldName]` for form inputs, `[ref=eN]` for clicking.
+Returns YAML with: role, "name", states (`[checked]`, `[disabled]`, `[expanded]`, `[required]`, `[invalid]`, `[level=N]`), `[name=fieldName]` for form inputs, `[ref=s{N}e{M}]` for clicking, and `snapshotId`.
 
 ```yaml
 - navigation:
-  - link "Home" [ref=e1]
+  - link "Home" [ref=s1e1]
 - main:
   - heading "Welcome" [level=1]
-  - textbox "Email" [required] [invalid] [name=email] [ref=e3]
-  - button "Submit" [ref=e4]
+  - textbox "Email" [required] [invalid] [name=email] [ref=s1e3]
+  - button "Submit" [ref=s1e4]
 ```
+
+**Snapshot Caching (HTTP 304-like)**: Use the `since` parameter to check if the page has changed:
+```json
+{"snapshot": {"since": "s1"}}
+```
+
+If the page hasn't changed (same URL, scroll position, DOM size, and interactive element count):
+```json
+{
+  "unchanged": true,
+  "snapshotId": "s1",
+  "message": "Page unchanged since s1"
+}
+```
+
+If the page has changed, a new snapshot is returned with an incremented `snapshotId`:
+```json
+{
+  "snapshotId": "s2",
+  "yaml": "- button \"Login\" [ref=s2e1]\n...",
+  "refs": {...}
+}
+```
+
+This minimizes context sent to the agent - only request new snapshots when needed.
 
 **Detail levels** control how much information is returned:
 - `"full"` (default): Complete accessibility tree
@@ -974,8 +1017,8 @@ Returns only matching elements without the full tree:
 ```json
 {
   "matches": [
-    {"path": "main > form > button", "ref": "e47", "name": "Submit Form", "role": "button"},
-    {"path": "dialog > button", "ref": "e89", "name": "Submit Feedback", "role": "button"}
+    {"path": "main > form > button", "ref": "s1e47", "name": "Submit Form", "role": "button"},
+    {"path": "dialog > button", "ref": "s1e89", "name": "Submit Feedback", "role": "button"}
   ],
   "matchCount": 2,
   "searchedElements": 1847
@@ -983,6 +1026,10 @@ Returns only matching elements without the full tree:
 ```
 
 Use `snapshotSearch` to find specific elements without loading the entire accessibility tree - especially useful for large SPAs.
+
+**Ref Persistence**: Refs generated by `snapshotSearch` are preserved across subsequent commands. The auto-snapshots taken at command boundaries merge into the existing ref map instead of overwriting it. This means you can:
+1. Run `snapshotSearch` to find elements on a very long page (e.g., "s1e1170")
+2. Click that ref in the next command and it will still work
 
 
 ### Viewport & Device Emulation

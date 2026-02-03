@@ -110,9 +110,9 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
         await inputEmulator.selectAll();
       }
 
-      await inputEmulator.type(String(value));
+      await inputEmulator.insertText(String(value));
 
-      return { filled: true, ref, method: 'keyboard' };
+      return { filled: true, ref, method: 'insertText' };
     } finally {
       await releaseObject(session, objectId);
     }
@@ -157,9 +157,9 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
         await inputEmulator.selectAll();
       }
 
-      await inputEmulator.type(String(value));
+      await inputEmulator.insertText(String(value));
 
-      return { filled: true, selector, method: 'keyboard' };
+      return { filled: true, selector, method: 'insertText' };
     } catch (e) {
       await resetInputState(session);
       throw e;
@@ -387,9 +387,9 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
         await inputEmulator.selectAll();
       }
 
-      await inputEmulator.type(String(value));
+      await inputEmulator.insertText(String(value));
 
-      return { filled: true, label, method: 'keyboard', foundBy: foundMethod };
+      return { filled: true, label, method: 'insertText', foundBy: foundMethod };
     } catch (e) {
       await resetInputState(session);
       throw e;
@@ -405,9 +405,9 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
       throw new Error('Fill requires value');
     }
 
-    // Detect if selector looks like a ref (e.g., "e1", "e12", "e123")
-    // This allows {"fill": {"selector": "e1", "value": "..."}} to work like {"fill": {"ref": "e1", "value": "..."}}
-    if (!ref && selector && /^e\d+$/.test(selector)) {
+    // Detect if selector looks like a versioned ref (s{N}e{M})
+    // This allows {"fill": {"selector": "s1e1", "value": "..."}} to work like {"fill": {"ref": "s1e1", "value": "..."}}
+    if (!ref && selector && /^s\d+e\d+$/.test(selector)) {
       ref = selector;
     }
 
@@ -458,7 +458,8 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
 
     for (const [selector, value] of entries) {
       try {
-        const isRef = /^e\d+$/.test(selector);
+        // Match versioned ref format s{N}e{M}
+        const isRef = /^s\d+e\d+$/.test(selector);
 
         if (isRef) {
           await fillByRef(selector, value, { clear: true, react: useReact });

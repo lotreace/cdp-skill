@@ -128,9 +128,9 @@ describe('ClickExecutor', () => {
         return {};
       });
 
-      const result = await executor.execute({ ref: 'e1' });
+      const result = await executor.execute({ ref: 's1e1' });
       assert.strictEqual(result.clicked, true);
-      assert.strictEqual(result.ref, 'e1');
+      assert.strictEqual(result.ref, 's1e1');
     });
 
     it('should detect ref from string selector pattern', async () => {
@@ -147,9 +147,9 @@ describe('ClickExecutor', () => {
         return {};
       });
 
-      const result = await executor.execute('e12');
+      const result = await executor.execute('s1e12');
       assert.strictEqual(result.clicked, true);
-      assert.strictEqual(result.ref, 'e12');
+      assert.strictEqual(result.ref, 's1e12');
     });
 
     it('should handle text-based click', async () => {
@@ -392,7 +392,7 @@ describe('ClickExecutor', () => {
       const noAriaExecutor = createClickExecutor(mockSession, mockElementLocator, mockInputEmulator);
 
       // Without ariaSnapshot, the executor falls back to selector-based click
-      // which will fail to find the element "e1" (since it's not a valid CSS selector)
+      // which will fail to find the element "s1e1" (since it's not a valid CSS selector)
       mockSession.send = mock.fn(async (method, params) => {
         if (method === 'Runtime.evaluate') {
           if (params?.expression?.includes('location.href')) {
@@ -404,9 +404,9 @@ describe('ClickExecutor', () => {
       });
 
       await assert.rejects(
-        () => noAriaExecutor.execute({ ref: 'e1' }),
+        () => noAriaExecutor.execute({ ref: 's1e1' }),
         (err) => {
-          // Without ariaSnapshot, the ref 'e1' is treated as selector, failing to find
+          // Without ariaSnapshot, the ref 's1e1' is treated as selector, failing to find
           return err.message.includes('not found') || err.message.includes('ariaSnapshot');
         }
       );
@@ -426,7 +426,7 @@ describe('ClickExecutor', () => {
         return {};
       });
 
-      const result = await executor.execute({ ref: 'e1' });
+      const result = await executor.execute({ ref: 's1e1' });
       assert.strictEqual(result.clicked, false);
       assert.strictEqual(result.stale, true);
       assert.ok(result.warning.includes('no longer attached'));
@@ -446,9 +446,35 @@ describe('ClickExecutor', () => {
         return {};
       });
 
-      const result = await executor.execute({ ref: 'e1' });
+      const result = await executor.execute({ ref: 's1e1' });
       assert.strictEqual(result.clicked, false);
       assert.ok(result.warning.includes('not visible'));
+    });
+
+    it('should succeed when ref element is re-resolved via metadata', async () => {
+      mockAriaSnapshot.getElementByRef = mock.fn(async () => ({
+        box: { x: 50, y: 50, width: 100, height: 40 },
+        isVisible: true,
+        stale: false,
+        reResolved: true
+      }));
+
+      mockSession.send = mock.fn(async (method, params) => {
+        if (method === 'Runtime.evaluate') {
+          if (params?.expression?.includes('location.href')) {
+            return { result: { value: 'https://example.com' } };
+          }
+          if (params?.expression?.includes('__ariaRefs')) {
+            return { result: { value: { targetReceived: true } } };
+          }
+          return { result: { objectId: 'obj-123' } };
+        }
+        return {};
+      });
+
+      const result = await executor.execute({ ref: 's1e1' });
+      assert.strictEqual(result.clicked, true);
+      assert.strictEqual(result.ref, 's1e1');
     });
 
     it('should click non-visible element with force option', async () => {
@@ -471,7 +497,7 @@ describe('ClickExecutor', () => {
         return {};
       });
 
-      const result = await executor.execute({ ref: 'e1', force: true });
+      const result = await executor.execute({ ref: 's1e1', force: true });
       assert.strictEqual(result.clicked, true);
     });
   });

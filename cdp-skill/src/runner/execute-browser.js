@@ -435,7 +435,9 @@ export async function runSteps(deps, steps, options = {}) {
     try {
       beforeUrl = await getCurrentUrl(deps.pageController.session);
       // Capture viewport-only snapshot for command-level diff
-      beforeViewport = await deps.ariaSnapshot.generate({ mode: 'ai', viewportOnly: true });
+      // Use preserveRefs to avoid clobbering refs from snapshotSearch
+      // Use internal to avoid incrementing snapshot ID (this is for diff, not agent-facing)
+      beforeViewport = await deps.ariaSnapshot.generate({ mode: 'ai', viewportOnly: true, preserveRefs: true, internal: true });
     } catch {
       // Ignore initial snapshot errors - will just skip diff comparison
     }
@@ -476,8 +478,10 @@ export async function runSteps(deps, steps, options = {}) {
       const afterContext = await contextCapture.captureContext();
 
       // Capture both viewport and full page snapshots
-      const afterViewport = await deps.ariaSnapshot.generate({ mode: 'ai', viewportOnly: true });
-      const afterFull = await deps.ariaSnapshot.generate({ mode: 'ai', viewportOnly: false });
+      // Use preserveRefs to avoid clobbering refs from snapshotSearch
+      // Use internal to avoid incrementing snapshot ID (this is for diff, not agent-facing)
+      const afterViewport = await deps.ariaSnapshot.generate({ mode: 'ai', viewportOnly: true, preserveRefs: true, internal: true });
+      const afterFull = await deps.ariaSnapshot.generate({ mode: 'ai', viewportOnly: false, preserveRefs: true, internal: true });
 
       const navigated = contextCapture.isNavigation(beforeUrl, afterUrl);
 

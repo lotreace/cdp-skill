@@ -499,7 +499,8 @@ export function createPageController(cdpClient) {
    * @returns {Promise<Object|null>} History entry or null if at start
    */
   async function goBack(options = {}) {
-    const { waitUntil = WaitCondition.LOAD, timeout = 30000 } = options;
+    // Use 'commit' by default for history navigation - cached pages may not fire 'load' event
+    const { waitUntil = WaitCondition.COMMIT, timeout = 5000 } = options;
     const validatedTimeout = validateTimeout(timeout);
     return navigateHistory(-1, waitUntil, validatedTimeout);
   }
@@ -510,7 +511,8 @@ export function createPageController(cdpClient) {
    * @returns {Promise<Object|null>} History entry or null if at end
    */
   async function goForward(options = {}) {
-    const { waitUntil = WaitCondition.LOAD, timeout = 30000 } = options;
+    // Use 'commit' by default for history navigation - cached pages may not fire 'load' event
+    const { waitUntil = WaitCondition.COMMIT, timeout = 5000 } = options;
     const validatedTimeout = validateTimeout(timeout);
     return navigateHistory(1, waitUntil, validatedTimeout);
   }

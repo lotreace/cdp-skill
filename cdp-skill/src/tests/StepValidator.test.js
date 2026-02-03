@@ -148,7 +148,7 @@ describe('StepValidator', () => {
       });
 
       it('should accept object with ref', () => {
-        const errors = validateStepInternal({ click: { ref: 'e1' } });
+        const errors = validateStepInternal({ click: { ref: 's1e1' } });
         assert.strictEqual(errors.length, 0);
       });
 
@@ -195,7 +195,7 @@ describe('StepValidator', () => {
       });
 
       it('should accept object with ref and value', () => {
-        const errors = validateStepInternal({ fill: { ref: 'e1', value: 'test' } });
+        const errors = validateStepInternal({ fill: { ref: 's1e1', value: 'test' } });
         assert.strictEqual(errors.length, 0);
       });
 
@@ -416,18 +416,18 @@ describe('StepValidator', () => {
 
     describe('getBox validation', () => {
       it('should accept single ref string', () => {
-        const errors = validateStepInternal({ getBox: 'e1' });
+        const errors = validateStepInternal({ getBox: 's1e1' });
         assert.strictEqual(errors.length, 0);
       });
 
       it('should accept array of refs', () => {
-        const errors = validateStepInternal({ getBox: ['e1', 'e2', 'e3'] });
+        const errors = validateStepInternal({ getBox: ['s1e1', 's1e2', 's2e3'] });
         assert.strictEqual(errors.length, 0);
       });
 
       it('should reject invalid ref format', () => {
         const errors = validateStepInternal({ getBox: 'invalid' });
-        assert.ok(errors.some(e => e.includes('format "eN"')));
+        assert.ok(errors.some(e => e.includes('format "s{N}e{M}"')));
       });
 
       it('should reject empty array', () => {

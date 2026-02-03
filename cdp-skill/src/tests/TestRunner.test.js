@@ -132,6 +132,7 @@ describe('TestRunner', () => {
     mockInputEmulator = {
       click: mock.fn(() => Promise.resolve()),
       type: mock.fn(() => Promise.resolve()),
+      insertText: mock.fn(() => Promise.resolve()),
       press: mock.fn(() => Promise.resolve()),
       selectAll: mock.fn(() => Promise.resolve())
     };
@@ -377,15 +378,15 @@ describe('TestRunner', () => {
       // We verify the input operations were called
       assert.strictEqual(mockInputEmulator.click.mock.calls.length, 1);
       assert.strictEqual(mockInputEmulator.selectAll.mock.calls.length, 1);
-      assert.strictEqual(mockInputEmulator.type.mock.calls.length, 1);
-      assert.strictEqual(mockInputEmulator.type.mock.calls[0].arguments[0], 'test');
+      assert.strictEqual(mockInputEmulator.insertText.mock.calls.length, 1);
+      assert.strictEqual(mockInputEmulator.insertText.mock.calls[0].arguments[0], 'test');
     });
 
     it('should fill without clearing when clear is false', async () => {
       const result = await testRunner.executeStep({ fill: { selector: '#input', value: 'test', clear: false } });
 
       assert.strictEqual(mockInputEmulator.selectAll.mock.calls.length, 0);
-      assert.strictEqual(mockInputEmulator.type.mock.calls.length, 1);
+      assert.strictEqual(mockInputEmulator.insertText.mock.calls.length, 1);
     });
 
     it('should fail without selector, ref, or label', async () => {
@@ -590,7 +591,7 @@ describe('TestRunner', () => {
     });
 
     it('should accept fill with ref instead of selector', () => {
-      const steps = [{ fill: { ref: 'e3', value: 'test' } }];
+      const steps = [{ fill: { ref: 's1e3', value: 'test' } }];
 
       const result = testRunner.validateSteps(steps);
       assert.strictEqual(result.valid, true);
@@ -704,7 +705,7 @@ describe('TestRunner', () => {
     });
 
     it('should accept valid hover with ref', () => {
-      const result = validateSteps([{ hover: { ref: 'e4' } }]);
+      const result = validateSteps([{ hover: { ref: 's1e4' } }]);
       assert.strictEqual(result.valid, true);
     });
 

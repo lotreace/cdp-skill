@@ -511,30 +511,72 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     let usedMethod = 'cdp';
     let targetReceived = true;
 
+    // Check for navigation helper
+    async function checkNavigation() {
+      try {
+        const urlAfterClick = await getCurrentUrl(session);
+        return urlAfterClick !== urlBeforeClick;
+      } catch {
+        // If we can't get URL, page likely navigated
+        return true;
+      }
+    }
+
+    let navigated = false;
+
     if (jsClick) {
       // User explicitly requested JS click
-      await executeJsClickOnRef(ref);
-      usedMethod = 'jsClick';
+      try {
+        await executeJsClickOnRef(ref);
+        usedMethod = 'jsClick';
+      } catch (e) {
+        // If jsClick fails, check if navigation happened - if so, click worked
+        navigated = await checkNavigation();
+        if (navigated) {
+          usedMethod = 'jsClick';
+          targetReceived = true;
+        } else {
+          throw e; // Re-throw if no navigation - genuine failure
+        }
+      }
     } else {
       // Perform CDP click with verification
       const verifyResult = await clickWithVerificationByRef(ref, point.x, point.y);
       targetReceived = verifyResult.targetReceived;
 
       if (!targetReceived && !nativeOnly) {
-        // CDP click didn't reach target, fallback to jsClick
-        await executeJsClickOnRef(ref);
-        usedMethod = 'jsClick-auto';
+        // Give SPA routers / async navigations time to commit URL changes
+        // before checking - frameworks like React Router use async state updates
+        await sleep(50);
+        // Check if navigation already happened before trying jsClick fallback
+        // If page navigated, the CDP click did work, just the verification failed
+        // because the element listener was destroyed during navigation
+        navigated = await checkNavigation();
+        if (!navigated) {
+          // No navigation, so CDP click genuinely didn't reach target - fallback to jsClick
+          try {
+            await executeJsClickOnRef(ref);
+            usedMethod = 'jsClick-auto';
+          } catch (e) {
+            // jsClick failed - check if navigation happened during the attempt
+            navigated = await checkNavigation();
+            if (navigated) {
+              usedMethod = 'jsClick-auto';
+              targetReceived = true;
+            } else {
+              throw e; // Re-throw if no navigation - genuine failure
+            }
+          }
+        } else {
+          // Navigation happened - CDP click worked, verification just failed due to page change
+          targetReceived = true; // Mark as successful since navigation implies click worked
+        }
       }
     }
 
-    // Check for navigation
-    let navigated = false;
-    try {
-      const urlAfterClick = await getCurrentUrl(session);
-      navigated = urlAfterClick !== urlBeforeClick;
-    } catch {
-      // If we can't get URL, page likely navigated
-      navigated = true;
+    // Check for navigation (if not already checked)
+    if (!navigated) {
+      navigated = await checkNavigation();
     }
 
     const result = {
@@ -709,15 +751,25 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       navigationTimeout = 100,
       timeout = 30000,
       waitAfter = false,
-      waitAfterOptions = {}
+      waitAfterOptions = {},
+      withinSelector = null  // Optional: scope text search to elements matching this selector
     } = opts;
 
     const urlBeforeClick = await getCurrentUrl(session);
 
-    // Find element by text using the locator
-    const element = await elementLocator.findElementByText(text, { exact, tag });
-    if (!element) {
-      throw elementNotFoundError(`text:"${text}"`, timeout);
+    let element;
+    if (withinSelector) {
+      // Find element by text within elements matching the selector
+      element = await elementLocator.findElementByTextWithinSelector(text, withinSelector, { exact, tag });
+      if (!element) {
+        throw elementNotFoundError(`text:"${text}" within selector "${withinSelector}"`, timeout);
+      }
+    } else {
+      // Find element by text using the locator
+      element = await elementLocator.findElementByText(text, { exact, tag });
+      if (!element) {
+        throw elementNotFoundError(`text:"${text}"`, timeout);
+      }
     }
 
     const objectId = element.objectId;
@@ -828,10 +880,14 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     const scrollUntilVisible = typeof params === 'object' && params.scrollUntilVisible === true;
     const scrollOptions = typeof params === 'object' ? params.scrollOptions : {};
 
-    // Detect if string selector looks like a ref (e.g., "e1", "e12", "e123")
-    // This allows {"click": "e1"} to work the same as {"click": {"ref": "e1"}}
-    if (!ref && selector && /^e\d+$/.test(selector)) {
-      ref = selector;
+    // Detect if string selector looks like a versioned ref (s{N}e{M})
+    // This allows {"click": "s1e1"} to work the same as {"click": {"ref": "s1e1"}}
+    if (!ref && selector) {
+      if (/^s\d+e\d+$/.test(selector)) {
+        ref = selector;
+      } else if (/^ref=s\d+e\d+$/i.test(selector)) {
+        ref = selector.slice(4); // Remove "ref=" prefix
+      }
     }
 
     // Handle coordinate-based click
@@ -844,9 +900,9 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       return clickByRef(ref, jsClick, { waitForNavigation, navigationTimeout, force, debug, nativeOnly, waitAfter, waitAfterOptions });
     }
 
-    // Handle click by visible text
+    // Handle click by visible text (optionally scoped to selector)
     if (text) {
-      return clickByText(text, { exact, tag, jsClick, nativeOnly, force, debug, waitForNavigation, navigationTimeout, waitAfter, waitAfterOptions });
+      return clickByText(text, { exact, tag, jsClick, nativeOnly, force, debug, waitForNavigation, navigationTimeout, waitAfter, waitAfterOptions, withinSelector: selector });
     }
 
     // Handle multi-selector fallback

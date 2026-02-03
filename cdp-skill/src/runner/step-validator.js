@@ -590,18 +590,19 @@ export function validateStepInternal(step) {
       break;
 
     case 'getBox':
-      // getBox: "e1" or ["e1", "e2"] or {"refs": ["e1", "e2"]}
+      // getBox: "s1e1" or ["s1e1", "s1e2"] or {"refs": ["s1e1", "s1e2"]}
+      // Versioned ref format: s{snapshotId}e{elementId}
       if (typeof params === 'string') {
-        if (!/^e\d+$/.test(params)) {
-          errors.push('getBox ref must be in format "eN" (e.g., "e1", "e12")');
+        if (!/^s\d+e\d+$/.test(params)) {
+          errors.push('getBox ref must be in format "s{N}e{M}" (e.g., "s1e1", "s2e34")');
         }
       } else if (Array.isArray(params)) {
         if (params.length === 0) {
           errors.push('getBox refs array cannot be empty');
         }
         for (const ref of params) {
-          if (typeof ref !== 'string' || !/^e\d+$/.test(ref)) {
-            errors.push('getBox refs must be strings in format "eN"');
+          if (typeof ref !== 'string' || !/^s\d+e\d+$/.test(ref)) {
+            errors.push('getBox refs must be strings in format "s{N}e{M}"');
             break;
           }
         }

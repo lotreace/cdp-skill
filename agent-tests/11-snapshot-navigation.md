@@ -8,8 +8,8 @@ Test using accessibility snapshots for page understanding and navigation via ref
 1. Navigate to https://news.ycombinator.com
 2. Take a snapshot with default options
 3. Examine the YAML output to understand page structure
-4. Find a link's ref (e.g., [ref=e5])
-5. Click using the ref: `{"click": {"ref": "e5"}}`
+4. Find a link's ref (e.g., [ref=s1e5])
+5. Click using the ref: `{"click": {"ref": "s1e5"}}`
 6. Wait for navigation and take another snapshot
 7. Test snapshot with root option: `{"snapshot": {"root": "#hnmain"}}`
 8. Test snapshot with root using role syntax: `{"snapshot": {"root": "role=main"}}`

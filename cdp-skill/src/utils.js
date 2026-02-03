@@ -1142,17 +1142,3 @@ export function resolveViewport(viewport) {
     isLandscape: viewport.isLandscape || false
   };
 }
-
-/**
- * Create a device presets manager (for backwards compatibility)
- * @returns {Object} Device presets manager
- */
-export function createDevicePresets() {
-  return {
-    get: getDevicePreset,
-    has: hasDevicePreset,
-    list: listDevicePresets,
-    listByCategory: listDevicePresetsByCategory,
-    resolve: resolveViewport
-  };
-}

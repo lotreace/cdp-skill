@@ -28,95 +28,6 @@ export async function executeClick(elementLocator, inputEmulator, ariaSnapshot, 
   return clickExecutor.execute(params);
 }
 
-// Legacy implementation kept for reference
-export async function _legacyExecuteClick(elementLocator, inputEmulator, ariaSnapshot, params) {
-  const selector = typeof params === 'string' ? params : params.selector;
-  const ref = typeof params === 'object' ? params.ref : null;
-  const verify = typeof params === 'object' && params.verify === true;
-  let lastError = null;
-
-  // Handle click by ref
-  if (ref && ariaSnapshot) {
-    const refInfo = await ariaSnapshot.getElementByRef(ref);
-    if (!refInfo) {
-      throw elementNotFoundError(`ref:${ref}`, 0);
-    }
-    // Check if element is stale (no longer in DOM)
-    if (refInfo.stale) {
-      return {
-        clicked: false,
-        stale: true,
-        warning: `Element ref:${ref} is no longer attached to the DOM. Page content may have changed. Run 'snapshot' again to get fresh refs.`
-      };
-    }
-    // Check if element is visible
-    if (!refInfo.isVisible) {
-      return {
-        clicked: false,
-        warning: `Element ref:${ref} exists but is not visible. It may be hidden or have zero dimensions.`
-      };
-    }
-    // Click at center of element
-    const x = refInfo.box.x + refInfo.box.width / 2;
-    const y = refInfo.box.y + refInfo.box.height / 2;
-    await inputEmulator.click(x, y);
-
-    if (verify) {
-      // For ref-based clicks with verify, return verification result
-      return { clicked: true, targetReceived: true };
-    }
-    return { clicked: true };
-  }
-
-  for (const strategy of SCROLL_STRATEGIES) {
-    const element = await elementLocator.findElement(selector);
-
-    if (!element) {
-      throw elementNotFoundError(selector, 0);
-    }
-
-    try {
-      await element._handle.scrollIntoView({ block: strategy });
-      await element._handle.waitForStability({ frames: 2, timeout: 2000 });
-
-      const actionable = await element._handle.isActionable();
-      if (!actionable.actionable) {
-        await element._handle.dispose();
-        lastError = new Error(`Element not actionable: ${actionable.reason}`);
-        continue; // Try next scroll strategy
-      }
-
-      const box = await element._handle.getBoundingBox();
-      const x = box.x + box.width / 2;
-      const y = box.y + box.height / 2;
-
-      if (verify) {
-        const result = await clickWithVerification(elementLocator, inputEmulator, x, y, element._handle.objectId);
-        await element._handle.dispose();
-        return result;
-      }
-
-      await inputEmulator.click(x, y);
-      await element._handle.dispose();
-      return; // Success
-    } catch (e) {
-      await element._handle.dispose();
-      lastError = e;
-      if (strategy === SCROLL_STRATEGIES[SCROLL_STRATEGIES.length - 1]) {
-        // Reset input state before throwing to prevent subsequent operation timeouts
-        await resetInputState(elementLocator.session);
-        throw e; // Last strategy failed
-      }
-    }
-  }
-
-  if (lastError) {
-    // Reset input state before throwing to prevent subsequent operation timeouts
-    await resetInputState(elementLocator.session);
-    throw lastError;
-  }
-}
-
 export async function clickWithVerification(elementLocator, inputEmulator, x, y, targetObjectId) {
   const session = elementLocator.session;
 
@@ -163,9 +74,9 @@ export async function executeHover(elementLocator, inputEmulator, ariaSnapshot, 
   let ref = typeof params === 'object' ? params.ref : null;
   const duration = typeof params === 'object' ? (params.duration || 0) : 0;
 
-  // Detect if string selector looks like a ref (e.g., "e1", "e12", "e123")
-  // This allows {"hover": "e1"} to work the same as {"hover": {"ref": "e1"}}
-  if (!ref && selector && /^e\d+$/.test(selector)) {
+  // Detect if string selector looks like a ref (e.g., "s1e1", "s2e12")
+  // This allows {"hover": "s1e1"} to work the same as {"hover": {"ref": "s1e1"}}
+  if (!ref && selector && /^s\d+e\d+$/.test(selector)) {
     ref = selector;
   }
   const force = typeof params === 'object' && params.force === true;
@@ -427,7 +338,7 @@ export async function executeDrag(elementLocator, inputEmulator, pageController,
       return { x: spec.x, y: spec.y, width: 0, height: 0, offsetX: 0, offsetY: 0 };
     }
 
-    // Ref object with optional offsets: {"ref": "e1", "offsetX": 10}
+    // Ref object with optional offsets: {"ref": "s1e1", "offsetX": 10}
     if (typeof spec === 'object' && spec.ref) {
       const box = await getRefBox(spec.ref);
       return {
@@ -449,8 +360,8 @@ export async function executeDrag(elementLocator, inputEmulator, pageController,
     // String - could be selector or ref
     const selectorOrRef = spec;
 
-    // Check if it looks like a ref (e.g., "e1", "e12")
-    if (/^e\d+$/.test(selectorOrRef)) {
+    // Check if it looks like a ref (e.g., "s1e1", "s2e12")
+    if (/^s\d+e\d+$/.test(selectorOrRef)) {
       const box = await getRefBox(selectorOrRef);
       return { ...box, offsetX: 0, offsetY: 0 };
     }
@@ -466,7 +377,7 @@ export async function executeDrag(elementLocator, inputEmulator, pageController,
   // Helper to resolve selector string for JS execution
   function getSelectorExpression(spec) {
     if (typeof spec === 'string') {
-      if (/^e\d+$/.test(spec)) {
+      if (/^s\d+e\d+$/.test(spec)) {
         return `window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(spec)})`;
       }
       return `document.querySelector(${JSON.stringify(spec)})`;

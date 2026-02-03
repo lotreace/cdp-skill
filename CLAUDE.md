@@ -59,6 +59,14 @@ Common utilities should be in `src/utils.js`:
 
 **Do not use example.com for testing** - it doesn't route anywhere useful. Use real websites like google.com, wikipedia.org, or dedicated test sites.
 
+## Quality Mindset
+
+Whenever you are testing the skill text or skill code for this project, be extra vigilant for things that should not be the case and investigate them. We are building and polishing the best CDP skill in the galaxy and that means we need to be extra perceptive, critical, and awake.
+
+## No Backwards Compatibility
+
+When implementing new or updating existing code in this project, do not maintain any backwards compatibility or legacy formats. The usage of the skill and code do not rely on persisting formats over time. If you think support for something should be kept, raise it as a question.
+
 ## Documentation
 
 After any code change affecting how agents use the JS code, make sure that `SKILL.md` is up to date. This can be done at the end of the implementation.

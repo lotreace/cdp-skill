@@ -27,6 +27,7 @@ describe('FillExecutor', () => {
     mockInputEmulator = {
       click: mock.fn(async () => {}),
       type: mock.fn(async () => {}),
+      insertText: mock.fn(async () => {}),
       selectAll: mock.fn(async () => {})
     };
 
@@ -119,7 +120,7 @@ describe('FillExecutor', () => {
       const result = await executor.execute({ selector: '#input', value: 'test value' });
       assert.strictEqual(result.filled, true);
       assert.strictEqual(result.selector, '#input');
-      assert.strictEqual(result.method, 'keyboard');
+      assert.strictEqual(result.method, 'insertText');
     });
 
     it('should fill by ref', async () => {
@@ -142,10 +143,10 @@ describe('FillExecutor', () => {
         return {};
       });
 
-      const result = await executor.execute({ ref: 'e1', value: 'ref value' });
+      const result = await executor.execute({ ref: 's1e1', value: 'ref value' });
       assert.strictEqual(result.filled, true);
-      assert.strictEqual(result.ref, 'e1');
-      assert.strictEqual(result.method, 'keyboard');
+      assert.strictEqual(result.ref, 's1e1');
+      assert.strictEqual(result.method, 'insertText');
     });
 
     it('should detect ref from selector pattern', async () => {
@@ -165,9 +166,9 @@ describe('FillExecutor', () => {
         return {};
       });
 
-      const result = await executor.execute({ selector: 'e5', value: 'test' });
+      const result = await executor.execute({ selector: 's1e5', value: 'test' });
       assert.strictEqual(result.filled, true);
-      assert.strictEqual(result.ref, 'e5');
+      assert.strictEqual(result.ref, 's1e5');
     });
 
     it('should fill by label', async () => {
@@ -455,8 +456,8 @@ describe('FillExecutor', () => {
       });
 
       const result = await executor.executeBatch({
-        'e1': 'value1',
-        'e2': 'value2'
+        's1e1': 'value1',
+        's1e2': 'value2'
       });
 
       assert.strictEqual(result.total, 2);
@@ -469,9 +470,9 @@ describe('FillExecutor', () => {
       const noAriaExecutor = createFillExecutor(mockSession, mockElementLocator, mockInputEmulator);
 
       // Without ariaSnapshot, the fill by ref won't work because ref requires ariaSnapshot
-      // The executor treats ref: 'e1' as needing ariaSnapshot
+      // The executor treats ref: 's1e1' as needing ariaSnapshot
       await assert.rejects(
-        () => noAriaExecutor.execute({ ref: 'e1', value: 'test' }),
+        () => noAriaExecutor.execute({ ref: 's1e1', value: 'test' }),
         (err) => {
           // May fail with "requires selector, ref, or label" because ref is only valid with ariaSnapshot
           return err.message.includes('requires') || err.message.includes('ariaSnapshot');
@@ -487,7 +488,7 @@ describe('FillExecutor', () => {
       }));
 
       await assert.rejects(
-        () => executor.execute({ ref: 'e1', value: 'test' }),
+        () => executor.execute({ ref: 's1e1', value: 'test' }),
         (err) => {
           assert.ok(err.message.includes('no longer attached'));
           return true;
@@ -503,7 +504,7 @@ describe('FillExecutor', () => {
       }));
 
       await assert.rejects(
-        () => executor.execute({ ref: 'e1', value: 'test' }),
+        () => executor.execute({ ref: 's1e1', value: 'test' }),
         (err) => {
           assert.ok(err.message.includes('not visible'));
           return true;
@@ -515,7 +516,7 @@ describe('FillExecutor', () => {
       mockAriaSnapshot.getElementByRef = mock.fn(async () => null);
 
       await assert.rejects(
-        () => executor.execute({ ref: 'e99', value: 'test' }),
+        () => executor.execute({ ref: 's1e99', value: 'test' }),
         (err) => {
           assert.ok(err.message.includes('not found'));
           return true;

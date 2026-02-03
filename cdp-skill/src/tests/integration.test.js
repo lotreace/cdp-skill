@@ -375,6 +375,7 @@ describe('Integration: TestRunner with Mocks', () => {
     const mockInputEmulator = {
       click: async () => {},
       type: async () => {},
+      insertText: async () => {},
       press: async () => {},
       selectAll: async () => {}
     };

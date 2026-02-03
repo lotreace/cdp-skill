@@ -32,16 +32,33 @@ export async function executeSnapshot(ariaSnapshot, params, options = {}) {
   }
 
   const snapshotOptions = params === true ? {} : (params || {});
+  // Default to preserveRefs: true so refs remain stable across snapshots
+  // User can override with preserveRefs: false if they want a fresh start
+  if (snapshotOptions.preserveRefs === undefined) {
+    snapshotOptions.preserveRefs = true;
+  }
   const result = await ariaSnapshot.generate(snapshotOptions);
 
   if (result.error) {
     throw new Error(result.error);
   }
 
+  // Handle HTTP 304-like response when page is unchanged
+  if (result.unchanged) {
+    return {
+      unchanged: true,
+      snapshotId: result.snapshotId,
+      message: result.message
+    };
+  }
+
   // Determine inline limit from params, options, or default
   const inlineLimit = snapshotOptions.inlineLimit ?? options.inlineLimit ?? DEFAULT_INLINE_LIMIT;
   const yaml = result.yaml || '';
   const snapshotSize = yaml.length;
+  const refs = result.refs || {};
+  const refsCount = Object.keys(refs).length;
+  const REFS_INLINE_LIMIT = 1000; // Max refs to return inline
 
   // Check if snapshot exceeds inline limit
   if (inlineLimit > 0 && snapshotSize > inlineLimit) {
@@ -50,21 +67,36 @@ export async function executeSnapshot(ariaSnapshot, params, options = {}) {
     const snapshotPath = await resolveTempPath(`${tabAlias}.snapshot.yaml`, '.yaml');
     await fs.writeFile(snapshotPath, yaml, 'utf8');
 
+    const artifacts = { snapshot: snapshotPath };
+    let refsToReturn = refs;
+
+    // Also save refs to file if they exceed the limit
+    if (refsCount > REFS_INLINE_LIMIT) {
+      const refsPath = await resolveTempPath(`${tabAlias}.refs.json`, '.json');
+      await fs.writeFile(refsPath, JSON.stringify(refs, null, 2), 'utf8');
+      artifacts.refs = refsPath;
+      refsToReturn = null; // Don't return refs inline
+    }
+
     return {
       yaml: null,
-      refs: result.refs,
+      refs: refsToReturn,
+      refsCount,
       stats: result.stats,
-      artifacts: { snapshot: snapshotPath },
+      snapshotId: result.snapshotId,
+      artifacts,
       snapshotSize,
       truncatedInline: true,
-      message: `Snapshot too large for inline (${snapshotSize} bytes > ${inlineLimit} limit). Saved to ${snapshotPath}`
+      message: `Snapshot too large for inline (${snapshotSize} bytes > ${inlineLimit} limit). Saved to ${snapshotPath}` +
+               (refsToReturn === null ? `. Refs (${refsCount}) saved to ${artifacts.refs}` : '')
     };
   }
 
   return {
     yaml: result.yaml,
     refs: result.refs,
-    stats: result.stats
+    stats: result.stats,
+    snapshotId: result.snapshotId
   };
 }
 
@@ -209,12 +241,15 @@ export async function executeRefAt(session, params) {
         return { error: 'No element at coordinates (' + x + ', ' + y + ')' };
       }
 
-      // Initialize refs map if needed
+      // Initialize refs map and snapshot tracking if needed
       if (!window.__ariaRefs) {
         window.__ariaRefs = new Map();
       }
       if (!window.__ariaRefCounter) {
         window.__ariaRefCounter = 0;
+      }
+      if (window.__ariaSnapshotId === undefined) {
+        window.__ariaSnapshotId = 1;
       }
 
       // Helper to generate a selector for an element
@@ -292,9 +327,9 @@ export async function executeRefAt(session, params) {
         }
       }
 
-      // Create new ref
+      // Create new versioned ref: s{snapshotId}e{counter}
       window.__ariaRefCounter++;
-      const ref = 'e' + window.__ariaRefCounter;
+      const ref = 's' + window.__ariaSnapshotId + 'e' + window.__ariaRefCounter;
       window.__ariaRefs.set(ref, el);
 
       const rect = el.getBoundingClientRect();
@@ -338,15 +373,18 @@ export async function executeElementsAt(session, coords) {
     expression: `(function() {
       const coords = ${JSON.stringify(coords)};
 
-      // Initialize refs map if needed
+      // Initialize refs map and snapshot tracking if needed
       if (!window.__ariaRefs) {
         window.__ariaRefs = new Map();
       }
       if (!window.__ariaRefCounter) {
         window.__ariaRefCounter = 0;
       }
+      if (window.__ariaSnapshotId === undefined) {
+        window.__ariaSnapshotId = 1;
+      }
 
-      // Helper to get or create ref for element
+      // Helper to get or create versioned ref for element
       function getOrCreateRef(el) {
         if (!el) return null;
 
@@ -357,9 +395,9 @@ export async function executeElementsAt(session, coords) {
           }
         }
 
-        // Create new ref
+        // Create new versioned ref: s{snapshotId}e{counter}
         window.__ariaRefCounter++;
-        const ref = 'e' + window.__ariaRefCounter;
+        const ref = 's' + window.__ariaSnapshotId + 'e' + window.__ariaRefCounter;
         window.__ariaRefs.set(ref, el);
         return { ref, existing: false };
       }
@@ -481,15 +519,18 @@ export async function executeElementsNear(session, params) {
       const radius = ${radius};
       const limit = ${limit};
 
-      // Initialize refs map if needed
+      // Initialize refs map and snapshot tracking if needed
       if (!window.__ariaRefs) {
         window.__ariaRefs = new Map();
       }
       if (!window.__ariaRefCounter) {
         window.__ariaRefCounter = 0;
       }
+      if (window.__ariaSnapshotId === undefined) {
+        window.__ariaSnapshotId = 1;
+      }
 
-      // Helper to get or create ref for element
+      // Helper to get or create versioned ref for element
       function getOrCreateRef(el) {
         // Check if element already has a ref
         for (const [ref, refEl] of window.__ariaRefs) {
@@ -498,9 +539,9 @@ export async function executeElementsNear(session, params) {
           }
         }
 
-        // Create new ref
+        // Create new versioned ref: s{snapshotId}e{counter}
         window.__ariaRefCounter++;
-        const ref = 'e' + window.__ariaRefCounter;
+        const ref = 's' + window.__ariaSnapshotId + 'e' + window.__ariaRefCounter;
         window.__ariaRefs.set(ref, el);
         return { ref, existing: false };
       }
@@ -827,7 +868,10 @@ export async function executeSnapshotSearch(ariaSnapshot, params) {
   } = params;
 
   // Generate full snapshot tree (in memory)
-  const snapshot = await ariaSnapshot.generate({ mode: 'ai' });
+  // Use preserveRefs so that refs from previous searches remain valid
+  // The generateRef function will reuse existing refs for the same elements
+  // Use internal to avoid incrementing snapshot ID (search doesn't create a new generation)
+  const snapshot = await ariaSnapshot.generate({ mode: 'ai', preserveRefs: true, internal: true });
 
   if (snapshot.error) {
     throw new Error(snapshot.error);
@@ -923,6 +967,7 @@ export async function executeSnapshotSearch(ariaSnapshot, params) {
     matches,
     matchCount: matches.length,
     searchedElements,
+    usedCDP: snapshot.usedCDP || false,
     criteria: {
       text: text || null,
       pattern: pattern || null,

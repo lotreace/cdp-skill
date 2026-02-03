@@ -5,8 +5,8 @@
  * EXPORTS:
  * - createElementLocator(session, options) → ElementLocator
  *   Methods: querySelector, querySelectorAll, queryByRole, waitForSelector,
- *            waitForText, findElement, findElementByText, waitForElementByText,
- *            getBoundingBox, getDefaultTimeout, setDefaultTimeout
+ *            waitForText, findElement, findElementByText, findElementByTextWithinSelector,
+ *            waitForElementByText, getBoundingBox, getDefaultTimeout, setDefaultTimeout
  *
  * DEPENDENCIES:
  * - ./element-handle.js: createElementHandle
@@ -423,6 +423,117 @@ export function createElementLocator(session, options = {}) {
   }
 
   /**
+   * Find an element by its visible text content within elements matching a selector
+   * @param {string} text - Text to search for
+   * @param {string} withinSelector - CSS selector to scope the search
+   * @param {Object} [opts] - Options
+   * @param {boolean} [opts.exact=false] - Require exact text match
+   * @param {string} [opts.tag] - Limit search to specific tag within the scoped elements
+   * @returns {Promise<Object|null>} Element handle or null
+   */
+  async function findElementByTextWithinSelector(text, withinSelector, opts = {}) {
+    if (!text || typeof text !== 'string') {
+      throw new Error('Text must be a non-empty string');
+    }
+    if (!withinSelector || typeof withinSelector !== 'string') {
+      throw new Error('Selector must be a non-empty string');
+    }
+
+    const { exact = false, tag = null } = opts;
+    const textLower = text.toLowerCase();
+    const textJson = JSON.stringify(text);
+    const textLowerJson = JSON.stringify(textLower);
+    const selectorJson = JSON.stringify(withinSelector);
+    const tagJson = tag ? JSON.stringify(tag.toLowerCase()) : 'null';
+
+    const expression = `
+      (function() {
+        const text = ${textJson};
+        const textLower = ${textLowerJson};
+        const exact = ${exact};
+        const withinSelector = ${selectorJson};
+        const tagFilter = ${tagJson};
+
+        function getElementText(el) {
+          const ariaLabel = el.getAttribute('aria-label');
+          if (ariaLabel) return ariaLabel;
+          if (el.tagName === 'INPUT') {
+            return el.value || el.placeholder || '';
+          }
+          return el.textContent || '';
+        }
+
+        function matchesText(elText) {
+          if (exact) {
+            return elText.trim() === text;
+          }
+          return elText.toLowerCase().includes(textLower);
+        }
+
+        function isVisible(el) {
+          if (!el.isConnected) return false;
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+            return false;
+          }
+          const rect = el.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        }
+
+        // Get all elements matching the selector
+        const scopedElements = document.querySelectorAll(withinSelector);
+
+        for (const scopedEl of scopedElements) {
+          // Check if the scoped element itself matches the text
+          if (isVisible(scopedEl)) {
+            if (!tagFilter || scopedEl.tagName.toLowerCase() === tagFilter) {
+              const elText = getElementText(scopedEl);
+              if (matchesText(elText)) {
+                return scopedEl;
+              }
+            }
+          }
+
+          // Search within the scoped element's descendants
+          const descendants = tagFilter
+            ? scopedEl.querySelectorAll(tagFilter)
+            : scopedEl.querySelectorAll('*');
+
+          for (const el of descendants) {
+            if (!isVisible(el)) continue;
+            const elText = getElementText(el);
+            if (matchesText(elText)) {
+              return el;
+            }
+          }
+        }
+
+        return null;
+      })()
+    `;
+
+    let result;
+    try {
+      result = await session.send('Runtime.evaluate', {
+        expression,
+        returnByValue: false
+      });
+    } catch (error) {
+      throw connectionError(error.message, 'Runtime.evaluate (findElementByTextWithinSelector)');
+    }
+
+    if (result.exceptionDetails) {
+      throw new Error(`Text search error: ${result.exceptionDetails.text}`);
+    }
+
+    if (result.result.subtype === 'null' || result.result.type === 'undefined') {
+      return null;
+    }
+
+    return createElementHandle(session, result.result.objectId, { selector: `text:${text} within ${withinSelector}` });
+  }
+
+  /**
    * Wait for an element with specific text to appear
    * @param {string} text - Text to search for
    * @param {Object} [opts] - Options
@@ -467,6 +578,7 @@ export function createElementLocator(session, options = {}) {
     waitForText,
     findElement,
     findElementByText,
+    findElementByTextWithinSelector,
     waitForElementByText,
     getBoundingBox,
     getDefaultTimeout: () => defaultTimeout,
