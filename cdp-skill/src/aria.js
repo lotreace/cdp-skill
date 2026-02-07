@@ -1636,32 +1636,61 @@ export function createAriaSnapshot(session, options = {}) {
           return buildResult(el, false);
         }
 
+        // Helper to check if candidate matches role+name
+        function matchesRoleAndName(candidate, meta) {
+          if (!candidate || !candidate.isConnected) return false;
+          const candidateRole = getRole(candidate);
+          const roleMatch = !meta.role || candidateRole === meta.role;
+          if (!roleMatch) return false;
+          if (!meta.name) return true;
+          const candidateName = getAccessibleName(candidate);
+          return candidateName.toLowerCase().includes(meta.name.toLowerCase().substring(0, 100));
+        }
+
         // 2. Element is null or stale - attempt re-resolution via metadata
         if (metaMap) {
           const meta = metaMap.get(ref);
-          if (meta && meta.selector) {
-            try {
-              const candidate = document.querySelector(meta.selector);
-              if (candidate && candidate.isConnected) {
-                // Verify role matches
-                const candidateRole = getRole(candidate);
-                const roleMatch = !meta.role || candidateRole === meta.role;
-
-                // Verify name matches (loose: contains check, case-insensitive)
-                let nameMatch = true;
-                if (meta.name) {
-                  const candidateName = getAccessibleName(candidate);
-                  nameMatch = candidateName.toLowerCase().includes(meta.name.toLowerCase().substring(0, 100));
-                }
-
-                if (roleMatch && nameMatch) {
-                  // Update the refs map so subsequent lookups are fast
+          if (meta) {
+            // 2a. Try stored CSS selector first (fastest)
+            if (meta.selector) {
+              try {
+                const candidate = document.querySelector(meta.selector);
+                if (matchesRoleAndName(candidate, meta)) {
                   if (refsMap) refsMap.set(ref, candidate);
                   return buildResult(candidate, true);
                 }
+              } catch (e) {
+                // querySelector can throw on invalid selectors - fall through
               }
-            } catch (e) {
-              // querySelector can throw on invalid selectors - fall through
+            }
+
+            // 2b. Broader search: find by role + name across the document
+            if (meta.role) {
+              const roleSelectors = {
+                'link': 'a[href]',
+                'button': 'button,[role="button"]',
+                'heading': 'h1,h2,h3,h4,h5,h6,[role="heading"]',
+                'textbox': 'input:not([type]),input[type="text"],input[type="email"],input[type="url"],input[type="search"],input[type="tel"],textarea,[role="textbox"]',
+                'checkbox': 'input[type="checkbox"],[role="checkbox"]',
+                'radio': 'input[type="radio"],[role="radio"]',
+                'combobox': 'select,[role="combobox"],[role="listbox"]',
+                'img': 'img,[role="img"]',
+                'listitem': 'li,[role="listitem"]',
+                'tab': '[role="tab"]',
+                'menuitem': '[role="menuitem"]'
+              };
+              const sel = roleSelectors[meta.role] || '[role="' + meta.role + '"]';
+              try {
+                const candidates = document.querySelectorAll(sel);
+                for (const candidate of candidates) {
+                  if (matchesRoleAndName(candidate, meta)) {
+                    if (refsMap) refsMap.set(ref, candidate);
+                    return buildResult(candidate, true);
+                  }
+                }
+              } catch (e) {
+                // fall through
+              }
             }
           }
         }

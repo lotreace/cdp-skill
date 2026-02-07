@@ -308,7 +308,22 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
   async function executeJsClickOnRef(ref) {
     const result = await session.send('Runtime.evaluate', frameEvalParams(`
         (function() {
-          const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
+          let el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
+
+          // Re-resolve if element is missing or stale
+          if (!el || !el.isConnected) {
+            const meta = window.__ariaRefMeta && window.__ariaRefMeta.get(${JSON.stringify(ref)});
+            if (meta && meta.selector) {
+              try {
+                const candidate = document.querySelector(meta.selector);
+                if (candidate && candidate.isConnected) {
+                  el = candidate;
+                  if (window.__ariaRefs) window.__ariaRefs.set(${JSON.stringify(ref)}, el);
+                }
+              } catch (e) {}
+            }
+          }
+
           if (!el) {
             return { success: false, reason: 'ref not found in __ariaRefs' };
           }
@@ -437,11 +452,23 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
   }
 
   async function clickWithVerificationByRef(ref, x, y) {
-    // Set up click listener on the ref element
+    // Set up click listener on the ref element (with re-resolution fallback)
     await session.send('Runtime.evaluate', frameEvalParams(`
         (function() {
-          const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
-          if (el) {
+          let el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
+          if ((!el || !el.isConnected) && window.__ariaRefMeta) {
+            const meta = window.__ariaRefMeta.get(${JSON.stringify(ref)});
+            if (meta && meta.selector) {
+              try {
+                const candidate = document.querySelector(meta.selector);
+                if (candidate && candidate.isConnected) {
+                  el = candidate;
+                  if (window.__ariaRefs) window.__ariaRefs.set(${JSON.stringify(ref)}, el);
+                }
+              } catch (e) {}
+            }
+          }
+          if (el && el.isConnected) {
             el.__clickReceived = false;
             el.__clickHandler = () => { el.__clickReceived = true; };
             el.addEventListener('click', el.__clickHandler, { once: true });
@@ -457,7 +484,7 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
         (function() {
           const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
           if (!el) return { targetReceived: false, reason: 'element not found' };
-          el.removeEventListener('click', el.__clickHandler);
+          if (el.__clickHandler) el.removeEventListener('click', el.__clickHandler);
           const received = el.__clickReceived;
           delete el.__clickReceived;
           delete el.__clickHandler;
