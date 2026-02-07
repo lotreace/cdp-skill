@@ -1,0 +1,19 @@
+{
+  "id": "027-prosemirror-editor",
+  "url": "https://prosemirror.net/examples/basic/",
+  "category": "create",
+  "difficulty": "hard",
+  "stability": "stable",
+  "task": "Use the ProseMirror basic example editor: clear existing text, type 'Testing ProseMirror', then apply bold to some text using Ctrl+B. Verify the text appears.",
+  "milestones": [
+    {
+      "id": "text_entered",
+      "weight": 1.0,
+      "description": "Text has been typed into the ProseMirror editor. The editor div contains the typed content.",
+      "verify": {
+        "eval_truthy": "document.querySelector('.ProseMirror, [contenteditable]')?.textContent?.includes('ProseMirror') || document.querySelector('.ProseMirror, [contenteditable]')?.textContent?.includes('Testing')"
+      }
+    }
+  ],
+  "budget": { "maxSteps": 20, "maxTimeMs": 60000 }
+}

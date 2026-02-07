@@ -27,6 +27,16 @@ describe('TestRunner', () => {
     mockPageController = {
       navigate: mock.fn(() => Promise.resolve()),
       getUrl: mock.fn(() => Promise.resolve('http://test.com')),
+      evaluateInFrame: mock.fn((expression, options = {}) => {
+        // Delegate to session.send with same behavior as real evaluateInFrame
+        const params = {
+          expression,
+          returnByValue: options.returnByValue !== false,
+          awaitPromise: options.awaitPromise || false
+        };
+        return mockPageController.session.send('Runtime.evaluate', params);
+      }),
+      getFrameContext: mock.fn(() => null),
       session: { send: null } // Will be set after mockElementLocator is created
     };
 

@@ -1,0 +1,23 @@
+{
+  "id": "011-heroku-dragdrop",
+  "url": "https://the-internet.herokuapp.com/drag_and_drop",
+  "category": "update",
+  "difficulty": "medium",
+  "stability": "stable",
+  "task": "Complete the drag and drop challenge by dragging element A to element B's position. Verify the elements have swapped positions.",
+  "milestones": [
+    {
+      "id": "swap_complete",
+      "weight": 1.0,
+      "description": "Elements A and B have swapped positions. Column A now shows 'B' and column B shows 'A'.",
+      "verify": {
+        "all": [
+          { "url_contains": "/drag_and_drop" },
+          { "eval_truthy": "document.querySelector('#column-a header')?.textContent.trim() === 'B'" },
+          { "eval_truthy": "document.querySelector('#column-b header')?.textContent.trim() === 'A'" }
+        ]
+      }
+    }
+  ],
+  "budget": { "maxSteps": 15, "maxTimeMs": 60000 }
+}

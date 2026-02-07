@@ -1,0 +1,24 @@
+{
+  "id": "012-amazon-search",
+  "url": "https://www.amazon.com",
+  "category": "read",
+  "difficulty": "medium",
+  "stability": "moderate",
+  "task": "Search for 'AA batteries' on Amazon and navigate to a product listing page to view product details.",
+  "milestones": [
+    {
+      "id": "product_page",
+      "weight": 1.0,
+      "description": "Navigated to a product detail page or search results page showing battery products.",
+      "verify": {
+        "any": [
+          { "url_contains": "/dp/" },
+          { "eval_truthy": "document.querySelector('#productTitle, [data-component-type=\"s-search-results\"], .s-result-list')?.textContent?.length > 10" },
+          { "url_contains": "s?k=" }
+        ]
+      }
+    }
+  ],
+  "budget": { "maxSteps": 20, "maxTimeMs": 90000 },
+  "skipWhen": { "eval_truthy": "document.title.includes('Robot Check') || document.body.innerText.includes('Enter the characters you see below') || document.title.includes('CAPTCHA')" }
+}

@@ -1,0 +1,969 @@
+{
+  "meta": {
+    "totalVotes": 156,
+    "lastUpdated": "2026-02-07T22:00:00Z"
+  },
+  "issues": [
+    {
+      "id": "1.2",
+      "section": "Timeout / Actionability Issues",
+      "title": "Step-level timeout parameter is ignored",
+      "votes": 2,
+      "status": "open",
+      "symptoms": [
+        "{\"click\": {\"selector\": \"...\", \"timeout\": 5000}} still waits default timeout",
+        "Step-level timeout doesn't override global timeout"
+      ],
+      "expected": "Step timeout should be honored",
+      "workaround": null,
+      "files": ["src/runner.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "2.1",
+      "section": "Frame / Context Issues",
+      "title": "Frame context doesn't persist across CLI invocations",
+      "votes": 3,
+      "status": "open",
+      "symptoms": [
+        "Call switchToFrame, next CLI call reverts to main frame",
+        "listFrames shows currentFrameId back to mainFrameId"
+      ],
+      "expected": "Frame context should persist with tab session",
+      "workaround": null,
+      "files": ["src/cdp-skill.js", "src/page.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "2.2",
+      "section": "Frame / Context Issues",
+      "title": "switchToFrame doesn't change action context",
+      "votes": 6,
+      "status": "open",
+      "symptoms": [
+        "After switchToFrame, snapshot still returns main frame content",
+        "Cannot get accessibility tree of iframe content",
+        "click and getDom also still execute in main frame context"
+      ],
+      "expected": "All actions should respect current frame context after switchToFrame",
+      "workaround": "Use eval to access iframe content",
+      "files": ["src/aria.js", "src/runner.js", "src/dom.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "2.3",
+      "section": "Frame / Context Issues",
+      "title": "listFrames doesn't detect cross-origin iframes",
+      "votes": 9,
+      "status": "open",
+      "symptoms": [
+        "Page has iframes from different origins but listFrames only returns main frame",
+        "Vue.js about:srcdoc iframes treated as cross-origin",
+        "BBC News consent management in cross-origin iframe unreachable"
+      ],
+      "expected": "listFrames should detect and list all iframes including cross-origin",
+      "workaround": "JavaScript eval to remove iframe elements or coordinate-based clicking",
+      "files": ["src/cdp-skill.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "3.1",
+      "section": "Shadow DOM Issues",
+      "title": "Selectors don't pierce shadow DOM boundaries",
+      "votes": 4,
+      "status": "open",
+      "symptoms": [
+        "Snapshot shows elements inside shadow DOM with refs",
+        "Clicking refs times out because CSS selectors can't reach shadow content",
+        "document.querySelector() can't find elements in shadow roots"
+      ],
+      "expected": "Add piercesShadow option or support >>> combinator",
+      "workaround": "Use eval with manual shadow root traversal",
+      "files": ["src/dom.js", "src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "3.2",
+      "section": "Shadow DOM Issues",
+      "title": "Hover doesn't support coordinates",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "{\"hover\": {\"x\": 100, \"y\": 200}} not supported",
+        "Cannot trigger hover on shadow DOM elements without selector"
+      ],
+      "expected": "Hover should accept x/y coordinates",
+      "workaround": null,
+      "files": ["src/runner.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "4.1",
+      "section": "Input / Typing Issues",
+      "title": "Key presses in dialogs don't reach input fields",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Open Monaco Go to Line dialog with Ctrl+G, press number keys - they don't appear in input",
+        "Keys may be going to wrong element"
+      ],
+      "expected": "Key presses should reach the focused input in dialogs",
+      "workaround": null,
+      "files": ["src/runner.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "4.2",
+      "section": "Input / Typing Issues",
+      "title": "Selection lost when clicking toolbar buttons",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Select text in WYSIWYG editor with Shift+Arrow",
+        "Click Bold button - selection is lost before formatting applies"
+      ],
+      "expected": "Option to preserve selection during click",
+      "workaround": null,
+      "files": ["src/dom.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "4.3",
+      "section": "Input / Typing Issues",
+      "title": "Fill with empty string does not clear input",
+      "votes": 3,
+      "status": "open",
+      "symptoms": [
+        "{\"fill\": {\"selector\": \"#search\", \"value\": \"\"}} doesn't clear the input",
+        "Input retains previous value"
+      ],
+      "expected": "Fill with empty string should clear the input",
+      "workaround": "Use eval with input.value = '' + dispatchEvent, or Backspace keypresses",
+      "files": ["src/runner.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "4.4",
+      "section": "Input / Typing Issues",
+      "title": "Keyboard shortcuts with modifiers don't trigger SPA event handlers",
+      "votes": 3,
+      "status": "open",
+      "symptoms": [
+        "Meta+k dispatches keydown but doesn't trigger GitHub command palette",
+        "Shortcut works manually in Chrome but not via CDP",
+        "SPA applications listen at document level, CDP events may not trigger listeners"
+      ],
+      "expected": "Keyboard shortcuts with modifiers should trigger same handlers as physical presses",
+      "workaround": "Click the button that triggers the same action",
+      "files": ["src/runner.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "5.1",
+      "section": "Error Handling Issues",
+      "title": "Invalid CSS selector doesn't show parsing error",
+      "votes": 2,
+      "status": "open",
+      "symptoms": [
+        "{\"click\": \"[[[invalid\"} times out instead of immediate error",
+        "No indication that selector syntax is invalid"
+      ],
+      "expected": "Immediate error like 'Invalid CSS selector'",
+      "workaround": null,
+      "files": ["src/dom.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "5.2",
+      "section": "Error Handling Issues",
+      "title": "Silent exit code 1 without JSON output",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Some failures return exit code 1 with no stdout/stderr",
+        "Hard to debug what went wrong"
+      ],
+      "expected": "Always return JSON with error details",
+      "workaround": null,
+      "files": ["src/cdp-skill.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "5.3",
+      "section": "Error Handling Issues",
+      "title": "Error messages show duplicate information",
+      "votes": 0,
+      "status": "open",
+      "symptoms": [
+        "Error shows \"(timeout: 0ms) (timeout: 30000ms)\" - timeout reported twice"
+      ],
+      "expected": "Single, clear timeout message",
+      "workaround": null,
+      "files": ["src/dom.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "6.1",
+      "section": "Snapshot / Query Issues",
+      "title": "Snapshot returns limited content on some React SPAs",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Airbnb page snapshot returns only 2 elements (Skip to content, alert)",
+        "Complex React SPAs with custom components have sparse accessibility trees"
+      ],
+      "expected": "Snapshot should capture full accessibility tree for React SPAs",
+      "workaround": null,
+      "files": ["src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "6.2",
+      "section": "Snapshot / Query Issues",
+      "title": "captureResult delay too short for tooltips",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "hover with captureResult returns visibleElements: []",
+        "100ms delay not enough for JS tooltips to render"
+      ],
+      "expected": "Make delay configurable or increase default",
+      "workaround": null,
+      "files": ["src/runner.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "6.3",
+      "section": "Snapshot / Query Issues",
+      "title": "Snapshot shows tooltip role but no text content",
+      "votes": 0,
+      "status": "open",
+      "symptoms": [
+        "Snapshot shows '- tooltip' but not the tooltip text"
+      ],
+      "expected": "Include tooltip content in snapshot",
+      "workaround": null,
+      "files": ["src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "6.4",
+      "section": "Snapshot / Query Issues",
+      "title": "Text selectors like button:has-text(...) timeout",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "{\"click\": \"button:has-text('Submit')\"} times out",
+        "Button is visible in screenshot",
+        "Playwright-style :has-text() pseudo-selector not supported"
+      ],
+      "expected": "Support :has-text() pseudo-selector or similar text matching",
+      "workaround": null,
+      "files": ["src/dom.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "6.5",
+      "section": "Snapshot / Query Issues",
+      "title": "Element refs go stale between snapshot and subsequent actions",
+      "votes": 14,
+      "status": "open",
+      "symptoms": [
+        "Full snapshot returns refs, immediate click fails with 'Element not found'",
+        "viewportSnapshot refs differ from full snapshot refs",
+        "Occurs on dynamic React sites where DOM updates between operations",
+        "Click on ref that triggers navigation reports 'ref not found' even though navigation succeeded",
+        "React date picker re-render causes refs to become stale"
+      ],
+      "expected": "Refs should remain valid for at least the duration of the agent turn",
+      "workaround": "Use click with text property or CSS selector instead of refs",
+      "files": ["src/aria.js", "src/dom.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "7.0",
+      "section": "Other Issues",
+      "title": "Drag doesn't work on HTML5 range input sliders",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Drag returns {\"dragged\": true} but slider value doesn't change",
+        "Click-at-position on slider track works as workaround"
+      ],
+      "expected": "Drag should move the slider thumb and update the value",
+      "workaround": "Use click-at-position on slider track or keyboard arrow keys",
+      "files": ["src/runner.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "7.1",
+      "section": "Other Issues",
+      "title": "New tab detection/tracking when links open in new tabs",
+      "votes": 2,
+      "status": "open",
+      "symptoms": [
+        "Click a link that opens in new tab, navigated: false returned",
+        "No indication that new tab opened",
+        "Agent must call chromeStatus to discover the new tab"
+      ],
+      "expected": "Detect when click opens new tab, return info about new tab in response",
+      "workaround": "Use chromeStatus after clicks that may open new tabs",
+      "files": ["src/runner.js", "src/cdp-skill.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "7.2",
+      "section": "Other Issues",
+      "title": "getBoundingClientRect() returns empty object in eval",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "eval with el.getBoundingClientRect() returns {}",
+        "DOMRect objects not automatically serialized"
+      ],
+      "expected": "DOMRect should be serialized automatically or clearly documented",
+      "workaround": "Use JSON.stringify() explicitly",
+      "files": ["src/runner.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "7.2b",
+      "section": "Other Issues",
+      "title": "Scroll reports incorrect position",
+      "votes": 0,
+      "status": "open",
+      "symptoms": [
+        "scroll with direction down returns scrollY: 0",
+        "Page appears to scroll but reported position is wrong"
+      ],
+      "expected": "Scroll should report correct position after scrolling",
+      "workaround": null,
+      "files": ["src/runner.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "7.3",
+      "section": "Other Issues",
+      "title": "Session state accumulation causes issues after extended use",
+      "votes": 0,
+      "status": "open",
+      "symptoms": [
+        "After many operations on same tab, click starts timing out",
+        "Closing and reopening tab resolves it"
+      ],
+      "expected": "Session should remain responsive after extended use",
+      "workaround": "Periodically close and reopen tabs",
+      "files": ["src/cdp.js", "src/page.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "7.4",
+      "section": "Other Issues",
+      "title": "Framework detection on page load",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Agents don't know what frameworks a page uses until they encounter issues",
+        "Early detection would allow proactive strategy adjustment"
+      ],
+      "expected": "Add framework detection to goto and openTab responses",
+      "workaround": null,
+      "files": ["src/runner.js", "src/frameworks.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "8.1",
+      "section": "Stagehand-Inspired Improvements",
+      "title": "Network quiet detection",
+      "votes": 7,
+      "status": "open",
+      "symptoms": [
+        "Modern web apps load content dynamically via API calls and lazy-loaded images",
+        "Acting or snapshotting before network settles leads to incomplete data or failed actions",
+        "GDPR consent modal re-appears after navigation due to async scripts loading"
+      ],
+      "expected": "Implement waitForNetworkQuiet tracking in-flight requests with idle period",
+      "workaround": null,
+      "files": ["src/network.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "8.2",
+      "section": "Stagehand-Inspired Improvements",
+      "title": "Lazy selector resolution (eliminate stale refs)",
+      "votes": 2,
+      "status": "open",
+      "symptoms": [
+        "Cached element handles can become stale creating stale element errors",
+        "Re-resolving selector from scratch for every action would eliminate this class of errors"
+      ],
+      "expected": "Never cache element references, re-resolve selector for every action",
+      "workaround": null,
+      "files": ["src/dom.js", "src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "8.3",
+      "section": "Stagehand-Inspired Improvements",
+      "title": "MutationObserver-based waiting",
+      "votes": 0,
+      "status": "open",
+      "symptoms": [
+        "Polling at 100ms intervals is slower and uses more CPU than event-driven detection"
+      ],
+      "expected": "Use MutationObserver for real-time DOM change detection",
+      "workaround": null,
+      "files": ["src/dom.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "8.4",
+      "section": "Stagehand-Inspired Improvements",
+      "title": "XPath support",
+      "votes": 0,
+      "status": "open",
+      "symptoms": [
+        "Some DOM traversal patterns are awkward with CSS selectors"
+      ],
+      "expected": "Add XPath selector support alongside CSS",
+      "workaround": null,
+      "files": ["src/dom.js", "src/xpath.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "8.5",
+      "section": "Stagehand-Inspired Improvements",
+      "title": "Innermost text matching",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Text matching can match parent elements containing same text as target child",
+        "Leads to wrong element clicks"
+      ],
+      "expected": "Filter text matches to return only innermost matching elements",
+      "workaround": null,
+      "files": ["src/dom.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "8.6",
+      "section": "Stagehand-Inspired Improvements",
+      "title": "Frame-scoped snapshots",
+      "votes": 3,
+      "status": "open",
+      "symptoms": [
+        "Large pages produce verbose snapshots",
+        "When target area is known, capturing only that portion improves efficiency"
+      ],
+      "expected": "Support scoped snapshots via focusSelector",
+      "workaround": null,
+      "files": ["src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "8.7",
+      "section": "Stagehand-Inspired Improvements",
+      "title": "Closed shadow DOM piercing",
+      "votes": 0,
+      "status": "open",
+      "symptoms": [
+        "Cannot access closed shadow roots via normal DOM APIs"
+      ],
+      "expected": "Monkey-patch Element.attachShadow() to maintain WeakMap of closed shadow roots",
+      "workaround": null,
+      "files": ["src/dom.js", "src/piercer.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "8.8",
+      "section": "Stagehand-Inspired Improvements",
+      "title": "Frame-aware element identification",
+      "votes": 0,
+      "status": "open",
+      "symptoms": [
+        "Element refs are scoped to single frame context, requiring manual frame switching"
+      ],
+      "expected": "Encode element IDs as frameOrdinal-backendNodeId pairs, support >> hop notation",
+      "workaround": null,
+      "files": ["src/aria.js", "src/dom.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "8.9",
+      "section": "Stagehand-Inspired Improvements",
+      "title": "Adaptive depth handling",
+      "votes": 0,
+      "status": "open",
+      "symptoms": [
+        "Hard depth limits truncate DOM capture with no automatic recovery"
+      ],
+      "expected": "Progressive depth reduction on encoder errors, re-hydrate missing branches",
+      "workaround": null,
+      "files": ["src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "9.1",
+      "section": "Snapshot Response Payload Issues",
+      "title": "Refs map inlined in every snapshot response",
+      "votes": 2,
+      "status": "open",
+      "symptoms": [
+        "Every snapshot response includes full refs map as inline JSON (CSS selectors keyed by ref ID)",
+        "HN: ~20KB of CSS selectors. ECMAScript spec: exceeds 1MB",
+        "Response size is 2-3x larger than actual snapshot content"
+      ],
+      "expected": "Refs should be written to file or omitted from JSON entirely",
+      "workaround": null,
+      "files": ["src/runner/execute-query.js", "src/runner/step-executors.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "9.2",
+      "section": "Snapshot Response Payload Issues",
+      "title": "viewportSnapshot always included regardless of relevance",
+      "votes": 2,
+      "status": "open",
+      "symptoms": [
+        "snapshot with since and unchanged:true still sends 5-10KB viewportSnapshot",
+        "snapshotSearch sends full viewportSnapshot alongside targeted results",
+        "10-12KB of YAML per response on typical pages"
+      ],
+      "expected": "viewportSnapshot should only be included on action responses",
+      "workaround": null,
+      "files": ["src/runner/step-executors.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "9.3",
+      "section": "Snapshot Response Payload Issues",
+      "title": "Summary mode includes all refs inline",
+      "votes": 2,
+      "status": "open",
+      "symptoms": [
+        "Summary detail level includes ALL refs inline in JSON",
+        "ECMAScript spec: summary YAML ~100 bytes but response 1MB+ due to 28,329 refs"
+      ],
+      "expected": "Summary mode should return zero refs",
+      "workaround": null,
+      "files": ["src/runner/execute-query.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "9.4",
+      "section": "Snapshot Response Payload Issues",
+      "title": "Accessible names not truncated causing snapshot bloat",
+      "votes": 2,
+      "status": "open",
+      "symptoms": [
+        "GitHub commit message links have 500-2000 character accessible names",
+        "Amazon product names duplicated in parent link + child heading",
+        "Full snapshot on GitHub: 57KB (would be ~8KB with name truncation)"
+      ],
+      "expected": "Names truncated to ~150 characters by default, with maxNameLength option",
+      "workaround": null,
+      "files": ["src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "9.5",
+      "section": "Snapshot Response Payload Issues",
+      "title": "Footer/boilerplate noise dominates snapshots",
+      "votes": 3,
+      "status": "open",
+      "symptoms": [
+        "Amazon homepage: 57% of interactive elements are footer links",
+        "Wikipedia: ~60-65% of viewport snapshot is site chrome",
+        "HN: table structure noise = ~35% of YAML"
+      ],
+      "expected": "Option to exclude landmark roles or auto-scope to role=main",
+      "workaround": "Use {\"snapshot\": {\"root\": \"role=main\"}} to scope to main content",
+      "files": ["src/aria.js", "src/runner/execute-query.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "9.6",
+      "section": "Snapshot Response Payload Issues",
+      "title": "Viewport snapshot includes fixed/sticky navigation in every response",
+      "votes": 2,
+      "status": "open",
+      "symptoms": [
+        "ECMAScript spec: fixed TOC sidebar is ~60% of every viewport snapshot",
+        "Wikipedia: banner + nav bars repeat in every viewport snapshot",
+        "Same banner content processed 5 times in a 5-action workflow"
+      ],
+      "expected": "Option to exclude fixed/sticky elements or auto-detect and omit after first snapshot",
+      "workaround": null,
+      "files": ["src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "10.1",
+      "section": "Snapshot Content/Accuracy Issues",
+      "title": "Summary reports 'Viewport elements: 0' incorrectly",
+      "votes": 5,
+      "status": "open",
+      "symptoms": [
+        "Summary detail level shows Viewport elements: 0 when elements are clearly visible",
+        "Confirmed on HN, Wikipedia, Amazon, Herokuapp, ECMAScript spec",
+        "All 5 snapshot eval agents independently flagged this"
+      ],
+      "expected": "Viewport element count should be accurate",
+      "workaround": null,
+      "files": ["src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "10.2",
+      "section": "Snapshot Content/Accuracy Issues",
+      "title": "Headings and non-interactive elements have no refs in snapshotSearch",
+      "votes": 3,
+      "status": "open",
+      "symptoms": [
+        "snapshotSearch returns ref=None for all heading matches",
+        "Wikipedia: all 11 section headings return ref=None",
+        "Agents must fall back to unreliable text-based clicking"
+      ],
+      "expected": "Headings should get refs as they are navigation targets",
+      "workaround": null,
+      "files": ["src/aria.js", "src/runner/execute-query.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "10.3",
+      "section": "Snapshot Content/Accuracy Issues",
+      "title": "Interactive detail level broken on link-dense pages",
+      "votes": 4,
+      "status": "open",
+      "symptoms": [
+        "HN: interactive (23,147 bytes) is LARGER than full (15,879 bytes)",
+        "Wikipedia: interactive saves only 12% vs full",
+        "Interactive removes headings needed for orientation while keeping low-value links"
+      ],
+      "expected": "Interactive should always be strictly smaller than full",
+      "workaround": null,
+      "files": ["src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "10.4",
+      "section": "Snapshot Content/Accuracy Issues",
+      "title": "since hash ignores element state changes",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Checkbox toggles don't change the hash",
+        "snapshot with since falsely reports unchanged after toggling checkboxes",
+        "Dropdown selection causes no hash change after selectOption"
+      ],
+      "expected": "Hash should include lightweight checksum of interactive element states",
+      "workaround": null,
+      "files": ["src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "10.5",
+      "section": "Snapshot Content/Accuracy Issues",
+      "title": "Combobox/select shows no value in snapshot",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "select elements render as bare 'combobox [ref=s1e1]' with no selected value",
+        "After selecting Option 2, snapshot still shows just combobox"
+      ],
+      "expected": "Display like combobox \"Option 2\" [ref=s1e1] showing selected option",
+      "workaround": null,
+      "files": ["src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "10.6",
+      "section": "Snapshot Content/Accuracy Issues",
+      "title": "Table cell text missing in default snapshot",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "td and th elements show as empty cell and columnheader without includeText",
+        "Default snapshot nearly useless for tabular data"
+      ],
+      "expected": "Table cells should show text content by default",
+      "workaround": "Use extract step or snapshot with includeText: true",
+      "files": ["src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "10.7",
+      "section": "Snapshot Content/Accuracy Issues",
+      "title": "snapshotSearch fuzzy matching too aggressive",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "'star' matches 'start', 'started' etc. (no word-boundary awareness)",
+        "No relevance scoring, long commit messages rank equally with navigation links"
+      ],
+      "expected": "Default matching should use word boundaries, add fuzzy parameter for control",
+      "workaround": null,
+      "files": ["src/runner/execute-query.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "10.8",
+      "section": "Snapshot Content/Accuracy Issues",
+      "title": "snapshotSearch results lack state attributes",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Checkbox search returns refs but doesn't indicate checked status",
+        "Combobox search doesn't show selected value",
+        "Search matches don't include disabled, expanded, or name attributes"
+      ],
+      "expected": "Add states field to search results",
+      "workaround": null,
+      "files": ["src/runner/execute-query.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "10.9",
+      "section": "Snapshot Content/Accuracy Issues",
+      "title": "snapshotSearch path context unhelpful on large pages",
+      "votes": 2,
+      "status": "open",
+      "symptoms": [
+        "HN: all matches share identical path with no disambiguation",
+        "ECMAScript spec: all headings show path 'generic' with no section hierarchy"
+      ],
+      "expected": "Include article/section context in path with nearest named ancestor",
+      "workaround": null,
+      "files": ["src/runner/execute-query.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "10.10",
+      "section": "Snapshot Content/Accuracy Issues",
+      "title": "Unnamed buttons have no fallback text",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Buttons with no ARIA accessible name show as 'button [ref=s1e13]'",
+        "Agent cannot tell which button dismisses modal vs redirects"
+      ],
+      "expected": "Fall back to innerText, value, title, or child text content",
+      "workaround": null,
+      "files": ["src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "11.1",
+      "section": "Navigation/Detection Issues",
+      "title": "SPA client-side navigation not detected",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Click on GitHub tab reports navigated: false",
+        "URL changes via history.pushState happen asynchronously after click resolves",
+        "Affects all SPAs: GitHub (Turbo), Next.js, Nuxt, React Router, Vue Router"
+      ],
+      "expected": "Monkey-patch history.pushState/replaceState and detect URL changes within ~500ms",
+      "workaround": "Add explicit wait steps after every link click on SPAs",
+      "files": ["src/runner/execute-interaction.js", "src/runner/step-executors.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "11.2",
+      "section": "Navigation/Detection Issues",
+      "title": "Same-page anchor navigation causes full page reload",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "goto with #hash fragment on same page causes full page reload",
+        "On ECMAScript spec (2.5MB page): anchor navigation takes 32 seconds instead of <1 second"
+      ],
+      "expected": "Detect same-origin URL with only hash difference and use location.hash + scroll",
+      "workaround": null,
+      "files": ["src/runner/execute-navigation.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "11.3",
+      "section": "Navigation/Detection Issues",
+      "title": "False modal detection from input placeholders",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "GitHub search input placeholder reported as context.modal on every page load",
+        "Misleads agents into thinking a dialog is blocking interaction"
+      ],
+      "expected": "context.modal should only be populated for role=dialog or role=alertdialog",
+      "workaround": null,
+      "files": ["src/runner/step-executors.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "11.4",
+      "section": "Navigation/Detection Issues",
+      "title": "selectOption produces no diff/changes",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "After selectOption, response has no changes field",
+        "Unlike click and fill, selectOption generates no diff"
+      ],
+      "expected": "selectOption should produce diff showing value change",
+      "workaround": null,
+      "files": ["src/runner/step-executors.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "11.5",
+      "section": "Navigation/Detection Issues",
+      "title": "Text-based click silently matches wrong element",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "click with text 'History' matched navigation link instead of article heading",
+        "No disambiguation warning despite multiple matches"
+      ],
+      "expected": "When click(text) finds multiple matches, return error listing all or prefer closest to viewport center",
+      "workaround": null,
+      "files": ["src/dom/click-executor.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "11.6",
+      "section": "Navigation/Detection Issues",
+      "title": "HTML markup leaking into accessible names",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Amazon results heading contains raw HTML span tags in accessible name",
+        "HTML tags should be stripped from accessible name strings"
+      ],
+      "expected": "Strip HTML tags from accessible names during snapshot generation",
+      "workaround": null,
+      "files": ["src/aria.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "12.1",
+      "section": "Session Resilience",
+      "title": "Page reload invalidates CDP session with no recovery",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "reload destroys CDP session entirely",
+        "Tab ID becomes invalid, all subsequent steps fail with CONNECTION error",
+        "Must open entirely new tab and redo all setup"
+      ],
+      "expected": "Auto-reconnect to same tab after page reload",
+      "workaround": null,
+      "files": ["src/cdp-skill.js", "src/page.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "12.2",
+      "section": "Session Resilience",
+      "title": "Reconnect step for session recovery",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "After session disconnect, no way to re-attach to same tab",
+        "Must use chromeStatus + openTab to start fresh, losing all state"
+      ],
+      "expected": "Add reconnect step that tries to re-attach by URL pattern or tab ID",
+      "workaround": null,
+      "files": ["src/cdp-skill.js", "src/page.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "13.1",
+      "section": "Workflow Shortcuts",
+      "title": "Composite clickAndSnapshot step",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Click + snapshot is the most common two-step pattern",
+        "Requires two CLI invocations adding latency"
+      ],
+      "expected": "Add clickAndSnapshot that performs both in one invocation",
+      "workaround": null,
+      "files": ["src/runner.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "13.2",
+      "section": "Workflow Shortcuts",
+      "title": "waitForSettled step (DOM mutation quiet)",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "After page loads or complex UI transitions, unclear what to wait for",
+        "wait requires knowing a specific selector or text",
+        "No way to say 'wait until the page stops changing'"
+      ],
+      "expected": "waitForSettled step that waits for no DOM mutations for N milliseconds",
+      "workaround": null,
+      "files": ["src/runner.js", "src/dom.js"],
+      "fixAttempts": []
+    },
+    {
+      "id": "14.1",
+      "section": "Site Profile Improvements",
+      "title": "Auto-learning from failures",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Site profiles are entirely manual, agent must remember to call writeSiteProfile",
+        "Quirks discovered during sessions are lost if not explicitly recorded",
+        "Same failure patterns repeat across sessions"
+      ],
+      "expected": "Auto-append discovered quirks to site profile after failures",
+      "workaround": null,
+      "files": ["src/cdp-skill.js", "src/site-profiles.js"],
+      "fixAttempts": []
+    }
+  ],
+  "implemented": [
+    {
+      "id": "1.1",
+      "title": "Drag action timeout",
+      "votes": 11,
+      "implementedAs": "JavaScript drag simulation (html5-dnd, range-input, mouse-events)",
+      "fixedDate": "2026-01-15"
+    },
+    {
+      "id": "7.1-legacy",
+      "title": "CDP clicks fail on React/links",
+      "votes": 9,
+      "implementedAs": "Auto-verify + jsClick fallback (method: jsClick-auto)",
+      "fixedDate": "2026-01-20"
+    },
+    {
+      "id": "1.3",
+      "title": "Scroll deltaY timeout",
+      "votes": 8,
+      "implementedAs": "JavaScript window.scrollBy() instead of CDP mouse wheel",
+      "fixedDate": "2026-01-18"
+    },
+    {
+      "id": "8.1-legacy",
+      "title": "Auto-snapshot with diff",
+      "votes": 5,
+      "implementedAs": "viewportSnapshot, fullSnapshot, changes in output",
+      "fixedDate": "2026-01-25"
+    },
+    {
+      "id": "4.1-legacy",
+      "title": "Type to focused element",
+      "votes": 4,
+      "implementedAs": "fillActive action",
+      "fixedDate": "2026-01-22"
+    },
+    {
+      "id": "8.2-legacy",
+      "title": "Screenshot timing",
+      "votes": 4,
+      "implementedAs": "Command-level screenshots only",
+      "fixedDate": "2026-01-22"
+    }
+  ]
+}

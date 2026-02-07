@@ -1,0 +1,33 @@
+{
+  "id": "023-bandcamp-browse",
+  "url": "https://bandcamp.com",
+  "category": "read",
+  "difficulty": "medium",
+  "stability": "moderate",
+  "task": "Browse Bandcamp Daily editorial section and summarize the titles of the top 3 featured articles about independent music.",
+  "milestones": [
+    {
+      "id": "homepage_loaded",
+      "weight": 0.2,
+      "verify": { "eval_truthy": "document.querySelector('body')?.textContent.length > 100" }
+    },
+    {
+      "id": "daily_section",
+      "weight": 0.4,
+      "verify": {
+        "any": [
+          { "url_contains": "daily.bandcamp.com" },
+          { "url_contains": "/daily" },
+          { "eval_truthy": "document.querySelectorAll('article, .bcweekly, .editorial, [class*=\"daily\"]').length >= 1" }
+        ]
+      }
+    },
+    {
+      "id": "articles_found",
+      "weight": 0.4,
+      "verify": { "eval_truthy": "document.querySelectorAll('article, .list-article, .bcweekly-item, a[href*=\"daily\"]').length >= 3" }
+    }
+  ],
+  "budget": { "maxSteps": 20, "maxTimeMs": 90000 },
+  "skipWhen": { "eval_truthy": "document.title.includes('blocked') || document.body.innerText.includes('Access Denied')" }
+}

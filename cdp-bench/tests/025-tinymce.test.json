@@ -1,0 +1,22 @@
+{
+  "id": "025-tinymce-editor",
+  "url": "https://the-internet.herokuapp.com/tinymce",
+  "category": "create",
+  "difficulty": "hard",
+  "stability": "stable",
+  "task": "Interact with the TinyMCE WYSIWYG editor inside the iframe: clear the existing content and type 'Hello World'. Verify the text appears in the editor.",
+  "milestones": [
+    {
+      "id": "text_entered",
+      "weight": 1.0,
+      "description": "Text has been entered into the TinyMCE editor iframe. The editor body contains the typed text.",
+      "verify": {
+        "all": [
+          { "url_contains": "/tinymce" },
+          { "eval_truthy": "document.querySelector('#mce_0_ifr')?.contentDocument?.body?.textContent?.includes('Hello') || document.querySelector('iframe')?.contentDocument?.body?.textContent?.includes('Hello') || document.body.innerText.includes('Hello')" }
+        ]
+      }
+    }
+  ],
+  "budget": { "maxSteps": 25, "maxTimeMs": 90000 }
+}

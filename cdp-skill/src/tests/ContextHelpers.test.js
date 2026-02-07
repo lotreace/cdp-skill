@@ -282,7 +282,16 @@ describe('ContextHelpers', () => {
       mockPageController = {
         session: {
           send: mock.fn(async () => ({ result: { value: '' } }))
-        }
+        },
+        evaluateInFrame: mock.fn(async (expression, options = {}) => {
+          const params = {
+            expression,
+            returnByValue: options.returnByValue !== false,
+            awaitPromise: options.awaitPromise || false
+          };
+          return mockPageController.session.send('Runtime.evaluate', params);
+        }),
+        getFrameContext: mock.fn(() => null)
       };
     });
 

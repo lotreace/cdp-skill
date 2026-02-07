@@ -1,0 +1,22 @@
+{
+  "id": "017-wikipedia-search",
+  "url": "https://www.wikipedia.org",
+  "category": "read",
+  "difficulty": "easy",
+  "stability": "stable",
+  "task": "Search Wikipedia for 'Artificial intelligence', navigate to the article page, read the introduction, then click an internal wiki link to explore a related article.",
+  "milestones": [
+    {
+      "id": "related_article",
+      "weight": 1.0,
+      "description": "Full task completed — navigated through search to an article and then to a related wiki article. Final URL should be a wiki article different from the starting page.",
+      "verify": {
+        "all": [
+          { "url_matches": "wikipedia\\.org/wiki/.+" },
+          { "eval_truthy": "document.querySelector('#firstHeading')?.textContent?.length > 0" }
+        ]
+      }
+    }
+  ],
+  "budget": { "maxSteps": 15, "maxTimeMs": 60000 }
+}

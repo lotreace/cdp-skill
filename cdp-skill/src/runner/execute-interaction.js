@@ -305,8 +305,6 @@ export async function executeDrag(elementLocator, inputEmulator, pageController,
 
   // Helper to get element bounding box in current frame context
   async function getElementBox(selector) {
-    // Use page controller's frame context if available
-    const contextId = pageController.currentExecutionContextId;
     const evalParams = {
       expression: `
         (function() {
@@ -319,10 +317,8 @@ export async function executeDrag(elementLocator, inputEmulator, pageController,
       returnByValue: true
     };
 
-    // Add context ID if we're in a non-main frame
-    if (contextId && pageController.currentFrameId !== pageController.mainFrameId) {
-      evalParams.contextId = contextId;
-    }
+    const contextId = pageController.getFrameContext();
+    if (contextId) evalParams.contextId = contextId;
 
     const result = await session.send('Runtime.evaluate', evalParams);
     if (result.exceptionDetails) {

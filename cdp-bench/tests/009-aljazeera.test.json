@@ -1,0 +1,23 @@
+{
+  "id": "009-aljazeera-search",
+  "url": "https://www.aljazeera.com",
+  "category": "read",
+  "difficulty": "medium",
+  "stability": "moderate",
+  "task": "Use the search function to find articles about 'climate change' and navigate to one of the result articles.",
+  "milestones": [
+    {
+      "id": "article_reached",
+      "weight": 1.0,
+      "description": "Navigated to an article page from search results. URL should be an aljazeera.com article or feature page with substantial content.",
+      "verify": {
+        "all": [
+          { "url_contains": "aljazeera.com" },
+          { "eval_truthy": "document.querySelector('article, [class*=\"article\"], .wysiwyg, main')?.textContent?.length > 200" }
+        ]
+      }
+    }
+  ],
+  "budget": { "maxSteps": 20, "maxTimeMs": 90000 },
+  "skipWhen": { "eval_truthy": "document.title.includes('Access Denied') || document.title.includes('blocked') || document.title.includes('CAPTCHA')" }
+}

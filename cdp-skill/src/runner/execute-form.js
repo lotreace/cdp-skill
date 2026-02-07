@@ -47,8 +47,7 @@ export async function executeExtract(deps, params) {
     throw new Error('extract requires a selector');
   }
 
-  const result = await session.send('Runtime.evaluate', {
-    expression: `
+  const extractExpr = `
       (function() {
         const selector = ${JSON.stringify(selector)};
         const typeHint = ${JSON.stringify(type)};
@@ -162,9 +161,11 @@ export async function executeExtract(deps, params) {
 
         return { error: 'Could not detect data type. Use type: "table" or "list" option.', detectedType };
       })()
-    `,
-    returnByValue: true
-  });
+    `;
+  const extractArgs = { expression: extractExpr, returnByValue: true };
+  const contextId = pageController.getFrameContext();
+  if (contextId) extractArgs.contextId = contextId;
+  const result = await session.send('Runtime.evaluate', extractArgs);
 
   if (result.exceptionDetails) {
     throw new Error('Extract error: ' + result.exceptionDetails.text);
@@ -254,15 +255,12 @@ export async function executeAssert(pageController, elementLocator, params) {
 
     try {
       // Get the text content of the target element
-      const textResult = await pageController.session.send('Runtime.evaluate', {
-        expression: `
+      const textResult = await pageController.evaluateInFrame(`
           (function() {
             const el = document.querySelector(${JSON.stringify(selector)});
             return el ? el.textContent : null;
           })()
-        `,
-        returnByValue: true
-      });
+        `);
 
       const actualText = textResult.result.value;
       textAssertion.found = actualText !== null;

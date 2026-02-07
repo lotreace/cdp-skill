@@ -1,0 +1,26 @@
+{
+  "id": "001-saucedemo-checkout",
+  "url": "https://www.saucedemo.com",
+  "category": "create",
+  "difficulty": "easy",
+  "stability": "stable",
+  "task": "Login with standard_user/secret_sauce, add an item to cart, complete checkout with test data, and confirm the order.",
+  "hints": {
+    "credentials": { "username": "standard_user", "password": "secret_sauce" }
+  },
+  "milestones": [
+    {
+      "id": "order_confirmed",
+      "weight": 1.0,
+      "description": "Full checkout completed — implies login, add-to-cart, and form fill all succeeded",
+      "verify": {
+        "all": [
+          { "url_contains": "/checkout-complete" },
+          { "eval_truthy": "document.body.innerText.includes('Thank you')" }
+        ]
+      }
+    }
+  ],
+  "budget": { "maxSteps": 25, "maxTimeMs": 90000 },
+  "skipWhen": { "eval_truthy": "document.title.includes('blocked') || document.title.includes('CAPTCHA')" }
+}

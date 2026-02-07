@@ -1,0 +1,22 @@
+{
+  "id": "015-heroku-slider",
+  "url": "https://the-internet.herokuapp.com/horizontal_slider",
+  "category": "update",
+  "difficulty": "medium",
+  "stability": "stable",
+  "task": "Interact with the horizontal slider: move it to a non-zero value. Verify the displayed value updates correctly.",
+  "milestones": [
+    {
+      "id": "slider_moved",
+      "weight": 1.0,
+      "description": "Slider value has been changed from default (0). The range output shows a non-zero value.",
+      "verify": {
+        "all": [
+          { "url_contains": "/horizontal_slider" },
+          { "eval_truthy": "parseFloat(document.querySelector('#range')?.textContent) > 0" }
+        ]
+      }
+    }
+  ],
+  "budget": { "maxSteps": 15, "maxTimeMs": 60000 }
+}

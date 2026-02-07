@@ -1,0 +1,24 @@
+{
+  "id": "020-archive-wayback",
+  "url": "https://archive.org",
+  "category": "read",
+  "difficulty": "medium",
+  "stability": "moderate",
+  "task": "Navigate to the Wayback Machine on archive.org, search for a well-known site like cnn.com, and explore an archived snapshot.",
+  "milestones": [
+    {
+      "id": "wayback_search",
+      "weight": 1.0,
+      "description": "Navigated into the Wayback Machine and performed a search or reached an archive result page.",
+      "verify": {
+        "any": [
+          { "url_contains": "web.archive.org" },
+          { "url_contains": "wayback" },
+          { "eval_truthy": "document.body.innerText.includes('Wayback Machine') || document.body.innerText.includes('Saved')" }
+        ]
+      }
+    }
+  ],
+  "budget": { "maxSteps": 20, "maxTimeMs": 90000 },
+  "skipWhen": { "eval_truthy": "document.title.includes('blocked') || document.title.includes('503')" }
+}

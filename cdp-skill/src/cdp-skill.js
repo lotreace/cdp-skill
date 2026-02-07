@@ -573,12 +573,13 @@ async function main() {
 
     // Create dependencies
     pageController = createPageController(session);
-    const elementLocator = createElementLocator(session);
+    const frameContextProvider = () => pageController.getFrameContext();
+    const elementLocator = createElementLocator(session, { getFrameContext: frameContextProvider });
     const inputEmulator = createInputEmulator(session);
     const screenshotCapture = createScreenshotCapture(session);
     const consoleCapture = createConsoleCapture(session);
     const pdfCapture = createPdfCapture(session);
-    const ariaSnapshot = createAriaSnapshot(session);
+    const ariaSnapshot = createAriaSnapshot(session, { getFrameContext: frameContextProvider });
     const cookieManager = createCookieManager(session);
 
     // Initialize page controller (enables required CDP domains)

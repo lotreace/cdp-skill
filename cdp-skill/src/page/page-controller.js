@@ -851,6 +851,18 @@ export function createPageController(cdpClient) {
   }
 
   /**
+   * Get the current frame execution context ID (if in a non-main frame).
+   * Used for dependency injection into modules that need frame-aware evaluation.
+   * @returns {number|null} contextId for current frame, or null if in main frame
+   */
+  function getFrameContext() {
+    if (currentFrameId !== mainFrameId && currentExecutionContextId) {
+      return currentExecutionContextId;
+    }
+    return null;
+  }
+
+  /**
    * Execute code in the current frame context
    * @param {string} expression - JavaScript expression
    * @param {Object} [options] - Evaluation options
@@ -1108,6 +1120,7 @@ export function createPageController(cdpClient) {
     waitForNetworkQuiet,
     getNetworkStatus,
     searchAllFrames,
+    getFrameContext,
     dispose,
     get mainFrameId() { return mainFrameId; },
     get currentFrameId() { return currentFrameId; },

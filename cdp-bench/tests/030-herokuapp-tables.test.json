@@ -1,0 +1,31 @@
+{
+  "id": "030-herokuapp-tables",
+  "url": "https://the-internet.herokuapp.com/tables",
+  "category": "read",
+  "difficulty": "easy",
+  "stability": "stable",
+  "task": "Read the sortable data tables page: extract data from Table 1 (all rows with Last Name, First Name, Email, Due, Website), sort by Last Name by clicking the header, and verify the sort order changed.",
+  "milestones": [
+    {
+      "id": "page_loaded",
+      "weight": 0.2,
+      "verify": { "eval_truthy": "document.querySelector('#table1') !== null" }
+    },
+    {
+      "id": "data_read",
+      "weight": 0.3,
+      "verify": { "eval_truthy": "document.querySelectorAll('#table1 tbody tr').length >= 4" }
+    },
+    {
+      "id": "header_clicked",
+      "weight": 0.2,
+      "verify": { "eval_truthy": "document.querySelector('#table1 thead .header') !== null || document.querySelector('#table1 th') !== null" }
+    },
+    {
+      "id": "sort_changed",
+      "weight": 0.3,
+      "verify": { "eval_truthy": "document.querySelector('#table1 tbody tr td')?.textContent !== ''" }
+    }
+  ],
+  "budget": { "maxSteps": 15, "maxTimeMs": 45000 }
+}

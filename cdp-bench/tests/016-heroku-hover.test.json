@@ -1,0 +1,19 @@
+{
+  "id": "016-heroku-hover",
+  "url": "https://the-internet.herokuapp.com/hovers",
+  "category": "read",
+  "difficulty": "easy",
+  "stability": "stable",
+  "task": "Test hover interactions on the user cards: hover over the avatar figures to reveal hidden usernames and 'View profile' links. Click one 'View profile' link to navigate to a user page.",
+  "milestones": [
+    {
+      "id": "profile_viewed",
+      "weight": 1.0,
+      "description": "Navigated to a user profile page after hovering and clicking 'View profile'.",
+      "verify": {
+        "url_matches": "/users/\\d+"
+      }
+    }
+  ],
+  "budget": { "maxSteps": 15, "maxTimeMs": 60000 }
+}

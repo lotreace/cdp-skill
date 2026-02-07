@@ -1,0 +1,23 @@
+{
+  "id": "018-apnews-browse",
+  "url": "https://apnews.com",
+  "category": "read",
+  "difficulty": "easy",
+  "stability": "moderate",
+  "task": "Visit the AP News homepage and click on the top featured article to read it. Verify you can see the article content.",
+  "milestones": [
+    {
+      "id": "article_loaded",
+      "weight": 1.0,
+      "description": "Navigated to an article page with visible article content.",
+      "verify": {
+        "all": [
+          { "url_matches": "apnews\\.com/article/" },
+          { "eval_truthy": "document.querySelector('article, [class*=\"Article\"], .RichTextStoryBody')?.textContent?.length > 100" }
+        ]
+      }
+    }
+  ],
+  "budget": { "maxSteps": 15, "maxTimeMs": 60000 },
+  "skipWhen": { "eval_truthy": "document.title.includes('Access Denied') || document.title.includes('blocked')" }
+}

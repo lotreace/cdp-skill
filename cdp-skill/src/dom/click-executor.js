@@ -36,8 +36,19 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
   if (!elementLocator) throw new Error('Element locator is required');
   if (!inputEmulator) throw new Error('Input emulator is required');
 
+  const getFrameContext = elementLocator.getFrameContext || null;
   const actionabilityChecker = createActionabilityChecker(session);
   const elementValidator = createElementValidator(session);
+
+  /** Build Runtime.evaluate params with frame context when in an iframe. */
+  function frameEvalParams(expression, returnByValue = true) {
+    const params = { expression, returnByValue };
+    if (getFrameContext) {
+      const contextId = getFrameContext();
+      if (contextId) params.contextId = contextId;
+    }
+    return params;
+  }
 
   function calculateVisibleCenter(box, viewport = null) {
     let visibleBox = { ...box };
@@ -58,13 +69,10 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
   }
 
   async function getViewportBounds() {
-    const result = await session.send('Runtime.evaluate', {
-      expression: `({
+    const result = await session.send('Runtime.evaluate', frameEvalParams(`({
         width: window.innerWidth || document.documentElement.clientWidth,
         height: window.innerHeight || document.documentElement.clientHeight
-      })`,
-      returnByValue: true
-    });
+      })`, true));
     return result.result.value;
   }
 
@@ -85,8 +93,7 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
 
     const urlBefore = checkNavigation ? await getCurrentUrl(session) : null;
 
-    const result = await session.send('Runtime.evaluate', {
-      expression: `
+    const detectExpr = `
         (function() {
           return new Promise((resolve) => {
             const timeout = ${timeout};
@@ -142,10 +149,10 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
             }, stableTime);
           });
         })()
-      `,
-      returnByValue: true,
-      awaitPromise: true
-    });
+      `;
+    const detectParams = frameEvalParams(detectExpr, true);
+    detectParams.awaitPromise = true;
+    const result = await session.send('Runtime.evaluate', detectParams);
 
     const changeResult = result.result.value || { type: 'none', changeCount: 0 };
 
@@ -245,10 +252,7 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       })()
     `;
 
-    const result = await session.send('Runtime.evaluate', {
-      expression,
-      returnByValue: true
-    });
+    const result = await session.send('Runtime.evaluate', frameEvalParams(expression, true));
 
     if (result.exceptionDetails || !result.result.value) {
       return null;
@@ -302,8 +306,7 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
   }
 
   async function executeJsClickOnRef(ref) {
-    const result = await session.send('Runtime.evaluate', {
-      expression: `
+    const result = await session.send('Runtime.evaluate', frameEvalParams(`
         (function() {
           const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
           if (!el) {
@@ -319,9 +322,7 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
           el.click();
           return { success: true };
         })()
-      `,
-      returnByValue: true
-    });
+      `, true));
 
     const value = result.result.value || {};
     if (!value.success) {
@@ -437,8 +438,7 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
 
   async function clickWithVerificationByRef(ref, x, y) {
     // Set up click listener on the ref element
-    await session.send('Runtime.evaluate', {
-      expression: `
+    await session.send('Runtime.evaluate', frameEvalParams(`
         (function() {
           const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
           if (el) {
@@ -447,15 +447,13 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
             el.addEventListener('click', el.__clickHandler, { once: true });
           }
         })()
-      `
-    });
+      `, false));
 
     await inputEmulator.click(x, y);
     await sleep(50);
 
     // Check if click was received
-    const verifyResult = await session.send('Runtime.evaluate', {
-      expression: `
+    const verifyResult = await session.send('Runtime.evaluate', frameEvalParams(`
         (function() {
           const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
           if (!el) return { targetReceived: false, reason: 'element not found' };
@@ -465,9 +463,7 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
           delete el.__clickHandler;
           return { targetReceived: received };
         })()
-      `,
-      returnByValue: true
-    });
+      `, true));
 
     return verifyResult.result.value || { targetReceived: false };
   }

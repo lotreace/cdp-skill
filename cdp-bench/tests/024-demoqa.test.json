@@ -1,0 +1,51 @@
+{
+  "id": "024-demoqa-forms",
+  "url": "https://demoqa.com/automation-practice-form",
+  "category": "create",
+  "difficulty": "medium",
+  "stability": "stable",
+  "task": "Complete the practice form with: First Name 'John', Last Name 'Doe', Email 'john.doe@example.com', Gender 'Male', Mobile '1234567890', check 'Sports' and 'Reading' hobbies, enter an address, then submit and verify the confirmation modal.",
+  "milestones": [
+    {
+      "id": "name_filled",
+      "weight": 0.15,
+      "verify": {
+        "all": [
+          { "eval_truthy": "document.getElementById('firstName')?.value === 'John'" },
+          { "eval_truthy": "document.getElementById('lastName')?.value === 'Doe'" }
+        ]
+      }
+    },
+    {
+      "id": "email_filled",
+      "weight": 0.1,
+      "verify": { "eval_truthy": "document.getElementById('userEmail')?.value === 'john.doe@example.com'" }
+    },
+    {
+      "id": "gender_selected",
+      "weight": 0.1,
+      "verify": { "eval_truthy": "document.querySelector('input[name=\"gender\"][value=\"Male\"]:checked') !== null" }
+    },
+    {
+      "id": "mobile_filled",
+      "weight": 0.1,
+      "verify": { "eval_truthy": "document.getElementById('userNumber')?.value === '1234567890'" }
+    },
+    {
+      "id": "hobbies_checked",
+      "weight": 0.15,
+      "verify": {
+        "all": [
+          { "eval_truthy": "document.getElementById('hobbies-checkbox-1')?.checked === true" },
+          { "eval_truthy": "document.getElementById('hobbies-checkbox-2')?.checked === true" }
+        ]
+      }
+    },
+    {
+      "id": "form_submitted",
+      "weight": 0.4,
+      "verify": { "eval_truthy": "document.querySelector('.modal-content')?.textContent.includes('Thanks for submitting the form')" }
+    }
+  ],
+  "budget": { "maxSteps": 30, "maxTimeMs": 120000 }
+}

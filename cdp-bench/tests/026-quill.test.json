@@ -1,0 +1,20 @@
+{
+  "id": "026-quill-editor",
+  "url": "https://quilljs.com/",
+  "category": "create",
+  "difficulty": "hard",
+  "stability": "moderate",
+  "task": "Find the Quill editor demo on the page, click into the editor area, and type some formatted text. Verify text appears in the editor.",
+  "milestones": [
+    {
+      "id": "editor_has_content",
+      "weight": 1.0,
+      "description": "Text has been entered into the Quill editor. The editor container shows typed content.",
+      "verify": {
+        "eval_truthy": "document.querySelector('.ql-editor, [contenteditable]')?.textContent?.trim()?.length > 5"
+      }
+    }
+  ],
+  "budget": { "maxSteps": 20, "maxTimeMs": 60000 },
+  "skipWhen": { "eval_truthy": "document.title.includes('blocked') || document.title.includes('CAPTCHA')" }
+}

@@ -121,10 +121,7 @@ export async function captureFailureContext(deps, options = {}) {
 
   try {
     // Get page title
-    const titleResult = await pageController.session.send('Runtime.evaluate', {
-      expression: 'document.title',
-      returnByValue: true
-    });
+    const titleResult = await pageController.evaluateInFrame('document.title');
     context.title = titleResult.result.value || '';
   } catch {
     context.title = null;
@@ -132,10 +129,7 @@ export async function captureFailureContext(deps, options = {}) {
 
   try {
     // Get current URL
-    const urlResult = await pageController.session.send('Runtime.evaluate', {
-      expression: 'window.location.href',
-      returnByValue: true
-    });
+    const urlResult = await pageController.evaluateInFrame('window.location.href');
     context.url = urlResult.result.value || '';
   } catch {
     context.url = null;
@@ -143,14 +137,11 @@ export async function captureFailureContext(deps, options = {}) {
 
   try {
     // Get scroll position
-    const scrollResult = await pageController.session.send('Runtime.evaluate', {
-      expression: `({
+    const scrollResult = await pageController.evaluateInFrame(`({
         x: window.scrollX || document.documentElement.scrollLeft,
         y: window.scrollY || document.documentElement.scrollTop,
         maxY: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) - window.innerHeight
-      })`,
-      returnByValue: true
-    });
+      })`);
     const scroll = scrollResult.result.value;
     context.scrollPosition = {
       x: scroll.x,
@@ -164,8 +155,7 @@ export async function captureFailureContext(deps, options = {}) {
 
   try {
     // Get visible buttons with refs (limit 8)
-    const buttonsResult = await pageController.session.send('Runtime.evaluate', {
-      expression: `
+    const buttonsResult = await pageController.evaluateInFrame(`
         (function() {
           const buttons = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"], [role="button"]'));
           return buttons
@@ -194,9 +184,7 @@ export async function captureFailureContext(deps, options = {}) {
               return { text, selector, ref };
             });
         })()
-      `,
-      returnByValue: true
-    });
+      `);
     context.visibleButtons = buttonsResult.result.value || [];
   } catch {
     context.visibleButtons = [];
@@ -204,8 +192,7 @@ export async function captureFailureContext(deps, options = {}) {
 
   try {
     // Get visible links (limit 5)
-    const linksResult = await pageController.session.send('Runtime.evaluate', {
-      expression: `
+    const linksResult = await pageController.evaluateInFrame(`
         (function() {
           const links = Array.from(document.querySelectorAll('a[href]'));
           return links
@@ -220,9 +207,7 @@ export async function captureFailureContext(deps, options = {}) {
               href: a.href ? a.href.substring(0, 100) : ''
             }));
         })()
-      `,
-      returnByValue: true
-    });
+      `);
     context.visibleLinks = linksResult.result.value || [];
   } catch {
     context.visibleLinks = [];
@@ -230,8 +215,7 @@ export async function captureFailureContext(deps, options = {}) {
 
   try {
     // Get any visible error messages or alerts
-    const errorsResult = await pageController.session.send('Runtime.evaluate', {
-      expression: `
+    const errorsResult = await pageController.evaluateInFrame(`
         (function() {
           const errorSelectors = [
             '.error', '.alert', '.warning', '.message',
@@ -253,9 +237,7 @@ export async function captureFailureContext(deps, options = {}) {
           }
           return errors.slice(0, 3);
         })()
-      `,
-      returnByValue: true
-    });
+      `);
     context.visibleErrors = errorsResult.result.value || [];
   } catch {
     context.visibleErrors = [];
@@ -265,8 +247,7 @@ export async function captureFailureContext(deps, options = {}) {
   if (failedSelector || failedText) {
     try {
       const searchTerm = failedText || failedSelector;
-      const nearMatchesResult = await pageController.session.send('Runtime.evaluate', {
-        expression: `
+      const nearMatchesResult = await pageController.evaluateInFrame(`
           (function() {
             const searchTerm = ${JSON.stringify(searchTerm)}.toLowerCase();
             const candidates = [];
@@ -323,9 +304,7 @@ export async function captureFailureContext(deps, options = {}) {
             candidates.sort((a, b) => b.score - a.score);
             return candidates.slice(0, 5);
           })()
-        `,
-        returnByValue: true
-      });
+        `);
       context.nearMatches = nearMatchesResult.result.value || [];
     } catch {
       context.nearMatches = [];

@@ -1,0 +1,26 @@
+{
+  "id": "021-hackernews-browse",
+  "url": "https://news.ycombinator.com",
+  "category": "read",
+  "difficulty": "easy",
+  "stability": "stable",
+  "task": "Browse Hacker News front page, identify a story with at least 10 comments, click to view its comments page, and report the top comment authors and discussion topic.",
+  "milestones": [
+    {
+      "id": "frontpage_loaded",
+      "weight": 0.2,
+      "verify": { "eval_truthy": "document.querySelectorAll('.athing').length >= 10" }
+    },
+    {
+      "id": "comments_page",
+      "weight": 0.4,
+      "verify": { "url_contains": "item?id=" }
+    },
+    {
+      "id": "comments_visible",
+      "weight": 0.4,
+      "verify": { "eval_truthy": "document.querySelectorAll('.comtr').length >= 1" }
+    }
+  ],
+  "budget": { "maxSteps": 15, "maxTimeMs": 60000 }
+}

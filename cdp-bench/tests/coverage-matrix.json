@@ -1,0 +1,123 @@
+{
+  "description": "Capability coverage tracker: step categories x site complexity x task types",
+  "lastUpdated": "2026-02-07",
+  "coverage": {
+    "navigation": {
+      "goto": { "tested": true, "tests": ["001-saucedemo", "002-heroku-forms", "017-wikipedia"] },
+      "openTab": { "tested": true, "tests": ["001-saucedemo"] },
+      "back": { "tested": false, "tests": [] },
+      "forward": { "tested": false, "tests": [] },
+      "reload": { "tested": false, "tests": [] },
+      "connectTab": { "tested": false, "tests": [] }
+    },
+    "interaction": {
+      "click": { "tested": true, "tests": ["001-saucedemo", "002-heroku-forms", "021-hackernews", "017-wikipedia"] },
+      "fill": { "tested": true, "tests": ["001-saucedemo", "002-heroku-forms", "024-demoqa"] },
+      "fillForm": { "tested": true, "tests": ["024-demoqa"] },
+      "type": { "tested": true, "tests": ["028-monaco"] },
+      "press": { "tested": false, "tests": [] },
+      "selectOption": { "tested": false, "tests": [] },
+      "hover": { "tested": false, "tests": [] },
+      "drag": { "tested": false, "tests": [] },
+      "scroll": { "tested": false, "tests": [] }
+    },
+    "observation": {
+      "snapshot": { "tested": true, "tests": ["all"] },
+      "snapshotSearch": { "tested": false, "tests": [] },
+      "extract": { "tested": false, "tests": [] },
+      "query": { "tested": false, "tests": [] },
+      "formState": { "tested": false, "tests": [] }
+    },
+    "advanced": {
+      "eval": { "tested": false, "tests": [] },
+      "pageFunction": { "tested": false, "tests": [] },
+      "poll": { "tested": false, "tests": [] },
+      "pipeline": { "tested": false, "tests": [] },
+      "assert": { "tested": false, "tests": [] },
+      "wait": { "tested": false, "tests": [] }
+    },
+    "context": {
+      "switchToFrame": { "tested": false, "tests": [] },
+      "listFrames": { "tested": false, "tests": [] },
+      "shadowDOM": { "tested": false, "tests": [] },
+      "cookies": { "tested": false, "tests": [] },
+      "viewport": { "tested": false, "tests": [] }
+    }
+  },
+  "siteComplexity": {
+    "static": {
+      "description": "Simple server-rendered HTML",
+      "tests": ["002-heroku-forms", "021-hackernews", "030-herokuapp-tables"]
+    },
+    "spa_simple": {
+      "description": "Single-page app with basic routing",
+      "tests": ["001-saucedemo", "029-todomvc"]
+    },
+    "spa_complex": {
+      "description": "Heavy SPA with dynamic content, lazy loading",
+      "tests": ["024-demoqa", "028-monaco"]
+    },
+    "content_heavy": {
+      "description": "Article/media sites with ads, modals, consent banners",
+      "tests": ["010-allrecipes", "017-wikipedia", "023-bandcamp"]
+    }
+  },
+  "gaps": [
+    {
+      "name": "Shadow DOM",
+      "priority": "high",
+      "description": "No tests exercise shadow DOM interactions",
+      "candidate": "Shoelace components demo (shoelace.style)",
+      "stepCategories": ["click", "fill", "snapshot"]
+    },
+    {
+      "name": "Delete flows",
+      "priority": "high",
+      "description": "Only TodoMVC tests deletion; need more delete workflows",
+      "candidate": "TodoMVC delete all, Heroku checkboxes (delete/uncheck)",
+      "stepCategories": ["click", "assert"]
+    },
+    {
+      "name": "Multi-tab",
+      "priority": "medium",
+      "description": "No tests exercise multi-tab workflows (openTab, connectTab, closeTab)",
+      "candidate": "eBay open in new tab, Wikipedia open in new tab",
+      "stepCategories": ["openTab", "connectTab", "closeTab"]
+    },
+    {
+      "name": "Error recovery",
+      "priority": "medium",
+      "description": "No tests deliberately navigate to error pages or handle modals",
+      "candidate": "Navigate to 404, handle alert/confirm dialogs",
+      "stepCategories": ["goto", "wait", "eval"]
+    },
+    {
+      "name": "Cross-origin iframe",
+      "priority": "high",
+      "description": "No tests exercise cross-origin iframes",
+      "candidate": "Stripe checkout embed, YouTube embed interaction",
+      "stepCategories": ["switchToFrame", "listFrames", "click"]
+    },
+    {
+      "name": "Rich text editors",
+      "priority": "medium",
+      "description": "Monaco test exists but TinyMCE/Quill/ProseMirror need validation",
+      "candidate": "Heroku TinyMCE (025), Quill (026), ProseMirror (027)",
+      "stepCategories": ["type", "fill", "switchToFrame", "eval"]
+    },
+    {
+      "name": "Keyboard navigation",
+      "priority": "low",
+      "description": "No tests exercise Tab key navigation or keyboard shortcuts",
+      "candidate": "DemoQA keyboard navigation, GitHub command palette",
+      "stepCategories": ["press", "type"]
+    },
+    {
+      "name": "File upload",
+      "priority": "low",
+      "description": "No v2 tests exercise file upload",
+      "candidate": "Heroku file upload (v1 test exists)",
+      "stepCategories": ["fill", "eval"]
+    }
+  ]
+}

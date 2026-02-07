@@ -1,0 +1,31 @@
+{
+  "id": "028-monaco-editor",
+  "url": "https://microsoft.github.io/monaco-editor/playground.html",
+  "category": "create",
+  "difficulty": "hard",
+  "stability": "moderate",
+  "task": "Use the Monaco editor playground: click into the editor area, clear existing code, type a JavaScript function 'function greet(name) { return \"Hello, \" + name; }', and verify syntax highlighting is applied.",
+  "milestones": [
+    {
+      "id": "page_loaded",
+      "weight": 0.15,
+      "verify": { "eval_truthy": "document.querySelector('.monaco-editor') !== null" }
+    },
+    {
+      "id": "editor_focused",
+      "weight": 0.15,
+      "verify": { "eval_truthy": "document.querySelector('.monaco-editor .inputarea, .monaco-editor textarea') !== null" }
+    },
+    {
+      "id": "code_entered",
+      "weight": 0.4,
+      "verify": { "eval_truthy": "typeof monaco !== 'undefined' && monaco.editor.getModels()[0]?.getValue().includes('function greet')" }
+    },
+    {
+      "id": "syntax_highlighted",
+      "weight": 0.3,
+      "verify": { "eval_truthy": "document.querySelectorAll('.monaco-editor .mtk1, .monaco-editor .mtk6, .monaco-editor [class^=\"mtk\"]').length >= 3" }
+    }
+  ],
+  "budget": { "maxSteps": 25, "maxTimeMs": 120000 }
+}

@@ -1,0 +1,33 @@
+{
+  "id": "029-todomvc-react",
+  "url": "https://todomvc.com/examples/react/dist/",
+  "category": "create",
+  "difficulty": "easy",
+  "stability": "stable",
+  "task": "Use the React TodoMVC app: add 3 todo items ('Buy groceries', 'Walk the dog', 'Read a book'), mark the second one as completed, filter by Active, then delete one todo.",
+  "milestones": [
+    {
+      "id": "crud_complete",
+      "weight": 0.7,
+      "description": "Full CRUD cycle completed — todos were added, one completed, filtered, and one deleted. Final state shows the app with remaining todos and active filter.",
+      "verify": {
+        "all": [
+          { "eval_truthy": "document.querySelectorAll('.todo-list li, [data-testid=\"todo-item\"], ul.todo-list > li').length >= 1" },
+          { "eval_truthy": "document.querySelector('.todo-count, .footer, [class*=\"footer\"]')?.textContent?.length > 0" }
+        ]
+      }
+    },
+    {
+      "id": "filtered",
+      "weight": 0.3,
+      "description": "Active filter is applied",
+      "verify": {
+        "any": [
+          { "url_contains": "/active" },
+          { "eval_truthy": "document.querySelector('a.selected, [class*=\"selected\"]')?.textContent?.includes('Active')" }
+        ]
+      }
+    }
+  ],
+  "budget": { "maxSteps": 20, "maxTimeMs": 60000 }
+}

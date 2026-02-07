@@ -184,7 +184,8 @@ export function createQueryOutputProcessor(session) {
  * @param {Object} elementLocator - Element locator instance
  * @returns {Object} Role query executor interface
  */
-export function createRoleQueryExecutor(session, elementLocator) {
+export function createRoleQueryExecutor(session, elementLocator, options = {}) {
+  const getFrameContext = options.getFrameContext || null;
   const outputProcessor = createQueryOutputProcessor(session);
 
   async function releaseObject(objectId) {
@@ -327,10 +328,12 @@ export function createRoleQueryExecutor(session, elementLocator) {
 
     let result;
     try {
-      result = await session.send('Runtime.evaluate', {
-        expression,
-        returnByValue: false
-      });
+      const evalArgs = { expression, returnByValue: false };
+      if (getFrameContext) {
+        const contextId = getFrameContext();
+        if (contextId) evalArgs.contextId = contextId;
+      }
+      result = await session.send('Runtime.evaluate', evalArgs);
     } catch (error) {
       throw new Error(`Role query error: ${error.message}`);
     }
@@ -1329,7 +1332,8 @@ const SNAPSHOT_SCRIPT = `
  * @param {Object} session - CDP session
  * @returns {Object} ARIA snapshot interface
  */
-export function createAriaSnapshot(session) {
+export function createAriaSnapshot(session, options = {}) {
+  const getFrameContext = options.getFrameContext || null;
   /**
    * Generate accessibility snapshot of the page
    * @param {Object} options - Snapshot options
@@ -1349,11 +1353,16 @@ export function createAriaSnapshot(session) {
   async function generate(options = {}) {
     const { root = null, mode = 'ai', detail = 'full', maxDepth = 50, maxElements = 0, includeText = false, includeFrames = false, viewportOnly = false, pierceShadow = false, preserveRefs = false, since = null, internal = false } = options;
 
-    const result = await session.send('Runtime.evaluate', {
+    const evalArgs = {
       expression: `(${SNAPSHOT_SCRIPT})(${JSON.stringify(root)}, ${JSON.stringify({ mode, detail, maxDepth, maxElements, includeText, includeFrames, viewportOnly, pierceShadow, preserveRefs, since, internal })})`,
       returnByValue: true,
       awaitPromise: false
-    });
+    };
+    if (getFrameContext) {
+      const contextId = getFrameContext();
+      if (contextId) evalArgs.contextId = contextId;
+    }
+    const result = await session.send('Runtime.evaluate', evalArgs);
 
     if (result.exceptionDetails) {
       throw new Error(`Snapshot generation failed: ${result.exceptionDetails.text}`);
@@ -1562,7 +1571,7 @@ export function createAriaSnapshot(session) {
    * @returns {Promise<Object>} Element info with selector, box, and connection status
    */
   async function getElementByRef(ref) {
-    const result = await session.send('Runtime.evaluate', {
+    const evalArgs = {
       expression: `(function() {
         const ref = ${JSON.stringify(ref)};
         const refsMap = window.__ariaRefs;
@@ -1664,7 +1673,12 @@ export function createAriaSnapshot(session) {
         return null;
       })()`,
       returnByValue: true
-    });
+    };
+    if (getFrameContext) {
+      const contextId = getFrameContext();
+      if (contextId) evalArgs.contextId = contextId;
+    }
+    const result = await session.send('Runtime.evaluate', evalArgs);
 
     return result.result.value;
   }

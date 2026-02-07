@@ -30,12 +30,26 @@ const MAX_TIMEOUT = TIMEOUTS.MAX;
  * @param {Object} session - CDP session
  * @param {Object} [options] - Configuration options
  * @param {number} [options.timeout=30000] - Default timeout in ms
+ * @param {Function} [options.getFrameContext] - Returns contextId when in a non-main frame
  * @returns {Object} Element locator interface
  */
 export function createElementLocator(session, options = {}) {
   if (!session) throw new Error('CDP session is required');
 
+  const getFrameContext = options.getFrameContext || null;
   let defaultTimeout = options.timeout || 30000;
+
+  /**
+   * Build Runtime.evaluate params, injecting contextId when in an iframe.
+   */
+  function evalParams(expression, returnByValue = false) {
+    const params = { expression, returnByValue };
+    if (getFrameContext) {
+      const contextId = getFrameContext();
+      if (contextId) params.contextId = contextId;
+    }
+    return params;
+  }
 
   function validateTimeout(timeout) {
     if (typeof timeout !== 'number' || !Number.isFinite(timeout)) return defaultTimeout;
@@ -59,10 +73,9 @@ export function createElementLocator(session, options = {}) {
 
     let result;
     try {
-      result = await session.send('Runtime.evaluate', {
-        expression: `document.querySelector(${JSON.stringify(selector)})`,
-        returnByValue: false
-      });
+      result = await session.send('Runtime.evaluate',
+        evalParams(`document.querySelector(${JSON.stringify(selector)})`, false)
+      );
     } catch (error) {
       throw connectionError(error.message, 'Runtime.evaluate (querySelector)');
     }
@@ -89,10 +102,9 @@ export function createElementLocator(session, options = {}) {
 
     let result;
     try {
-      result = await session.send('Runtime.evaluate', {
-        expression: `Array.from(document.querySelectorAll(${JSON.stringify(selector)}))`,
-        returnByValue: false
-      });
+      result = await session.send('Runtime.evaluate',
+        evalParams(`Array.from(document.querySelectorAll(${JSON.stringify(selector)}))`, false)
+      );
     } catch (error) {
       throw connectionError(error.message, 'Runtime.evaluate (querySelectorAll)');
     }
@@ -175,10 +187,9 @@ export function createElementLocator(session, options = {}) {
     while (Date.now() - startTime < validatedTimeout) {
       let result;
       try {
-        result = await session.send('Runtime.evaluate', {
-          expression: checkExpr,
-          returnByValue: true
-        });
+        result = await session.send('Runtime.evaluate',
+          evalParams(checkExpr, true)
+        );
       } catch (error) {
         throw connectionError(error.message, 'Runtime.evaluate (waitForText)');
       }
@@ -278,10 +289,9 @@ export function createElementLocator(session, options = {}) {
 
     let result;
     try {
-      result = await session.send('Runtime.evaluate', {
-        expression,
-        returnByValue: false
-      });
+      result = await session.send('Runtime.evaluate',
+        evalParams(expression, false)
+      );
     } catch (error) {
       throw connectionError(error.message, 'Runtime.evaluate (queryByRole)');
     }
@@ -403,10 +413,9 @@ export function createElementLocator(session, options = {}) {
 
     let result;
     try {
-      result = await session.send('Runtime.evaluate', {
-        expression,
-        returnByValue: false
-      });
+      result = await session.send('Runtime.evaluate',
+        evalParams(expression, false)
+      );
     } catch (error) {
       throw connectionError(error.message, 'Runtime.evaluate (findElementByText)');
     }
@@ -514,10 +523,9 @@ export function createElementLocator(session, options = {}) {
 
     let result;
     try {
-      result = await session.send('Runtime.evaluate', {
-        expression,
-        returnByValue: false
-      });
+      result = await session.send('Runtime.evaluate',
+        evalParams(expression, false)
+      );
     } catch (error) {
       throw connectionError(error.message, 'Runtime.evaluate (findElementByTextWithinSelector)');
     }
@@ -582,6 +590,7 @@ export function createElementLocator(session, options = {}) {
     waitForElementByText,
     getBoundingBox,
     getDefaultTimeout: () => defaultTimeout,
-    setDefaultTimeout: (timeout) => { defaultTimeout = validateTimeout(timeout); }
+    setDefaultTimeout: (timeout) => { defaultTimeout = validateTimeout(timeout); },
+    get getFrameContext() { return getFrameContext; }
   };
 }

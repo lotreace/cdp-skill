@@ -1,0 +1,25 @@
+{
+  "id": "002-heroku-forms",
+  "url": "https://the-internet.herokuapp.com/login",
+  "category": "create",
+  "difficulty": "easy",
+  "stability": "stable",
+  "task": "Test form authentication: submit invalid credentials and verify error, then login with valid credentials (tomsmith/SuperSecretPassword!) and verify secure area, then logout.",
+  "hints": {
+    "credentials": { "username": "tomsmith", "password": "SuperSecretPassword!" }
+  },
+  "milestones": [
+    {
+      "id": "logout_complete",
+      "weight": 1.0,
+      "description": "Full login/logout cycle completed — implies invalid login, valid login, secure area access, and logout all succeeded. Final state should be back at /login.",
+      "verify": {
+        "all": [
+          { "url_contains": "/login" },
+          { "eval_truthy": "!window.location.href.includes('/secure')" }
+        ]
+      }
+    }
+  ],
+  "budget": { "maxSteps": 20, "maxTimeMs": 60000 }
+}

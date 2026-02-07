@@ -133,10 +133,11 @@ export async function executeGetDom(pageController, params) {
         };
       })()`;
 
-  const result = await session.send('Runtime.evaluate', {
-    expression,
-    returnByValue: true
-  });
+  const evalArgs = { expression, returnByValue: true };
+  const contextId = pageController.getFrameContext();
+  if (contextId) evalArgs.contextId = contextId;
+
+  const result = await session.send('Runtime.evaluate', evalArgs);
 
   if (result.exceptionDetails) {
     throw new Error(`getDom error: ${result.exceptionDetails.text}`);
@@ -746,7 +747,9 @@ export async function executeQuery(elementLocator, params) {
  */
 
 export async function executeRoleQuery(elementLocator, params) {
-  const roleQueryExecutor = createRoleQueryExecutor(elementLocator.session, elementLocator);
+  const roleQueryExecutor = createRoleQueryExecutor(elementLocator.session, elementLocator, {
+    getFrameContext: elementLocator.getFrameContext
+  });
   return roleQueryExecutor.execute(params);
 }
 

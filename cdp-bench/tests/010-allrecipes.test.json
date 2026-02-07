@@ -1,0 +1,28 @@
+{
+  "id": "010-allrecipes-search",
+  "url": "https://www.allrecipes.com",
+  "category": "read",
+  "difficulty": "medium",
+  "stability": "moderate",
+  "task": "Search for a seasonal recipe (e.g. 'pumpkin soup'), navigate to a recipe page, and note the serving size and key ingredients.",
+  "milestones": [
+    {
+      "id": "recipe_page",
+      "weight": 0.6,
+      "description": "Navigated to a recipe page — implies search or browsing was successful",
+      "verify": {
+        "all": [
+          { "url_matches": "allrecipes\\.com/recipe/" },
+          { "eval_truthy": "document.querySelector('h1')?.textContent.length > 3" }
+        ]
+      }
+    },
+    {
+      "id": "recipe_details_visible",
+      "weight": 0.4,
+      "verify": { "eval_truthy": "document.body.innerText.includes('Ingredients') || document.body.innerText.includes('ingredients')" }
+    }
+  ],
+  "budget": { "maxSteps": 20, "maxTimeMs": 90000 },
+  "skipWhen": { "eval_truthy": "document.title.includes('Access Denied') || document.title.includes('blocked')" }
+}
