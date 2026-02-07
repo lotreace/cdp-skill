@@ -409,6 +409,7 @@ async function handleCloseTab(config, step) {
  * Main CLI execution
  */
 async function main() {
+  const startTime = Date.now();
   let browser = null;
   let pageController = null;
   let parsedRequest = null;  // Track for debug logging in error handler
@@ -471,9 +472,10 @@ async function main() {
     // Get page session - requires explicit targetId or openTab step
     let session;
 
-    // Check if first step is openTab
+    // Check if first step is openTab or connectTab
     const firstStep = json.steps[0];
     const hasOpenTab = firstStep && firstStep.openTab !== undefined;
+    const hasConnectTab = firstStep && firstStep.connectTab !== undefined;
 
     // Extract URL from openTab if provided
     let openTabUrl = null;
@@ -496,6 +498,44 @@ async function main() {
         throw {
           type: ErrorType.CONNECTION,
           message: `Could not attach to tab ${tab}${tab !== resolvedTargetId ? ` (${resolvedTargetId})` : ''}: ${err.message}`
+        };
+      }
+    } else if (hasConnectTab) {
+      // Connect to an existing tab by alias, targetId, or URL regex
+      try {
+        const connectParam = firstStep.connectTab;
+        let connectTargetId = null;
+
+        if (typeof connectParam === 'string') {
+          // Try alias first, then targetId
+          connectTargetId = resolveTabAlias(connectParam);
+        } else if (connectParam && typeof connectParam === 'object') {
+          if (connectParam.targetId) {
+            connectTargetId = connectParam.targetId;
+          } else if (connectParam.url) {
+            // Find tab by URL regex
+            const pages = await browser.getPages();
+            const urlRegex = new RegExp(connectParam.url);
+            const match = pages.find(p => urlRegex.test(p.url));
+            if (!match) {
+              throw new Error(`No tab matches URL pattern: ${connectParam.url}`);
+            }
+            connectTargetId = match.targetId;
+          }
+        }
+
+        if (!connectTargetId) {
+          throw new Error('Could not resolve connectTab target');
+        }
+
+        session = await browser.attachToPage(connectTargetId);
+        const tabAlias = getTabAlias(connectTargetId) || registerTab(connectTargetId);
+        json.steps[0]._connectTabHandled = true;
+        json.steps[0]._connectTabAlias = tabAlias;
+      } catch (err) {
+        throw {
+          type: ErrorType.CONNECTION,
+          message: `connectTab failed: ${err.message}`
         };
       }
     } else if (hasOpenTab) {
@@ -521,12 +561,13 @@ async function main() {
         };
       }
     } else {
-      // No targetId and no openTab step - fail with helpful message
+      // No targetId and no openTab/connectTab step - fail with helpful message
       throw {
         type: ErrorType.VALIDATION,
         message: `No tab specified. Either:\n` +
           `  1. Use {"steps":[{"openTab":"url"},...]} to create a new tab\n` +
-          `  2. Pass tab id: {"tab":"t1", "steps":[...]}`
+          `  2. Use {"steps":[{"connectTab":"t1"},...]} to connect to an existing tab\n` +
+          `  3. Pass tab id: {"tab":"t1", "steps":[...]}`
       };
     }
 
@@ -654,6 +695,26 @@ async function main() {
 
     // Debug logging
     writeDebugLog(json, finalOutput);
+
+    // Write metrics if CDP_METRICS_FILE is set
+    const metricsFile = process.env.CDP_METRICS_FILE;
+    if (metricsFile) {
+      const inputBytes = Buffer.byteLength(input, 'utf8');
+      const outputJson = JSON.stringify(finalOutput);
+      const outputBytes = Buffer.byteLength(outputJson, 'utf8');
+      const metricsLine = JSON.stringify({
+        ts: new Date().toISOString(),
+        input_bytes: inputBytes,
+        output_bytes: outputBytes,
+        steps: json.steps.length,
+        time_ms: Date.now() - startTime
+      }) + '\n';
+      try {
+        const metricsDir = path.dirname(metricsFile);
+        if (!fs.existsSync(metricsDir)) fs.mkdirSync(metricsDir, { recursive: true });
+        fs.appendFileSync(metricsFile, metricsLine);
+      } catch (e) { /* metrics write failure is non-fatal */ }
+    }
 
     // Output result
     console.log(JSON.stringify(finalOutput));

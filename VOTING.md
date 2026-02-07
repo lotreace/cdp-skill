@@ -863,6 +863,98 @@ Issues identified by the snapshot evaluation run (2026-02-03) across 6 agents te
 
 ---
 
+## 12. Session Resilience
+
+### 12.1 Page reload invalidates CDP session with no recovery
+`[votes: 1]`
+**Symptoms:**
+- `{"reload": true}` destroys the CDP session entirely
+- Tab ID becomes invalid, all subsequent steps fail with CONNECTION error
+- Must open an entirely new tab and redo all setup
+- code-server testing (2026-02-07): reload to pick up extension changes killed the session, required opening fresh tab t823
+
+**Expected:** The skill should auto-reconnect to the same tab after a page reload by watching for the target to reappear with the same URL, rather than losing the session entirely.
+
+**Files:** `src/cdp-skill.js`, `src/page.js`
+
+---
+
+### 12.2 Reconnect step for session recovery
+`[votes: 1]`
+**Symptoms:**
+- After session disconnect (reload, crash, timeout), there's no way to re-attach to the same tab
+- Must use `chromeStatus` + `openTab` to start fresh, losing all state
+- code-server testing (2026-02-07): multiple reconnection attempts after reload all timed out
+
+**Proposed:**
+Add a `reconnect` step that tries to re-attach to a tab by URL pattern or tab ID:
+```json
+{"reconnect": {"tab": "t1"}}
+{"reconnect": {"url": "127.0.0.1:8080"}}
+```
+
+**Files:** `src/cdp-skill.js`, `src/page.js`
+
+---
+
+## 13. Workflow Shortcuts
+
+### 13.1 Composite clickAndSnapshot step
+`[votes: 1]`
+**Symptoms:**
+- Clicking something and wanting to see the result is the most common two-step pattern
+- Requires two CLI invocations (click, then snapshot), adding latency
+- Every interaction-then-observe cycle costs an extra round-trip
+
+**Proposed:**
+Add `clickAndSnapshot` that performs click + returns a full snapshot in one invocation:
+```json
+{"clickAndSnapshot": {"ref": "s1e5", "detail": "interactive"}}
+```
+
+**Files:** `src/runner.js`
+
+---
+
+### 13.2 waitForSettled step (DOM mutation quiet)
+`[votes: 1]`
+**Symptoms:**
+- After actions like page loads or complex UI transitions, unclear what to wait for
+- `wait` requires knowing a specific selector or text
+- No way to say "wait until the page stops changing"
+
+**Proposed:**
+A `waitForSettled` step that waits for no DOM mutations for N milliseconds:
+```json
+{"waitForSettled": true}
+{"waitForSettled": {"quietMs": 500, "timeout": 5000}}
+```
+
+**Related:** 8.1 (network quiet) and 8.3 (MutationObserver) — this is the user-facing step that combines both signals.
+
+**Files:** `src/runner.js`, `src/dom.js`
+
+---
+
+## 14. Site Profile Improvements
+
+### 14.1 Auto-learning from failures
+`[votes: 1]`
+**Symptoms:**
+- Site profiles are entirely manual — agent must remember to call `writeSiteProfile`
+- Quirks discovered during a session (e.g., "reload invalidates session", "command palette uses specific ARIA roles") are lost if the agent doesn't explicitly record them
+- Same failure patterns repeat across sessions
+
+**Proposed:**
+Auto-append discovered quirks to the site profile after failures:
+- When an action fails and the agent finds a workaround, auto-record it
+- When `autoForced: true` or `reResolved: true` triggers, note the element/pattern
+- Expose a `profileAppend` field on responses that the skill auto-merges into the profile
+
+**Files:** `src/cdp-skill.js`, `src/site-profiles.js`
+
+---
+
 ## Adding New Issues
 
 To add a new issue, use this template:
@@ -932,8 +1024,13 @@ To add a new issue, use this template:
 | 8.7 Closed shadow DOM piercing | 0 |
 | 8.8 Frame-aware element IDs | 0 |
 | 8.9 Adaptive depth handling | 0 |
+| **12.1 Reload invalidates CDP session** | **1** |
+| **12.2 Reconnect step** | **1** |
+| **13.1 clickAndSnapshot composite** | **1** |
+| **13.2 waitForSettled (DOM quiet)** | **1** |
+| **14.1 Profile auto-learning** | **1** |
 
-**Total votes allocated: 90** (includes snapshot eval run 2026-02-03: +51 votes across 6 agents)
+**Total votes allocated: 95** (includes snapshot eval run 2026-02-03: +51 votes across 6 agents; manual testing 2026-02-07: +5 votes)
 
 ---
 

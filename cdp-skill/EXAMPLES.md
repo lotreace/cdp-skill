@@ -59,6 +59,38 @@ Close when done:
 {"steps":[{"closeTab":"t1"}]}
 ```
 
+### connectTab — Connect to Existing Tab
+By alias:
+```json
+{"steps":[{"connectTab":"t2"},{"snapshot":true}]}
+```
+
+By URL regex:
+```json
+{"steps":[{"connectTab":{"url":"github\\.com"}},{"snapshot":true}]}
+```
+
+By targetId:
+```json
+{"steps":[{"connectTab":{"targetId":"ABC123..."}},{"snapshot":true}]}
+```
+
+### New Tab Handling — click → detect → connectTab
+When a click opens a new tab (e.g. `target="_blank"`), the response includes `newTabs`:
+```json
+{
+  "steps": [{"action": "click", "status": "ok", "output": {
+    "method": "cdp",
+    "newTabs": [{"targetId": "DEF456", "url": "https://other.com", "title": "Other"}]
+  }}]
+}
+```
+
+Then connect to the new tab:
+```json
+{"steps":[{"connectTab":{"url":"other\\.com"}},{"snapshot":true}]}
+```
+
 ---
 
 ## Input / Output Schema
@@ -397,6 +429,26 @@ Response:
 {"filled": true, "tag": "INPUT", "type": "text", "selector": "#search", "valueBefore": "", "valueAfter": "search query"}
 ```
 
+### Autocomplete pattern
+Fill triggers suggestions → wait for dropdown → click or press to select:
+```json
+{"steps": [
+  {"fill": {"selector": "#city", "value": "San Fra"}},
+  {"wait": ".autocomplete-dropdown"},
+  {"click": {"text": "San Francisco"}}
+]}
+```
+
+Or with keyboard:
+```json
+{"steps": [
+  {"fill": {"selector": "#city", "value": "San Fra"}},
+  {"wait": ".autocomplete-dropdown"},
+  {"press": "ArrowDown"},
+  {"press": "Enter"}
+]}
+```
+
 ---
 
 ## Type / Press / Select
@@ -456,6 +508,13 @@ Response:
 {"drag": {"source": {"ref": "s1e1", "offsetX": 20}, "target": {"ref": "s1e5", "offsetY": -10}}}
 {"drag": {"source": {"x": 100, "y": 100}, "target": {"x": 300, "y": 200}}}
 {"drag": {"source": "#item", "target": "#container", "steps": 20, "delay": 10}}
+```
+
+### Drag with method
+```json
+{"drag": {"source": "#item", "target": "#zone", "method": "mouse"}}
+{"drag": {"source": "#item", "target": "#zone", "method": "html5"}}
+{"drag": {"source": "#item", "target": "#zone", "method": "auto"}}
 ```
 
 ---

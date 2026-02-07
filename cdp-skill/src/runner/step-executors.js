@@ -131,6 +131,18 @@ export async function executeStep(deps, step, options = {}) {
       }
     } else if (step.click !== undefined) {
       stepResult.action = 'click';
+
+      // Capture tabs before click for new-tab detection
+      let tabsBefore = null;
+      try {
+        if (deps.browser) {
+          const pages = await deps.browser.getPages();
+          tabsBefore = new Set(pages.map(p => p.targetId));
+        }
+      } catch {
+        // Detection failure is non-fatal
+      }
+
       const clickResult = await executeClick(elementLocator, inputEmulator, deps.ariaSnapshot, step.click);
       if (clickResult) {
         if (clickResult.method) {
@@ -153,6 +165,23 @@ export async function executeStep(deps, step, options = {}) {
         if (clickResult.method === 'jsClick-auto') {
           stepResult.warning = 'CDP click was intercepted, used JavaScript click fallback';
         }
+      }
+
+      // Detect new tabs opened by the click
+      try {
+        if (tabsBefore && deps.browser) {
+          await sleep(200);
+          const pagesAfter = await deps.browser.getPages();
+          const newTabs = pagesAfter
+            .filter(p => !tabsBefore.has(p.targetId))
+            .map(p => ({ targetId: p.targetId, url: p.url, title: p.title }));
+          if (newTabs.length > 0) {
+            stepResult.output = stepResult.output || {};
+            stepResult.output.newTabs = newTabs;
+          }
+        }
+      } catch {
+        // Detection failure is non-fatal
       }
     } else if (step.fill !== undefined) {
       stepResult.action = 'fill';
@@ -355,6 +384,13 @@ export async function executeStep(deps, step, options = {}) {
     } else if (step.readSiteProfile !== undefined) {
       stepResult.action = 'readSiteProfile';
       stepResult.output = await executeReadSiteProfile(step.readSiteProfile);
+    } else if (step.connectTab !== undefined) {
+      stepResult.action = 'connectTab';
+      if (step._connectTabHandled) {
+        stepResult.output = { tab: step._connectTabAlias, connected: true };
+      } else {
+        throw new Error('connectTab must be the first step when no tab is specified');
+      }
     }
 
     // Process hooks on action steps (settledWhen, observe)
@@ -367,7 +403,11 @@ export async function executeStep(deps, step, options = {}) {
           timeout: stepTimeout || 30000
         });
         if (!settledResult.resolved) {
-          stepResult.warning = (stepResult.warning || '') + ' settledWhen timed out without resolving';
+          const lastValStr = settledResult.lastValue !== undefined
+            ? ` (last value: ${JSON.stringify(settledResult.lastValue).substring(0, 200)})`
+            : '';
+          stepResult.warning = (stepResult.warning || '') +
+            `settledWhen timed out after ${settledResult.elapsed || 'unknown'}ms${lastValStr}`;
         }
       }
 

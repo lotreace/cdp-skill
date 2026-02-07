@@ -285,7 +285,7 @@ export async function captureHoverResult(session, visibleBefore) {
  * @returns {Promise<Object>} Drag result
  */
 export async function executeDrag(elementLocator, inputEmulator, pageController, ariaSnapshot, params) {
-  const { source, target, steps = 10, delay = 0 } = params;
+  const { source, target, steps = 10, delay = 0, method = 'auto' } = params;
   const session = elementLocator.session;
 
   // Helper to get element bounding box by ref
@@ -415,10 +415,10 @@ export async function executeDrag(elementLocator, inputEmulator, pageController,
         const targetX = ${targetX};
         const targetY = ${targetY};
         const steps = ${steps};
+        const method = ${JSON.stringify(method)};
 
         // Check if source is an input[type=range] (slider)
         if (sourceEl && sourceEl.tagName === 'INPUT' && sourceEl.type === 'range') {
-          // For range inputs, calculate the value based on target position
           const rect = sourceEl.getBoundingClientRect();
           const percent = Math.max(0, Math.min(1, (targetX - rect.left) / rect.width));
           const min = parseFloat(sourceEl.min) || 0;
@@ -430,130 +430,86 @@ export async function executeDrag(elementLocator, inputEmulator, pageController,
           return { success: true, method: 'range-input', value: newValue };
         }
 
-        // Try HTML5 Drag and Drop API first
-        if (sourceEl && targetEl) {
+        function doMouseDrag() {
+          const sourceElAtPoint = sourceEl || document.elementFromPoint(sourceX, sourceY);
+          if (!sourceElAtPoint) {
+            return { success: false, error: 'No element at source coordinates' };
+          }
+
+          sourceElAtPoint.dispatchEvent(new MouseEvent('mousedown', {
+            bubbles: true, cancelable: true,
+            clientX: sourceX, clientY: sourceY, button: 0, buttons: 1
+          }));
+
+          const deltaX = (targetX - sourceX) / steps;
+          const deltaY = (targetY - sourceY) / steps;
+
+          for (let i = 1; i <= steps; i++) {
+            const currentX = sourceX + deltaX * i;
+            const currentY = sourceY + deltaY * i;
+            const elAtPoint = document.elementFromPoint(currentX, currentY) || sourceElAtPoint;
+            elAtPoint.dispatchEvent(new MouseEvent('mousemove', {
+              bubbles: true, cancelable: true,
+              clientX: currentX, clientY: currentY, button: 0, buttons: 1
+            }));
+          }
+
+          const targetElAtPoint = document.elementFromPoint(targetX, targetY) || sourceElAtPoint;
+          targetElAtPoint.dispatchEvent(new MouseEvent('mouseup', {
+            bubbles: true, cancelable: true,
+            clientX: targetX, clientY: targetY, button: 0, buttons: 0
+          }));
+
+          return { success: true, method: 'mouse-events' };
+        }
+
+        function doHtml5Drag() {
+          if (!sourceEl || !targetEl) {
+            return { success: false, error: 'HTML5 DnD requires both source and target elements' };
+          }
           try {
-            // Create DataTransfer object
             const dataTransfer = new DataTransfer();
             dataTransfer.effectAllowed = 'all';
             dataTransfer.dropEffect = 'move';
 
-            // Dispatch dragstart on source
-            const dragStartEvent = new DragEvent('dragstart', {
-              bubbles: true,
-              cancelable: true,
-              dataTransfer: dataTransfer,
-              clientX: sourceX,
-              clientY: sourceY
-            });
-            sourceEl.dispatchEvent(dragStartEvent);
-
-            // Dispatch drag on source
-            const dragEvent = new DragEvent('drag', {
-              bubbles: true,
-              cancelable: true,
-              dataTransfer: dataTransfer,
-              clientX: sourceX,
-              clientY: sourceY
-            });
-            sourceEl.dispatchEvent(dragEvent);
-
-            // Dispatch dragenter on target
-            const dragEnterEvent = new DragEvent('dragenter', {
-              bubbles: true,
-              cancelable: true,
-              dataTransfer: dataTransfer,
-              clientX: targetX,
-              clientY: targetY
-            });
-            targetEl.dispatchEvent(dragEnterEvent);
-
-            // Dispatch dragover on target
-            const dragOverEvent = new DragEvent('dragover', {
-              bubbles: true,
-              cancelable: true,
-              dataTransfer: dataTransfer,
-              clientX: targetX,
-              clientY: targetY
-            });
-            targetEl.dispatchEvent(dragOverEvent);
-
-            // Dispatch drop on target
-            const dropEvent = new DragEvent('drop', {
-              bubbles: true,
-              cancelable: true,
-              dataTransfer: dataTransfer,
-              clientX: targetX,
-              clientY: targetY
-            });
-            targetEl.dispatchEvent(dropEvent);
-
-            // Dispatch dragend on source
-            const dragEndEvent = new DragEvent('dragend', {
-              bubbles: true,
-              cancelable: true,
-              dataTransfer: dataTransfer,
-              clientX: targetX,
-              clientY: targetY
-            });
-            sourceEl.dispatchEvent(dragEndEvent);
+            sourceEl.dispatchEvent(new DragEvent('dragstart', {
+              bubbles: true, cancelable: true, dataTransfer, clientX: sourceX, clientY: sourceY
+            }));
+            sourceEl.dispatchEvent(new DragEvent('drag', {
+              bubbles: true, cancelable: true, dataTransfer, clientX: sourceX, clientY: sourceY
+            }));
+            targetEl.dispatchEvent(new DragEvent('dragenter', {
+              bubbles: true, cancelable: true, dataTransfer, clientX: targetX, clientY: targetY
+            }));
+            targetEl.dispatchEvent(new DragEvent('dragover', {
+              bubbles: true, cancelable: true, dataTransfer, clientX: targetX, clientY: targetY
+            }));
+            targetEl.dispatchEvent(new DragEvent('drop', {
+              bubbles: true, cancelable: true, dataTransfer, clientX: targetX, clientY: targetY
+            }));
+            sourceEl.dispatchEvent(new DragEvent('dragend', {
+              bubbles: true, cancelable: true, dataTransfer, clientX: targetX, clientY: targetY
+            }));
 
             return { success: true, method: 'html5-dnd' };
           } catch (e) {
-            // Fall through to mouse events
+            return { success: false, error: e.message };
           }
         }
 
-        // Fallback: Mouse event simulation for non-DnD dragging (e.g., sortable lists, custom drag)
-        const sourceElAtPoint = sourceEl || document.elementFromPoint(sourceX, sourceY);
-        if (!sourceElAtPoint) {
-          return { success: false, error: 'No element at source coordinates' };
+        if (method === 'mouse') return doMouseDrag();
+        if (method === 'html5') return doHtml5Drag();
+
+        // auto: try mouse first (works for jQuery UI, sortable lists), then HTML5 DnD
+        const mouseResult = doMouseDrag();
+        if (mouseResult.success) return mouseResult;
+
+        if (sourceEl && targetEl) {
+          const html5Result = doHtml5Drag();
+          if (html5Result.success) return html5Result;
         }
 
-        // Dispatch mouse events
-        const mouseDown = new MouseEvent('mousedown', {
-          bubbles: true,
-          cancelable: true,
-          clientX: sourceX,
-          clientY: sourceY,
-          button: 0,
-          buttons: 1
-        });
-        sourceElAtPoint.dispatchEvent(mouseDown);
-
-        // Move in steps
-        const deltaX = (targetX - sourceX) / steps;
-        const deltaY = (targetY - sourceY) / steps;
-
-        for (let i = 1; i <= steps; i++) {
-          const currentX = sourceX + deltaX * i;
-          const currentY = sourceY + deltaY * i;
-          const elAtPoint = document.elementFromPoint(currentX, currentY) || sourceElAtPoint;
-
-          const mouseMove = new MouseEvent('mousemove', {
-            bubbles: true,
-            cancelable: true,
-            clientX: currentX,
-            clientY: currentY,
-            button: 0,
-            buttons: 1
-          });
-          elAtPoint.dispatchEvent(mouseMove);
-        }
-
-        // Release at target
-        const targetElAtPoint = document.elementFromPoint(targetX, targetY) || sourceElAtPoint;
-        const mouseUp = new MouseEvent('mouseup', {
-          bubbles: true,
-          cancelable: true,
-          clientX: targetX,
-          clientY: targetY,
-          button: 0,
-          buttons: 0
-        });
-        targetElAtPoint.dispatchEvent(mouseUp);
-
-        return { success: true, method: 'mouse-events' };
+        return mouseResult;
       })()
     `,
     returnByValue: true,

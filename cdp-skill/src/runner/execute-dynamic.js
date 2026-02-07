@@ -393,7 +393,8 @@ export async function loadSiteProfile(domain) {
  */
 export async function executeWriteSiteProfile(params) {
   if (!params || !params.domain || !params.content) {
-    throw new Error('writeSiteProfile requires domain and content');
+    const providedKeys = params ? Object.keys(params).join(', ') : 'none';
+    throw new Error(`writeSiteProfile requires domain and content (got keys: ${providedKeys})`);
   }
 
   const clean = sanitizeDomain(params.domain);

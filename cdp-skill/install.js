@@ -19,6 +19,7 @@ const targets = [
 
 const filesToCopy = [
   'SKILL.md',
+  'EXAMPLES.md',
   'src',
 ];
 

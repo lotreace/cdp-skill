@@ -8,7 +8,8 @@ A lightweight, zero-dependency browser automation library using Chrome DevTools 
 - **AI-agent optimized** - JSON in, JSON out; designed for LLM tool use
 - **Auto-launch Chrome** - Detects and starts Chrome automatically on macOS, Linux, Windows
 - **Accessibility-first** - ARIA snapshots with element refs for resilient automation
-- **Battle-tested** - 600+ unit tests
+- **Site profiles** - Per-domain knowledge files that agents build and share across sessions
+- **Battle-tested** - 1,150+ unit tests
 
 ## Quick Start
 
@@ -16,11 +17,20 @@ A lightweight, zero-dependency browser automation library using Chrome DevTools 
 # Check Chrome status (auto-launches if needed)
 node src/cdp-skill.js '{"steps":[{"chromeStatus":true}]}'
 
-# Navigate to a page
-node src/cdp-skill.js '{"steps":[{"goto":"https://google.com"}]}'
+# Open a tab and navigate
+node src/cdp-skill.js '{"steps":[{"openTab":"https://google.com"}]}'
+
+# Use the returned tab ID for subsequent calls
+node src/cdp-skill.js '{"config":{"tab":"t1"},"steps":[{"click":"#btn"}]}'
 ```
 
 ## Features
+
+### Site Profiles
+- **Per-domain knowledge** - Agents record quirks, selectors, and strategies at `~/.cdp-skill/sites/{domain}.md`
+- **Automatic prompting** - `goto`/`openTab` returns `actionRequired` for unknown sites, `siteProfile` for known ones
+- **Read/write** - `readSiteProfile` and `writeSiteProfile` steps for ad-hoc profile access
+- **Collaborative** - Multiple agents share and improve profiles across sessions
 
 ### Chrome Management
 - **Auto-launch** - Detects Chrome path on macOS/Linux/Windows, launches with remote debugging
@@ -29,12 +39,12 @@ node src/cdp-skill.js '{"steps":[{"goto":"https://google.com"}]}'
 - **Headless support** - Run Chrome without UI via `{"chromeStatus":{"headless":true}}`
 
 ### Navigation
-- **URL navigation** - `goto`, `back`, `forward`
+- **URL navigation** - `goto`, `back`, `forward`, `reload`
 - **Wait conditions** - Network idle, DOM ready, element visible, text appears, URL changes
 - **Navigation detection** - Automatic navigation tracking after clicks
 
 ### Element Interaction
-- **Click** - CSS selectors, ARIA refs, or x/y coordinates
+- **Click** - CSS selectors, ARIA refs, text content, or x/y coordinates
 - **Fill & Type** - Input filling with React/controlled component support
 - **Keyboard** - Key presses, combos (`Control+a`, `Meta+Shift+Enter`)
 - **Hover** - Mouse over with configurable duration
@@ -50,13 +60,24 @@ node src/cdp-skill.js '{"steps":[{"goto":"https://google.com"}]}'
 - **Pointer events** - CSS pointer-events not disabled
 - **Auto-force** - Retries with force when actionability times out
 
+### Action Hooks
+- **readyWhen** - Poll a condition before executing the action
+- **settledWhen** - Poll a condition after the action completes
+- **observe** - Run a function after settlement, return value in response
+
 ### Accessibility & Queries
 - **ARIA snapshots** - Get accessibility tree as YAML with clickable refs
+- **Snapshot search** - Find elements by text, pattern, or role within snapshots
 - **Role queries** - Find elements by ARIA role (`button`, `textbox`, `link`, etc.)
 - **CSS queries** - Traditional selector-based queries
 - **Multi-query** - Batch multiple queries in one step
 - **Page inspection** - Quick overview of page structure
 - **Coordinate discovery** - `refAt`, `elementsAt`, `elementsNear` for visual-based targeting
+
+### Dynamic Browser Execution
+- **pageFunction** - Run agent-generated JavaScript in the browser with serialized return values
+- **poll** - Poll a predicate function until truthy or timeout
+- **pipeline** - Compile micro-operations (find+fill, find+click, waitFor, sleep) into a single async JS function with zero roundtrips
 
 ### Frame Support
 - **List frames** - Enumerate all iframes
@@ -65,13 +86,13 @@ node src/cdp-skill.js '{"steps":[{"goto":"https://google.com"}]}'
 - **Shadow DOM** - Pierce shadow roots with `pierceShadow` option in snapshots
 
 ### Screenshots & PDF
-- **Viewport capture** - Current view
+- **Auto-capture** - Screenshots taken on every visual action
 - **Full page** - Entire scrollable area
 - **Element capture** - Specific element by selector
 - **PDF generation** - With metadata (page count, dimensions)
-- **Temp directory** - Auto-saves to platform temp dir for relative paths
 
 ### Data Extraction
+- **Structured extraction** - Tables and lists with auto-detection
 - **Text/HTML/attributes** - Extract content from elements
 - **Console logs** - Capture browser console output
 - **Cookies** - Get, set, delete with expiration support
@@ -93,34 +114,59 @@ node src/cdp-skill.js '{"steps":[{"goto":"https://google.com"}]}'
 - **Mobile mode** - Touch events, mobile user agent
 
 ### Tab Management
-- **List tabs** - See all open tabs with targetId
-- **Close tabs** - Clean up when done
-- **Tab reuse** - Pass targetId to reuse existing tab
-
-### Debug Mode
-- **Before/after screenshots** - Capture state around each action
-- **DOM snapshots** - HTML at each step
-- **Output to temp dir** - Automatic cleanup-friendly location
+- **Open/close tabs** - Create and clean up tabs
+- **List tabs** - See all open tabs
+- **Tab reuse** - Pass tab ID to reuse existing tab across CLI invocations
 
 ## Documentation
 
-- **[SKILL.md](./SKILL.md)** - Complete step reference and API documentation
-- **[src/](./src/)** - Source code with JSDoc comments
+- **[SKILL.md](./cdp-skill/SKILL.md)** - Complete step reference and API documentation
+- **[EXAMPLES.md](./cdp-skill/EXAMPLES.md)** - JSON examples, response shapes, and worked patterns
 
 ## Architecture
 
 ```
 src/
-├── cdp-skill.js   # CLI entry point
-├── cdp.js         # CDP connection, discovery, Chrome launcher
-├── page.js        # Page controller, navigation, cookies
-├── dom.js         # Element location, input emulation, clicks
-├── aria.js        # Accessibility snapshots, role queries
-├── capture.js     # Screenshots, PDF, console, network
-├── diff.js        # Snapshot diffing, context capture
-├── runner.js      # Step validation and execution
-├── utils.js       # Errors, key validation, device presets
-└── index.js       # Public API exports
+├── cdp-skill.js              # CLI entry point, JSON parsing, response assembly
+├── aria.js                   # Accessibility snapshots, role queries
+├── diff.js                   # Snapshot diffing, viewport change detection
+├── utils.js                  # Errors, key validation, device presets
+├── constants.js              # Shared constants
+├── index.js                  # Public API exports
+├── cdp/                      # CDP connection layer
+│   ├── browser.js            #   Chrome launcher, path detection
+│   ├── connection.js         #   WebSocket CDP connection
+│   ├── discovery.js          #   Tab discovery, target filtering
+│   └── target-and-session.js #   Target attachment, session management
+├── page/                     # Page-level operations
+│   ├── page-controller.js    #   Navigation, frame switching, eval
+│   ├── cookie-manager.js     #   Cookie get/set/delete
+│   ├── dom-stability.js      #   DOM mutation and stability detection
+│   └── wait-utilities.js     #   Wait conditions (selector, text, URL)
+├── dom/                      # Element interaction
+│   ├── element-locator.js    #   CSS/ref/text element finding
+│   ├── actionability.js      #   Visibility, stability, pointer-events checks
+│   ├── click-executor.js     #   Click dispatch (CDP, JS, coordinate)
+│   ├── fill-executor.js      #   Input filling, React support
+│   ├── input-emulator.js     #   Keyboard/mouse CDP commands
+│   └── element-handle.js     #   Element box model, scrolling
+├── capture/                  # Output capture
+│   ├── screenshot-capture.js #   Viewport and full-page screenshots
+│   ├── pdf-capture.js        #   PDF generation
+│   ├── console-capture.js    #   Console log capture
+│   ├── eval-serializer.js    #   JS value serialization
+│   └── error-aggregator.js   #   Error collection and formatting
+└── runner/                   # Step orchestration
+    ├── step-executors.js     #   Main step dispatch and execution
+    ├── step-validator.js     #   Step definition validation
+    ├── context-helpers.js    #   Step types, action context
+    ├── execute-dynamic.js    #   pageFunction, poll, pipeline, site profiles
+    ├── execute-interaction.js#   click, hover, drag
+    ├── execute-input.js      #   fill, fillActive, selectOption
+    ├── execute-navigation.js #   wait, scroll, waitForNavigation
+    ├── execute-query.js      #   snapshot, query, inspect, getBox, etc.
+    ├── execute-form.js       #   validate, submit, extract, assert
+    └── execute-browser.js    #   eval, pdf, cookies, console, tabs
 ```
 
 ## Requirements

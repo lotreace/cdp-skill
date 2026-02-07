@@ -740,8 +740,16 @@ const SNAPSHOT_SCRIPT = `
 
     // Text content for buttons, links, etc.
     const role = getAriaRole(el);
-    if (['button', 'link', 'menuitem', 'option', 'tab', 'treeitem', 'heading'].includes(role)) {
+    if (['button', 'link', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'option',
+         'tab', 'treeitem', 'heading', 'gridcell', 'listitem', 'columnheader',
+         'rowheader', 'cell', 'switch'].includes(role)) {
       return normalizeWhitespace(el.textContent);
+    }
+
+    // Short-text fallback for any remaining role with empty name
+    if (role) {
+      const fallbackText = normalizeWhitespace(el.textContent);
+      if (fallbackText && fallbackText.length <= 80) return fallbackText;
     }
 
     return '';

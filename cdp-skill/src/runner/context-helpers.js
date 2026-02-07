@@ -19,7 +19,8 @@ export const STEP_TYPES = [
   'closeTab', 'openTab', 'type', 'select', 'selectOption', 'validate', 'submit',
   'assert', 'switchToFrame', 'switchToMainFrame', 'listFrames', 'drag', 'formState',
   'extract', 'getDom', 'getBox', 'fillActive', 'refAt', 'elementsAt', 'elementsNear',
-  'reload', 'pageFunction', 'poll', 'pipeline', 'writeSiteProfile', 'readSiteProfile'
+  'reload', 'pageFunction', 'poll', 'pipeline', 'writeSiteProfile', 'readSiteProfile',
+  'connectTab'
 ];
 
 // Visual actions that trigger auto-screenshot
@@ -28,7 +29,7 @@ export const VISUAL_ACTIONS = [
   'goto', 'reload', 'click', 'fill', 'fillForm', 'type', 'hover', 'press', 'scroll', 'wait',  // interactions
   'snapshot', 'snapshotSearch', 'query', 'queryAll', 'inspect', 'eval', 'extract', 'formState',  // queries
   'drag', 'select', 'selectOption', 'validate', 'submit', 'assert',  // other page interactions
-  'openTab'  // navigation actions - behave like goto for auto-snapshot
+  'openTab', 'connectTab'  // navigation actions - behave like goto for auto-snapshot
 ];
 
 /**

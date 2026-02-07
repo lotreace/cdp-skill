@@ -548,6 +548,9 @@ export function validateStepInternal(step) {
         if (!params.target) {
           errors.push('drag requires a target selector or coordinates');
         }
+        if (params.method !== undefined && !['auto', 'mouse', 'html5'].includes(params.method)) {
+          errors.push('drag method must be "auto", "mouse", or "html5"');
+        }
       }
       break;
 
@@ -757,11 +760,12 @@ export function validateStepInternal(step) {
       if (!params || typeof params !== 'object') {
         errors.push('writeSiteProfile requires an object with domain and content');
       } else {
+        const providedKeys = Object.keys(params).join(', ');
         if (!params.domain || typeof params.domain !== 'string') {
-          errors.push('writeSiteProfile requires a non-empty domain string');
+          errors.push(`writeSiteProfile requires a non-empty domain string (got keys: ${providedKeys})`);
         }
         if (!params.content || typeof params.content !== 'string') {
-          errors.push('writeSiteProfile requires a non-empty content string');
+          errors.push(`writeSiteProfile requires a non-empty content string (got keys: ${providedKeys})`);
         }
       }
       break;
@@ -777,6 +781,26 @@ export function validateStepInternal(step) {
         }
       } else {
         errors.push('readSiteProfile requires a domain string or object with domain');
+      }
+      break;
+
+    case 'connectTab':
+      if (typeof params === 'string') {
+        if (params.length === 0) {
+          errors.push('connectTab requires a non-empty alias or targetId string');
+        }
+      } else if (params && typeof params === 'object') {
+        if (!params.targetId && !params.url) {
+          errors.push('connectTab object requires targetId or url');
+        }
+        if (params.url !== undefined && typeof params.url !== 'string') {
+          errors.push('connectTab url must be a string (regex pattern)');
+        }
+        if (params.targetId !== undefined && typeof params.targetId !== 'string') {
+          errors.push('connectTab targetId must be a string');
+        }
+      } else {
+        errors.push('connectTab requires a string (alias/targetId) or object with {targetId} or {url}');
       }
       break;
   }
