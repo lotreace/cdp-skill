@@ -81,10 +81,15 @@ Write your execution trace to `{{run_dir}}/{{test_id}}.trace.json` with this str
     "workaroundCount": <eval_click_or_eval_fill_count>
   },
   "observations": ["Framework detected", "Site quirks noticed"],
-  "improvements": [
-    {"category": "actions", "description": "Description of potential improvement"}
-  ],
-  "bugs": []
+  "feedback": [
+    {
+      "type": "improvement|bug|workaround",
+      "area": "actions|snapshot|navigation|iframe|input|error-handling|shadow-dom|timing|other",
+      "title": "Short actionable title",
+      "detail": "What happened, what you expected, what you had to do instead",
+      "files": ["src/relevant-file.js"]
+    }
+  ]
 }
 ```
 
@@ -98,6 +103,18 @@ TRACE: {{test_id}} | wallClock={{ms}}ms | steps={{N}} | errors={{N}} | tab={{tN}
 ```
 
 Do NOT include explanations, observations, or debugging info in your response — put those in the trace file instead.
+
+## Feedback (REQUIRED)
+
+**You MUST include at least one entry in the `feedback` array.** This is how the flywheel learns. After completing the test, reflect on your experience and report:
+
+- **Workarounds** (`type: "workaround"`): Any time you used eval, pageFunction, or a non-obvious approach because the direct cdp-skill step didn't work. Example: "Used eval to click because CDP click was intercepted by overlay"
+- **Bugs** (`type: "bug"`): Errors, crashes, or incorrect behavior from cdp-skill. Example: "snapshot returned empty after navigating to SPA route"
+- **Improvements** (`type: "improvement"`): Missing features or capabilities that would have made the task easier. Example: "No way to wait for specific text to appear without polling via pageFunction"
+
+**Areas**: `actions` (click/fill/hover/drag), `snapshot` (aria tree/refs), `navigation` (goto/back/wait), `iframe` (frame switching/context), `input` (typing/keyboard), `error-handling` (error messages/recovery), `shadow-dom`, `timing` (waits/network), `other`
+
+If the test went perfectly with no issues, still add one entry noting what worked well as `type: "improvement"` with a positive observation.
 
 ## Guidelines
 

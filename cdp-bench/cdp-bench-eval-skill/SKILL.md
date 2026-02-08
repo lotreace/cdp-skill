@@ -294,7 +294,23 @@ recorder.recordCrankSummary({
 });
 ```
 
-#### Step 16b: Rebuild Dashboard Dataset
+#### Step 16b: Aggregate Runner Feedback
+
+Run the FeedbackAggregator to close the flywheel loop — runners report what works and what doesn't, and that data flows back into `improvements.json`:
+
+```bash
+node cdp-bench/flywheel/FeedbackAggregator.js --run-dir ${runDir} --improvements improvements.json --apply
+```
+
+This:
+- Extracts structured feedback from all `.trace.json` files in the run
+- Matches feedback to existing open issues (upvotes matches)
+- Creates new issues from unmatched bugs/workarounds (improvements need 2+ reports)
+- Prints a human-readable report + JSON summary
+
+**Save the JSON output** for inclusion in the crank report (Step 17).
+
+#### Step 16c: Rebuild Dashboard Dataset
 
 ```bash
 node dashboard/scripts/build-dataset.js
@@ -312,7 +328,14 @@ Fix: #{id} {title} → {outcome}
 SHS: {old} → {new} (delta: {delta})
 Tests: {passed}/{total} passed
 Regression gate: {pass/fail}
+
+--- Runner Feedback ---
+{total} feedback entries from {trace_count} traces ({deduped} unique)
+Matched to existing issues: {matched_count} (upvoted: {upvoted_list})
+New feedback: {unmatched_count} ({created_count} auto-created as issues)
 ```
+
+If no feedback was collected, note: "No feedback collected — runners should populate the feedback array in traces."
 
 #### Step 18: Cleanup
 
@@ -351,6 +374,7 @@ cdp-bench/
     diagnosis-engine.js              # Result analysis + improvements.json cross-reference
     DecisionEngine.js                # History-aware recommendation re-ranking
     FlywheelRecorder.js              # Fix outcome + crank summary persistence
+    FeedbackAggregator.js            # Runner feedback → improvements.json closed loop
     prompts/
       runner.md                      # Runner agent prompt template
       diagnostician.md               # Diagnostician prompt template
