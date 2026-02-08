@@ -1239,10 +1239,21 @@ const SNAPSHOT_SCRIPT = `
     return document.querySelector(selector);
   }
 
-  // Main execution
-  const root = resolveRoot(rootSelector);
+  // Main execution - auto-scope to <main> when no root specified (reduces footer/boilerplate noise)
+  let autoScoped = false;
+  let root;
+  if (!rootSelector) {
+    const mainEl = document.querySelector('main, [role="main"]');
+    if (mainEl) {
+      root = mainEl;
+      autoScoped = true;
+    } else {
+      root = document.body;
+    }
+  } else {
+    root = resolveRoot(rootSelector);
+  }
   if (!root) {
-    // Provide helpful error message based on selector type
     const roleMatch = rootSelector && rootSelector.match(/^role=(.+)$/i);
     if (roleMatch) {
       return { error: 'Root element not found for role: ' + roleMatch[1] + '. Use CSS selector (e.g., "main", "#container") or check that an element with this role exists.' };
@@ -1319,7 +1330,34 @@ const SNAPSHOT_SCRIPT = `
     return generateSelectorForElement(el);
   }
 
-  const yaml = tree.children ? tree.children.map(c => renderYaml(c, '')).join('\\n') : renderYaml(tree, '');
+  // Build landmark header when auto-scoped to main (shows what else is on the page)
+  let landmarkHeader = '';
+  if (autoScoped) {
+    const LM_QUERIES = [
+      { sel: 'nav, [role="navigation"]', role: 'navigation' },
+      { sel: 'header, [role="banner"]', role: 'banner' },
+      { sel: 'footer, [role="contentinfo"]', role: 'contentinfo' },
+      { sel: 'aside, [role="complementary"]', role: 'complementary' },
+      { sel: '[role="search"]', role: 'search' }
+    ];
+    const found = [];
+    for (const { sel, role } of LM_QUERIES) {
+      try {
+        const count = document.querySelectorAll(sel).length;
+        if (count > 0) {
+          const label = document.querySelector(sel).getAttribute('aria-label');
+          found.push(label ? role + ' "' + label + '"' : role);
+        }
+      } catch (e) {}
+    }
+    if (found.length > 0) {
+      landmarkHeader = '# Auto-scoped to main content. Other landmarks: ' + found.join(', ') + '\\n# Use {root: "body"} for full page\\n';
+    } else {
+      landmarkHeader = '# Auto-scoped to main content. Use {root: "body"} for full page\\n';
+    }
+  }
+
+  const yaml = landmarkHeader + (tree.children ? tree.children.map(c => renderYaml(c, '')).join('\\n') : renderYaml(tree, ''));
 
   // Store refs globally for later use (e.g., click by ref)
   // When preserveRefs is true, merge new refs into existing map instead of overwriting
@@ -1346,13 +1384,15 @@ const SNAPSHOT_SCRIPT = `
   // Store page hash for change detection
   window.__ariaSnapshotHash = computePageHash();
 
-  return {
+  const snapshotResult = {
     tree,
     yaml,
     refs,
     truncated: limitReached,
     snapshotId: 's' + currentSnapshotId
   };
+  if (autoScoped) snapshotResult.autoScoped = true;
+  return snapshotResult;
 })
 `;
 
