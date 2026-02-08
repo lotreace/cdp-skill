@@ -3,3 +3,6 @@
 /cdp-skill/log/
 /dev/
 /cdp-bench/runs/
+/dashboard/node_modules/
+/dashboard/dist/
+/dashboard/data/

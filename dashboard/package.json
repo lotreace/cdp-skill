@@ -1,0 +1,17 @@
+{
+  "name": "cdp-bench-dashboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "dataset": "node scripts/build-dataset.js"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.7"
+  },
+  "devDependencies": {
+    "vite": "^6.1.0"
+  }
+}
