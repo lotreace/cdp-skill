@@ -294,6 +294,14 @@ recorder.recordCrankSummary({
 });
 ```
 
+#### Step 16b: Rebuild Dashboard Dataset
+
+```bash
+node dashboard/scripts/build-dataset.js
+```
+
+This regenerates `dashboard/data/dataset.json` from the updated baselines, trend, and run traces. If the Vite dev server is running, it auto-reloads the browser.
+
 ### Phase 6: REPORT
 
 #### Step 17: Print Summary
