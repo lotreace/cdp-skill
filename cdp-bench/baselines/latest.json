@@ -1,11 +1,11 @@
 {
-  "version": "1.0.8",
-  "timestamp": "2026-02-07T21:28:26.676Z",
-  "runId": "2026-02-07T21-21-43",
-  "shs": 99,
+  "version": "1.0.9",
+  "timestamp": "2026-02-07T23:05:23.676Z",
+  "runId": "2026-02-07T22-30-14",
+  "shs": 100,
   "passRate": 1,
-  "avgCompletion": 0.993,
-  "perfectRate": 0.95,
+  "avgCompletion": 1,
+  "perfectRate": 1,
   "avgEfficiency": 1,
   "categoryCoverage": 1,
   "tests": {
@@ -75,9 +75,9 @@
       "ratcheted": true
     },
     "024-demoqa-forms": {
-      "score": 0.85,
-      "composite": 0.91,
-      "ratcheted": false
+      "score": 1,
+      "composite": 1,
+      "ratcheted": true
     },
     "025-tinymce-editor": {
       "score": 1,

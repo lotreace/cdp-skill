@@ -1,7 +1,7 @@
 {
   "meta": {
     "totalVotes": 156,
-    "lastUpdated": "2026-02-07T22:00:00Z"
+    "lastUpdated": "2026-02-07T23:05:14.201Z"
   },
   "issues": [
     {
@@ -16,7 +16,9 @@
       ],
       "expected": "Step timeout should be honored",
       "workaround": null,
-      "files": ["src/runner.js"],
+      "files": [
+        "src/runner.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -31,23 +33,10 @@
       ],
       "expected": "Frame context should persist with tab session",
       "workaround": null,
-      "files": ["src/cdp-skill.js", "src/page.js"],
-      "fixAttempts": []
-    },
-    {
-      "id": "2.2",
-      "section": "Frame / Context Issues",
-      "title": "switchToFrame doesn't change action context",
-      "votes": 6,
-      "status": "open",
-      "symptoms": [
-        "After switchToFrame, snapshot still returns main frame content",
-        "Cannot get accessibility tree of iframe content",
-        "click and getDom also still execute in main frame context"
+      "files": [
+        "src/cdp-skill.js",
+        "src/page.js"
       ],
-      "expected": "All actions should respect current frame context after switchToFrame",
-      "workaround": "Use eval to access iframe content",
-      "files": ["src/aria.js", "src/runner.js", "src/dom.js"],
       "fixAttempts": []
     },
     {
@@ -63,7 +52,9 @@
       ],
       "expected": "listFrames should detect and list all iframes including cross-origin",
       "workaround": "JavaScript eval to remove iframe elements or coordinate-based clicking",
-      "files": ["src/cdp-skill.js"],
+      "files": [
+        "src/cdp-skill.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -79,7 +70,10 @@
       ],
       "expected": "Add piercesShadow option or support >>> combinator",
       "workaround": "Use eval with manual shadow root traversal",
-      "files": ["src/dom.js", "src/aria.js"],
+      "files": [
+        "src/dom.js",
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -94,7 +88,9 @@
       ],
       "expected": "Hover should accept x/y coordinates",
       "workaround": null,
-      "files": ["src/runner.js"],
+      "files": [
+        "src/runner.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -109,7 +105,9 @@
       ],
       "expected": "Key presses should reach the focused input in dialogs",
       "workaround": null,
-      "files": ["src/runner.js"],
+      "files": [
+        "src/runner.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -124,7 +122,9 @@
       ],
       "expected": "Option to preserve selection during click",
       "workaround": null,
-      "files": ["src/dom.js"],
+      "files": [
+        "src/dom.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -139,7 +139,9 @@
       ],
       "expected": "Fill with empty string should clear the input",
       "workaround": "Use eval with input.value = '' + dispatchEvent, or Backspace keypresses",
-      "files": ["src/runner.js"],
+      "files": [
+        "src/runner.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -155,7 +157,9 @@
       ],
       "expected": "Keyboard shortcuts with modifiers should trigger same handlers as physical presses",
       "workaround": "Click the button that triggers the same action",
-      "files": ["src/runner.js"],
+      "files": [
+        "src/runner.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -170,7 +174,9 @@
       ],
       "expected": "Immediate error like 'Invalid CSS selector'",
       "workaround": null,
-      "files": ["src/dom.js"],
+      "files": [
+        "src/dom.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -185,7 +191,9 @@
       ],
       "expected": "Always return JSON with error details",
       "workaround": null,
-      "files": ["src/cdp-skill.js"],
+      "files": [
+        "src/cdp-skill.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -199,7 +207,9 @@
       ],
       "expected": "Single, clear timeout message",
       "workaround": null,
-      "files": ["src/dom.js"],
+      "files": [
+        "src/dom.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -214,7 +224,9 @@
       ],
       "expected": "Snapshot should capture full accessibility tree for React SPAs",
       "workaround": null,
-      "files": ["src/aria.js"],
+      "files": [
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -229,7 +241,9 @@
       ],
       "expected": "Make delay configurable or increase default",
       "workaround": null,
-      "files": ["src/runner.js"],
+      "files": [
+        "src/runner.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -243,7 +257,9 @@
       ],
       "expected": "Include tooltip content in snapshot",
       "workaround": null,
-      "files": ["src/aria.js"],
+      "files": [
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -259,25 +275,9 @@
       ],
       "expected": "Support :has-text() pseudo-selector or similar text matching",
       "workaround": null,
-      "files": ["src/dom.js"],
-      "fixAttempts": []
-    },
-    {
-      "id": "6.5",
-      "section": "Snapshot / Query Issues",
-      "title": "Element refs go stale between snapshot and subsequent actions",
-      "votes": 14,
-      "status": "open",
-      "symptoms": [
-        "Full snapshot returns refs, immediate click fails with 'Element not found'",
-        "viewportSnapshot refs differ from full snapshot refs",
-        "Occurs on dynamic React sites where DOM updates between operations",
-        "Click on ref that triggers navigation reports 'ref not found' even though navigation succeeded",
-        "React date picker re-render causes refs to become stale"
+      "files": [
+        "src/dom.js"
       ],
-      "expected": "Refs should remain valid for at least the duration of the agent turn",
-      "workaround": "Use click with text property or CSS selector instead of refs",
-      "files": ["src/aria.js", "src/dom.js"],
       "fixAttempts": []
     },
     {
@@ -292,7 +292,9 @@
       ],
       "expected": "Drag should move the slider thumb and update the value",
       "workaround": "Use click-at-position on slider track or keyboard arrow keys",
-      "files": ["src/runner.js"],
+      "files": [
+        "src/runner.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -308,7 +310,10 @@
       ],
       "expected": "Detect when click opens new tab, return info about new tab in response",
       "workaround": "Use chromeStatus after clicks that may open new tabs",
-      "files": ["src/runner.js", "src/cdp-skill.js"],
+      "files": [
+        "src/runner.js",
+        "src/cdp-skill.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -323,7 +328,9 @@
       ],
       "expected": "DOMRect should be serialized automatically or clearly documented",
       "workaround": "Use JSON.stringify() explicitly",
-      "files": ["src/runner.js"],
+      "files": [
+        "src/runner.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -338,7 +345,9 @@
       ],
       "expected": "Scroll should report correct position after scrolling",
       "workaround": null,
-      "files": ["src/runner.js"],
+      "files": [
+        "src/runner.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -353,7 +362,10 @@
       ],
       "expected": "Session should remain responsive after extended use",
       "workaround": "Periodically close and reopen tabs",
-      "files": ["src/cdp.js", "src/page.js"],
+      "files": [
+        "src/cdp.js",
+        "src/page.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -368,7 +380,10 @@
       ],
       "expected": "Add framework detection to goto and openTab responses",
       "workaround": null,
-      "files": ["src/runner.js", "src/frameworks.js"],
+      "files": [
+        "src/runner.js",
+        "src/frameworks.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -384,7 +399,9 @@
       ],
       "expected": "Implement waitForNetworkQuiet tracking in-flight requests with idle period",
       "workaround": null,
-      "files": ["src/network.js"],
+      "files": [
+        "src/network.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -399,7 +416,10 @@
       ],
       "expected": "Never cache element references, re-resolve selector for every action",
       "workaround": null,
-      "files": ["src/dom.js", "src/aria.js"],
+      "files": [
+        "src/dom.js",
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -413,7 +433,9 @@
       ],
       "expected": "Use MutationObserver for real-time DOM change detection",
       "workaround": null,
-      "files": ["src/dom.js"],
+      "files": [
+        "src/dom.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -427,7 +449,10 @@
       ],
       "expected": "Add XPath selector support alongside CSS",
       "workaround": null,
-      "files": ["src/dom.js", "src/xpath.js"],
+      "files": [
+        "src/dom.js",
+        "src/xpath.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -442,7 +467,9 @@
       ],
       "expected": "Filter text matches to return only innermost matching elements",
       "workaround": null,
-      "files": ["src/dom.js"],
+      "files": [
+        "src/dom.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -457,7 +484,9 @@
       ],
       "expected": "Support scoped snapshots via focusSelector",
       "workaround": null,
-      "files": ["src/aria.js"],
+      "files": [
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -471,7 +500,10 @@
       ],
       "expected": "Monkey-patch Element.attachShadow() to maintain WeakMap of closed shadow roots",
       "workaround": null,
-      "files": ["src/dom.js", "src/piercer.js"],
+      "files": [
+        "src/dom.js",
+        "src/piercer.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -485,7 +517,10 @@
       ],
       "expected": "Encode element IDs as frameOrdinal-backendNodeId pairs, support >> hop notation",
       "workaround": null,
-      "files": ["src/aria.js", "src/dom.js"],
+      "files": [
+        "src/aria.js",
+        "src/dom.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -499,7 +534,9 @@
       ],
       "expected": "Progressive depth reduction on encoder errors, re-hydrate missing branches",
       "workaround": null,
-      "files": ["src/aria.js"],
+      "files": [
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -515,7 +552,10 @@
       ],
       "expected": "Refs should be written to file or omitted from JSON entirely",
       "workaround": null,
-      "files": ["src/runner/execute-query.js", "src/runner/step-executors.js"],
+      "files": [
+        "src/runner/execute-query.js",
+        "src/runner/step-executors.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -531,7 +571,9 @@
       ],
       "expected": "viewportSnapshot should only be included on action responses",
       "workaround": null,
-      "files": ["src/runner/step-executors.js"],
+      "files": [
+        "src/runner/step-executors.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -546,7 +588,9 @@
       ],
       "expected": "Summary mode should return zero refs",
       "workaround": null,
-      "files": ["src/runner/execute-query.js"],
+      "files": [
+        "src/runner/execute-query.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -562,7 +606,9 @@
       ],
       "expected": "Names truncated to ~150 characters by default, with maxNameLength option",
       "workaround": null,
-      "files": ["src/aria.js"],
+      "files": [
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -578,7 +624,10 @@
       ],
       "expected": "Option to exclude landmark roles or auto-scope to role=main",
       "workaround": "Use {\"snapshot\": {\"root\": \"role=main\"}} to scope to main content",
-      "files": ["src/aria.js", "src/runner/execute-query.js"],
+      "files": [
+        "src/aria.js",
+        "src/runner/execute-query.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -594,7 +643,9 @@
       ],
       "expected": "Option to exclude fixed/sticky elements or auto-detect and omit after first snapshot",
       "workaround": null,
-      "files": ["src/aria.js"],
+      "files": [
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -610,7 +661,9 @@
       ],
       "expected": "Viewport element count should be accurate",
       "workaround": null,
-      "files": ["src/aria.js"],
+      "files": [
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -626,7 +679,10 @@
       ],
       "expected": "Headings should get refs as they are navigation targets",
       "workaround": null,
-      "files": ["src/aria.js", "src/runner/execute-query.js"],
+      "files": [
+        "src/aria.js",
+        "src/runner/execute-query.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -642,7 +698,9 @@
       ],
       "expected": "Interactive should always be strictly smaller than full",
       "workaround": null,
-      "files": ["src/aria.js"],
+      "files": [
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -658,7 +716,9 @@
       ],
       "expected": "Hash should include lightweight checksum of interactive element states",
       "workaround": null,
-      "files": ["src/aria.js"],
+      "files": [
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -673,7 +733,9 @@
       ],
       "expected": "Display like combobox \"Option 2\" [ref=s1e1] showing selected option",
       "workaround": null,
-      "files": ["src/aria.js"],
+      "files": [
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -688,7 +750,9 @@
       ],
       "expected": "Table cells should show text content by default",
       "workaround": "Use extract step or snapshot with includeText: true",
-      "files": ["src/aria.js"],
+      "files": [
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -703,7 +767,9 @@
       ],
       "expected": "Default matching should use word boundaries, add fuzzy parameter for control",
       "workaround": null,
-      "files": ["src/runner/execute-query.js"],
+      "files": [
+        "src/runner/execute-query.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -719,7 +785,9 @@
       ],
       "expected": "Add states field to search results",
       "workaround": null,
-      "files": ["src/runner/execute-query.js"],
+      "files": [
+        "src/runner/execute-query.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -734,7 +802,9 @@
       ],
       "expected": "Include article/section context in path with nearest named ancestor",
       "workaround": null,
-      "files": ["src/runner/execute-query.js"],
+      "files": [
+        "src/runner/execute-query.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -749,7 +819,9 @@
       ],
       "expected": "Fall back to innerText, value, title, or child text content",
       "workaround": null,
-      "files": ["src/aria.js"],
+      "files": [
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -765,7 +837,10 @@
       ],
       "expected": "Monkey-patch history.pushState/replaceState and detect URL changes within ~500ms",
       "workaround": "Add explicit wait steps after every link click on SPAs",
-      "files": ["src/runner/execute-interaction.js", "src/runner/step-executors.js"],
+      "files": [
+        "src/runner/execute-interaction.js",
+        "src/runner/step-executors.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -780,7 +855,9 @@
       ],
       "expected": "Detect same-origin URL with only hash difference and use location.hash + scroll",
       "workaround": null,
-      "files": ["src/runner/execute-navigation.js"],
+      "files": [
+        "src/runner/execute-navigation.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -795,7 +872,9 @@
       ],
       "expected": "context.modal should only be populated for role=dialog or role=alertdialog",
       "workaround": null,
-      "files": ["src/runner/step-executors.js"],
+      "files": [
+        "src/runner/step-executors.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -810,7 +889,9 @@
       ],
       "expected": "selectOption should produce diff showing value change",
       "workaround": null,
-      "files": ["src/runner/step-executors.js"],
+      "files": [
+        "src/runner/step-executors.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -825,7 +906,9 @@
       ],
       "expected": "When click(text) finds multiple matches, return error listing all or prefer closest to viewport center",
       "workaround": null,
-      "files": ["src/dom/click-executor.js"],
+      "files": [
+        "src/dom/click-executor.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -840,7 +923,9 @@
       ],
       "expected": "Strip HTML tags from accessible names during snapshot generation",
       "workaround": null,
-      "files": ["src/aria.js"],
+      "files": [
+        "src/aria.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -856,7 +941,10 @@
       ],
       "expected": "Auto-reconnect to same tab after page reload",
       "workaround": null,
-      "files": ["src/cdp-skill.js", "src/page.js"],
+      "files": [
+        "src/cdp-skill.js",
+        "src/page.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -871,7 +959,10 @@
       ],
       "expected": "Add reconnect step that tries to re-attach by URL pattern or tab ID",
       "workaround": null,
-      "files": ["src/cdp-skill.js", "src/page.js"],
+      "files": [
+        "src/cdp-skill.js",
+        "src/page.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -886,7 +977,9 @@
       ],
       "expected": "Add clickAndSnapshot that performs both in one invocation",
       "workaround": null,
-      "files": ["src/runner.js"],
+      "files": [
+        "src/runner.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -902,7 +995,10 @@
       ],
       "expected": "waitForSettled step that waits for no DOM mutations for N milliseconds",
       "workaround": null,
-      "files": ["src/runner.js", "src/dom.js"],
+      "files": [
+        "src/runner.js",
+        "src/dom.js"
+      ],
       "fixAttempts": []
     },
     {
@@ -918,7 +1014,10 @@
       ],
       "expected": "Auto-append discovered quirks to site profile after failures",
       "workaround": null,
-      "files": ["src/cdp-skill.js", "src/site-profiles.js"],
+      "files": [
+        "src/cdp-skill.js",
+        "src/site-profiles.js"
+      ],
       "fixAttempts": []
     }
   ],
@@ -964,6 +1063,20 @@
       "votes": 4,
       "implementedAs": "Command-level screenshots only",
       "fixedDate": "2026-01-22"
+    },
+    {
+      "id": "2.2",
+      "title": "switchToFrame doesn't change action context",
+      "votes": 6,
+      "implementedAs": "Frame context DI via getFrameContext() injected into element-locator, aria, click-executor",
+      "fixedDate": "2026-02-07"
+    },
+    {
+      "id": "6.5",
+      "title": "Element refs go stale between snapshot and subsequent actions",
+      "votes": 14,
+      "implementedAs": "Document-wide role+name search fallback for stale element references, inline re-resolution in JS click and verification paths",
+      "fixedDate": "2026-02-07"
     }
   ]
 }

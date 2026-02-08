@@ -6,14 +6,24 @@ user_invocable: true
 
 # CDP-Bench Flywheel
 
-Deterministic evaluation system for cdp-skill. Each "crank turn" measures test performance, validates against live browser state, diagnoses failures, and optionally applies fixes with regression protection.
+Improvement-first evaluation system for cdp-skill. Each "crank turn" selects the highest-impact improvement from `improvements.json`, implements it, then measures and validates the result with regression protection.
+
+## Context Window Safety
+
+**The conductor agent MUST protect its context window.** Previous crashes occurred because runner agent outputs (containing verbose CLI responses with screenshots and snapshots) were read back into the conductor's context via `TaskOutput` or `Read`.
+
+Rules:
+1. **Never call `TaskOutput`** on runner agents — their output is irrelevant to the conductor. Runners write trace files to disk; the conductor reads only the TraceCollector summary.
+2. **Never `Read` trace files** unless debugging a specific single-test failure. The validator harness reads them.
+3. **Never `Read` validation result files individually.** Use `validation-summary.json` which the harness writes.
+4. **Use `head_limit` on Grep/Read** when you must inspect run artifacts — cap at 20-30 lines.
+5. **Runner agents are fire-and-forget.** Launch them in background, then poll for completion via TraceCollector.
 
 ## Usage
 
 ```
-/cdp-bench-eval-skill                     # Full crank: measure + validate + diagnose + fix + verify
-/cdp-bench-eval-skill --measure           # Measure + validate + diagnose only (no code changes)
-/cdp-bench-eval-skill --fix-only          # Fix top diagnosis from last run (no re-measure)
+/cdp-bench-eval-skill                     # Full crank: select + fix + measure + validate + record
+/cdp-bench-eval-skill --measure           # Measure only (no fix, just score current state)
 /cdp-bench-eval-skill --test 001          # Single test with validation (prefix match)
 /cdp-bench-eval-skill --test 001 --debug  # Single test with debug logging
 ```
@@ -64,9 +74,95 @@ SHS = 40 * passRate + 25 * avgCompletion + 15 * perfectRate + 10 * avgEfficiency
 
 <eval-implementation>
 
-### Phase 1: MEASURE (~20-25 min)
+### Phase 1: SELECT (~1 min)
 
-#### Step 1: Setup
+Pick the highest-impact improvement to implement this crank.
+
+#### Step 1: Rank Improvements
+
+Run the DecisionEngine against `improvements.json`:
+
+```bash
+node --input-type=module -e '
+import { createDecisionEngine } from "./cdp-bench/flywheel/DecisionEngine.js";
+import fs from "fs";
+
+const engine = createDecisionEngine("improvements.json", "cdp-bench/baselines/flywheel-history.jsonl");
+const data = JSON.parse(fs.readFileSync("improvements.json", "utf8"));
+
+const recs = data.issues
+  .filter(i => i.status === "open")
+  .map(i => ({
+    patternId: i.id,
+    name: i.title,
+    priority: i.votes,
+    votingIds: [i.id],
+    count: 1,
+    affectedTests: [],
+    files: i.files,
+    section: i.section,
+    symptoms: i.symptoms,
+    expected: i.expected,
+    workaround: i.workaround
+  }));
+
+const ranked = engine.rank(recs);
+console.log(JSON.stringify(ranked.slice(0, 5), null, 2));
+'
+```
+
+#### Step 2: Present Selection
+
+Print the top-ranked improvement to the user:
+
+```
+=== CDP-Bench Flywheel: Crank {N} ===
+Target: #{id} {title} ({votes} votes, {prior_attempts} prior attempts)
+Files: {files}
+Symptoms: {symptoms}
+```
+
+**If `--measure` flag was set, SKIP to Phase 3 (MEASURE).** No fix phase.
+
+### Phase 2: FIX (~10-15 min)
+
+#### Step 3: Read Improvement Details
+
+Read the full issue entry from `improvements.json` including:
+- `symptoms`: What's broken
+- `expected`: What should happen
+- `workaround`: Known workarounds (indicates the gap)
+- `files`: Where to look
+- `fixAttempts`: What was tried before (if any — choose a DIFFERENT approach)
+
+If the issue has 3+ consecutive failed attempts (`needsDesignReview: true`), skip it and take the next-ranked improvement.
+
+#### Step 4: Implement the Fix
+
+Read the relevant source files in `cdp-skill/src/`. Understand the current behavior, then implement a targeted, minimal fix following the project's functional style.
+
+#### Step 5: Run Unit Tests
+
+```bash
+cd cdp-skill && npm run test:run
+```
+
+All existing tests must pass. If any fail due to your change, fix them. If pre-existing, note but don't block.
+
+#### Step 6: Commit the Fix
+
+```bash
+git add <specific_files>
+git commit -m "fix: <description>
+
+Addresses improvements.json #{id}: {title}
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+```
+
+### Phase 3: MEASURE (~20-25 min)
+
+#### Step 7: Setup
 
 **Kill existing Chrome and create run directory:**
 
@@ -82,16 +178,13 @@ Use the exact output as `runId`. Set `runDir` = `cdp-bench/runs/${runId}`.
 
 Create a metrics file path: `metricsFile` = `${runDir}/metrics.jsonl`
 
-#### Step 2: Discover Tests
+#### Step 8: Discover Tests
 
 Glob for `.test.json` files in `cdp-bench/tests/`:
 - No flag: all `*.test.json` files
 - `--test NNN`: prefix match `NNN*.test.json`
-- Category filter: match `category` field in JSON
 
-If no `.test.json` files match, fall back to legacy `*.json` files (v1 format — no milestones, self-assessed).
-
-#### Step 3: Read Baseline
+#### Step 9: Read Baseline
 
 Read the current baseline:
 ```
@@ -100,11 +193,11 @@ cdp-bench/baselines/latest.json
 
 If it exists, note the SHS and per-test scores for comparison. If not, this is the first run.
 
-#### Step 4: Launch Runner Subagents
+#### Step 10: Launch Runner Subagents
 
-For each test file, spawn a background Task agent with `run_in_background: true`.
+For each test file, spawn a background Task agent with `run_in_background: true`. **Discard the output_file path** — you will NOT read it. Trace collection happens via file polling in Step 11.
 
-**Batch in groups of 5-8** to avoid overwhelming Chrome.
+**Batch in groups of 5-8** to avoid overwhelming Chrome. Launch all agents in a batch with a single message (multiple Task tool calls), then immediately proceed to Step 11 to poll. Do NOT wait for individual agents to finish between batches — the TraceCollector handles waiting.
 
 **Subagent prompt** — read and adapt from `cdp-bench/flywheel/prompts/runner.md`, substituting:
 - `{{test_file_path}}` = path to the `.test.json` file
@@ -119,20 +212,25 @@ For each test file, spawn a background Task agent with `run_in_background: true`
 export CDP_METRICS_FILE="${metricsFile}"
 ```
 
-#### Step 5: Collect Traces
+#### Step 11: Collect Traces via File Polling
 
-Wait for all runner subagents to complete. Each writes a `.trace.json` to the run directory.
+**IMPORTANT: Do NOT read runner agent outputs via TaskOutput.** Runner conversations contain verbose CLI output (screenshots, snapshots, HTML) that will overflow the conductor's context window.
 
-Collect one-line summaries:
+Instead, use the TraceCollector to poll for trace files on disk:
+
+```bash
+node cdp-bench/flywheel/TraceCollector.js --run-dir ${runDir} --tests-dir cdp-bench/tests --timeout 600 --poll 15
 ```
-TRACE: 001-saucedemo-checkout | wallClock=25000ms | steps=10 | errors=0 | tab=t42
-```
 
-### Phase 2: VALIDATE (~5 min)
+This blocks until all expected `.trace.json` files appear (or timeout). It outputs a compact JSON summary with per-test step/error/timing stats — never the full trace content.
 
-#### Step 6: Run Validator Harness
+**If some traces are missing after timeout**, check which tests failed by examining the `missing` field in the output. You can re-run individual tests with `--test <prefix>`.
 
-The validator harness is a Node.js script (NOT an agent) that connects to each runner's tab via CDP and executes milestone verify blocks.
+**Do NOT use `Read` on trace files** unless debugging a specific test failure. The validator harness reads them directly.
+
+### Phase 4: VALIDATE (~5 min)
+
+#### Step 12: Run Validator Harness
 
 ```bash
 node cdp-bench/flywheel/validator-harness.js --run-dir ${runDir} --tests-dir cdp-bench/tests --port 9222
@@ -142,200 +240,86 @@ This produces:
 - `${runDir}/${test_id}.result.json` for each test
 - `${runDir}/validation-summary.json` with SHS and aggregate metrics
 
-Read the validation summary to get the current SHS.
-
-### Phase 3: DIAGNOSE (~5 min)
-
-#### Step 7: Run Diagnosis
-
-Spawn ONE diagnostician agent using the prompt from `cdp-bench/flywheel/prompts/diagnostician.md`, substituting:
-- `{{run_dir}}` = the run directory
-- `{{baselines_dir}}` = `cdp-bench/baselines`
-- `{{improvements_path}}` = `improvements.json`
-- `{{tests_dir}}` = `cdp-bench/tests`
-
-Alternatively, run the diagnosis engine programmatically:
-```javascript
-import { diagnose } from './cdp-bench/flywheel/diagnosis-engine.js';
-const diagnosis = diagnose(runDir, 'cdp-bench/tests', 'improvements.json', baseline);
-// diagnosis.recommendations now include attemptHistory from DecisionEngine
-```
-
-The diagnosis produces `${runDir}/diagnosis.json` with:
-- Failure patterns detected
-- Regressions vs baseline
-- Top-3 fix recommendations with priority scores
-
-#### Step 7b: History-Aware Ranking
-
-The diagnosis engine automatically re-ranks recommendations using the DecisionEngine:
-- Reads `improvements.json` for fix attempt history per issue
-- Reads `cdp-bench/baselines/flywheel-history.jsonl` for crank pattern persistence
-- Applies penalty (0.3x) for issues that failed in the last 2 cranks
-- Applies boost (1.5x) for patterns detected in 3+ consecutive cranks
-- Skips issues with 3+ consecutive failures (flags as "needs design review")
-- Each recommendation in `diagnosis.json` includes an `attemptHistory` field
-
-#### Step 8: Report Measure Results
-
-Print summary to user:
-```
-=== CDP-Bench Flywheel: Measure Complete ===
-SHS: {shs}/100 (delta: {delta} vs baseline)
-Tests: {passed}/{total} passed ({passRate}%)
-Perfect: {perfect}/{total} ({perfectRate}%)
-Categories: {passedCats}/{totalCats} covered
-
-Top Failures:
-  - {test_id}: {completion} (milestones: {failed_milestones})
-  ...
-
-Top Fix Recommendation:
-  #{rank}: {pattern_name} ({affected_tests} tests, est. +{shs_gain} SHS)
-  Files: {files}
-```
-
-**If `--measure` flag was set, STOP HERE.** Do not proceed to fix/verify.
-
-### Phase 4: FIX (~10-15 min, autonomous)
-
-#### Step 9: Apply Top Fix
-
-Read `${runDir}/diagnosis.json` and get the rank-1 recommendation.
-
-Spawn a fixer agent using the prompt from `cdp-bench/flywheel/prompts/fixer.md`, substituting:
-- `{{run_dir}}` = the run directory
-- `{{rank}}` = 1 (top recommendation)
-
-The fixer:
-1. Reads the recommendation
-2. Reads relevant source files
-3. Implements the fix
-4. Runs `npm run test:run` in `cdp-skill/`
-5. Commits if tests pass
-
-### Phase 5: VERIFY (~10 min, autonomous)
-
-#### Step 10: Re-run Affected Tests
-
-Spawn a verifier agent using the prompt from `cdp-bench/flywheel/prompts/verifier.md`.
-
-The verifier:
-1. Identifies affected tests from the diagnosis
-2. Re-runs only those tests + ratcheted tests
-3. Runs the validator harness
-4. Checks regression gate
-
-#### Step 11: Regression Gate
+#### Step 13: Regression Gate
 
 Check regression gate:
 - `SHS(new) >= SHS(baseline) - 1` (1-point margin for flakiness)
 - No ratcheted test (passed 3+ consecutive) drops below 0.7
 
-If gate passes:
-- Accept the fix commit
-- Update baseline: write `cdp-bench/baselines/latest.json`
-- Append to trend: `cdp-bench/baselines/trend.jsonl`
-
-If gate fails:
+If gate **fails** and a fix was applied in Phase 2:
 - Revert the fix commit: `git revert HEAD --no-edit`
+- Record outcome as `"reverted"` via FlywheelRecorder
 - Report which tests regressed
-- Try next recommendation (rank 2) or stop
 
-### Phase 6: REPORT (~1 min)
+### Phase 5: RECORD (~1 min)
 
-#### Step 12: Generate Summary
+#### Step 14: Record Fix Outcome
 
-Write `${runDir}/summary.md` with:
-
-```markdown
-# CDP-Bench Run: {runId}
-
-## Skill Health Score: {shs}/100 (delta: {delta})
-
-| Metric | Value |
-|--------|-------|
-| Pass rate | {passRate}% |
-| Perfect rate | {perfectRate}% |
-| Avg completion | {avgCompletion} |
-| Avg efficiency | {avgEfficiency} |
-| Category coverage | {categoryCoverage} |
-
-## Results by Category
-
-| Category | Pass | Fail | Avg Score |
-|----------|------|------|-----------|
-| create | 3/4 | 1 | 0.82 |
-| read | 4/5 | 1 | 0.91 |
-| ... | | | |
-
-## Improvements vs Baseline
-- {test_id}: {from} -> {to} (+{delta})
-
-## Regressions vs Baseline
-- {test_id}: {from} -> {to} ({delta})
-
-## Fix Applied
-- Pattern: {pattern_name}
-- Files: {files}
-- Result: {accepted/reverted}
-
-## Top Remaining Issues
-1. {pattern} ({N} tests, {votes} votes)
-2. ...
-3. ...
-```
-
-#### Step 12b: Record Fix Outcome
-
-If a fix was applied and verified, record the outcome using FlywheelRecorder:
+If a fix was applied, record the outcome using FlywheelRecorder:
 
 ```javascript
 import { createFlywheelRecorder } from './cdp-bench/flywheel/FlywheelRecorder.js';
 const recorder = createFlywheelRecorder('improvements.json', 'cdp-bench/baselines/flywheel-history.jsonl');
 
-// Read fix-outcome.json written by the verifier
-const outcome = JSON.parse(fs.readFileSync(`${runDir}/fix-outcome.json`, 'utf8'));
-recorder.recordFixOutcome(outcome.issueId, outcome.outcome, {
+recorder.recordFixOutcome(issueId, outcome, {
   crank: crankNumber,
-  version: outcome.version,
-  details: outcome.details,
-  filesChanged: outcome.filesChanged,
-  shsDelta: outcome.shsDelta
+  version: version,
+  details: whatChanged,
+  filesChanged: files,
+  shsDelta: newShs - baselineShs
 });
 
-// If fix was accepted, also record crank summary
+// If outcome is "fixed", move to implemented
+if (outcome === 'fixed') {
+  recorder.moveToImplemented(issueId, implementationSummary);
+}
+```
+
+#### Step 15: Update Baseline (if gate passed)
+
+- Update baseline: write `cdp-bench/baselines/latest.json`
+- Append to trend: `cdp-bench/baselines/trend.jsonl`
+
+#### Step 16: Record Crank Summary
+
+```javascript
 recorder.recordCrankSummary({
   crank: crankNumber,
   shs: newShs,
   shsDelta: newShs - baselineShs,
+  fixAttempt: { issueId, outcome, version },
   testsRun: totalTests,
   passRate: passRate,
-  patternsDetected: Object.keys(diagnosis.failurePatterns)
+  patternsDetected: detectedPatterns
 });
 ```
 
-#### Step 13: Cleanup
+### Phase 6: REPORT
+
+#### Step 17: Print Summary
+
+```
+=== CDP-Bench Flywheel: Crank {N} Complete ===
+Fix: #{id} {title} → {outcome}
+SHS: {old} → {new} (delta: {delta})
+Tests: {passed}/{total} passed
+Regression gate: {pass/fail}
+```
+
+#### Step 18: Cleanup
 
 ```bash
 pkill -f "chrome.*remote-debugging-port" 2>/dev/null || true
 ```
 
-Print final summary and path to full report.
-
 </eval-implementation>
 
-## `--fix-only` Mode
+## `--measure` Mode
 
-When `--fix-only` is passed:
-1. Skip phases 1-3 (measure/validate/diagnose)
-2. Read the most recent `diagnosis.json` from the latest run directory
-3. Proceed directly to Phase 4 (Fix) → Phase 5 (Verify) → Phase 6 (Report)
-
-Find the latest run:
-```bash
-ls -1d cdp-bench/runs/*/ | sort | tail -1
-```
+When `--measure` is passed:
+1. Skip Phase 1-2 (SELECT/FIX) — no code changes
+2. Go directly to Phase 3 (MEASURE) → Phase 4 (VALIDATE) → Phase 6 (REPORT)
+3. Run diagnosis engine to detect patterns and produce recommendations for reference
 
 ## Single Test Mode (`--test NNN`)
 
@@ -344,7 +328,7 @@ When `--test NNN` is passed:
 2. Launch ONE runner agent (no batching)
 3. Run validator harness for just that test
 4. Print result with milestone details
-5. No diagnosis/fix/verify phases
+5. No fix/record phases
 
 ## Directory Structure
 
@@ -388,9 +372,6 @@ cdp-bench/
 
 | Role | Count | Purpose |
 |------|-------|---------|
-| Conductor | 1 (you) | Orchestrate phases, enforce gates, report |
+| Conductor | 1 (you) | Select improvement, implement fix, orchestrate measure/validate, enforce gates, record outcome |
 | Runner | 5-8 (parallel) | Execute tests, write traces |
 | Validator | 0 (Node.js script) | Deterministic scoring via CDP |
-| Diagnostician | 1 | Analyze failures, recommend fixes |
-| Fixer | 0-1 | Implement top fix |
-| Verifier | 0-1 | Re-run affected tests, check regression gate |

@@ -199,16 +199,40 @@ async function checkSkipCondition(session, skipWhen) {
 
 // --- Scoring ---
 
+function extractTraceMetrics(trace) {
+  if (!trace) return { totalSteps: 0, totalErrors: 0, recoveredErrors: 0, wallClockMs: null };
+
+  // Normalize: support aggregate.X, root-level X, and steps as array or number
+  const agg = trace.aggregate || {};
+  const stepsField = trace.steps;
+  const stepsCount = typeof stepsField === 'number' ? stepsField
+    : Array.isArray(stepsField) ? stepsField.length : 0;
+  const totalSteps = agg.totalSteps || trace.totalSteps || stepsCount;
+  const errorsField = agg.totalErrors ?? trace.errors ?? 0;
+  const totalErrors = typeof errorsField === 'number' ? errorsField
+    : Array.isArray(errorsField) ? errorsField.length : 0;
+  const recoveredField = agg.recoveredErrors ?? trace.recoveredErrors ?? 0;
+  const recoveredErrors = typeof recoveredField === 'number' ? recoveredField : 0;
+  const wallClockMs = trace.wallClockMs || null;
+
+  // Compute wallClock from timestamps if not directly available
+  const computedWallClock = wallClockMs
+    || (trace.endTs && trace.startTs ? trace.endTs - trace.startTs : null);
+
+  return { totalSteps, totalErrors, recoveredErrors, wallClockMs: computedWallClock };
+}
+
 function computeTestScore(completionScore, trace, budget) {
+  const metrics = extractTraceMetrics(trace);
+
   // Efficiency: penalize exceeding budget
-  const stepsUsed = trace?.aggregate?.totalSteps || 0;
   const maxSteps = budget?.maxSteps || 50;
-  const efficiency = Math.max(0, 1 - Math.max(0, stepsUsed - maxSteps) / maxSteps);
+  const efficiency = Math.max(0, 1 - Math.max(0, metrics.totalSteps - maxSteps) / maxSteps);
 
   // Resilience: error recovery
-  const errors = trace?.aggregate?.totalErrors || 0;
-  const recovered = trace?.aggregate?.recoveredErrors || 0;
-  const resilience = errors === 0 ? 1.0 : 0.5 + 0.5 * (recovered / Math.max(1, errors));
+  const resilience = metrics.totalErrors === 0
+    ? 1.0
+    : 0.5 + 0.5 * (metrics.recoveredErrors / Math.max(1, metrics.totalErrors));
 
   // Response quality: fraction of response_checks passed (1.0 if none defined)
   const responseQuality = 1.0;
@@ -222,10 +246,12 @@ function computeTestScore(completionScore, trace, budget) {
 
   return {
     completion: completionScore,
-    efficiency,
-    resilience,
+    efficiency: Math.round(efficiency * 1000) / 1000,
+    resilience: Math.round(resilience * 1000) / 1000,
     responseQuality,
-    composite: Math.round(composite * 1000) / 1000
+    composite: Math.round(composite * 1000) / 1000,
+    stepsUsed: metrics.totalSteps,
+    wallClockMs: metrics.wallClockMs
   };
 }
 
@@ -263,7 +289,7 @@ function computeSHS(testResults) {
 
 // --- Single Test Validation ---
 
-async function validateTest(testPath, host, port, targetId, urlHint) {
+async function validateTest(testPath, host, port, targetId, urlHint, options = {}) {
   const testDef = JSON.parse(fs.readFileSync(testPath, 'utf8'));
 
   // Find target
@@ -282,11 +308,12 @@ async function validateTest(testPath, host, port, targetId, urlHint) {
     // Validate milestones
     const validation = await validateMilestones(session, testDef.milestones || []);
 
-    // Load trace if available (trace files are named by test ID)
-    const traceDir = path.dirname(testPath).replace('/tests', '/runs/latest');
-    const traceFile = path.join(traceDir, `${testDef.id}.trace.json`);
-    let trace = null;
-    try { trace = JSON.parse(fs.readFileSync(traceFile, 'utf8')); } catch (e) { /* no trace */ }
+    // Use pre-loaded trace from batch mode, or try loading from runDir
+    let trace = options.trace || null;
+    if (!trace && options.runDir) {
+      const traceFile = path.join(options.runDir, `${testDef.id}.trace.json`);
+      try { trace = JSON.parse(fs.readFileSync(traceFile, 'utf8')); } catch (e) { /* no trace */ }
+    }
 
     // Compute scores
     const scores = computeTestScore(validation.completionScore, trace, testDef.budget);
@@ -297,7 +324,7 @@ async function validateTest(testPath, host, port, targetId, urlHint) {
       status: validation.completionScore >= 0.5 ? 'pass' : 'fail',
       milestones: validation.milestones,
       scores,
-      wallClockMs: trace?.wallClockMs || null
+      wallClockMs: scores.wallClockMs
     };
   } finally {
     session.close();
@@ -339,8 +366,9 @@ async function validateRunDir(runDir, testsDir, host, port) {
     const traceFile = path.join(runDir, `${testId}.trace.json`);
     let targetId = null;
     let urlHint = null;
+    let trace = null;
     try {
-      const trace = JSON.parse(fs.readFileSync(traceFile, 'utf8'));
+      trace = JSON.parse(fs.readFileSync(traceFile, 'utf8'));
       // Resolve tab alias (e.g., "t825") to CDP targetId
       const tabAlias = trace.tab || trace.tabId;
       if (tabAlias) {
@@ -359,7 +387,7 @@ async function validateRunDir(runDir, testsDir, host, port) {
     } catch (e) { /* no trace */ }
 
     try {
-      const result = await validateTest(testPath, host, port, targetId, urlHint);
+      const result = await validateTest(testPath, host, port, targetId, urlHint, { trace, runDir });
       results.push(result);
 
       // Write result file (named by test ID to match trace files)

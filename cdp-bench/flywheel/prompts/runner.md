@@ -34,7 +34,7 @@ export CDP_METRICS_FILE="{{metrics_file}}"
 
 ### 4. Execute the Test
 
-Launch Chrome in headless mode and execute the task:
+**Always use headless mode.** Launch Chrome and execute the task:
 
 ```bash
 node cdp-skill/src/cdp-skill.js '{"config": {"headless": true}, "steps": [{"openTab": "{{url}}"}]}'
@@ -42,7 +42,14 @@ node cdp-skill/src/cdp-skill.js '{"config": {"headless": true}, "steps": [{"open
 
 Work through the task step by step. Use the most appropriate cdp-skill steps for each action. Stay within the budget limits.
 
-### 5. Record Your Trace
+### 5. Close the Tab
+
+**When finished, close the tab** to free resources:
+```bash
+node cdp-skill/src/cdp-skill.js '{"tab": "<tN>", "steps": [{"closeTab": true}]}'
+```
+
+### 6. Record Your Trace
 
 **DO NOT self-assess or score yourself.** The validator harness will do deterministic scoring.
 
@@ -81,16 +88,16 @@ Write your execution trace to `{{run_dir}}/{{test_id}}.trace.json` with this str
 }
 ```
 
-### 6. Keep Tab Open
-
-**IMPORTANT:** Do NOT close the tab when done. The validator harness needs to connect to it to verify milestones against live browser state.
-
 ### 7. Return Summary
 
-Return a one-line summary:
+**CRITICAL: Keep your final response to exactly ONE line.** The conductor does NOT read your output — it polls for your trace file on disk. Any verbose output wastes tokens in the agent transcript.
+
+Return ONLY this one-line summary as your final message:
 ```
 TRACE: {{test_id}} | wallClock={{ms}}ms | steps={{N}} | errors={{N}} | tab={{tN}}
 ```
+
+Do NOT include explanations, observations, or debugging info in your response — put those in the trace file instead.
 
 ## Guidelines
 
