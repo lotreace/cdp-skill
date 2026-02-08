@@ -346,12 +346,26 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
   }
 
   async function clickWithVerification(x, y, targetObjectId) {
+    // Use pointerdown for verification instead of click.
+    // React (and similar frameworks) re-render elements between mousedown and click,
+    // destroying the original DOM node and its event listeners. pointerdown fires
+    // synchronously at the start of the interaction, before any re-render.
+    // Also listen on document (capture phase) as a fallback — if the click target
+    // is the element or a descendant, count it as received.
     await session.send('Runtime.callFunctionOn', {
       objectId: targetObjectId,
       functionDeclaration: `function() {
         this.__clickReceived = false;
-        this.__clickHandler = () => { this.__clickReceived = true; };
-        this.addEventListener('click', this.__clickHandler, { once: true });
+        const self = this;
+        this.__ptrHandler = (e) => { self.__clickReceived = true; };
+        this.addEventListener('pointerdown', this.__ptrHandler, { once: true });
+        // Document-level capture fallback: catch clicks that bubble from descendants
+        this.__docHandler = (e) => {
+          if (self.contains(e.target) || e.target === self) {
+            self.__clickReceived = true;
+          }
+        };
+        document.addEventListener('pointerdown', this.__docHandler, { capture: true, once: true });
       }`
     });
 
@@ -361,10 +375,12 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     const verifyResult = await session.send('Runtime.callFunctionOn', {
       objectId: targetObjectId,
       functionDeclaration: `function() {
-        this.removeEventListener('click', this.__clickHandler);
+        this.removeEventListener('pointerdown', this.__ptrHandler);
+        document.removeEventListener('pointerdown', this.__docHandler, { capture: true });
         const received = this.__clickReceived;
         delete this.__clickReceived;
-        delete this.__clickHandler;
+        delete this.__ptrHandler;
+        delete this.__docHandler;
         return received;
       }`,
       returnByValue: true
@@ -452,7 +468,10 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
   }
 
   async function clickWithVerificationByRef(ref, x, y) {
-    // Set up click listener on the ref element (with re-resolution fallback)
+    // Use pointerdown for verification instead of click.
+    // React re-renders between mousedown and click, destroying the original DOM node.
+    // pointerdown fires synchronously before any re-render.
+    // Also uses document-level capture as fallback for descendant hits.
     await session.send('Runtime.evaluate', frameEvalParams(`
         (function() {
           let el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
@@ -470,8 +489,14 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
           }
           if (el && el.isConnected) {
             el.__clickReceived = false;
-            el.__clickHandler = () => { el.__clickReceived = true; };
-            el.addEventListener('click', el.__clickHandler, { once: true });
+            el.__ptrHandler = () => { el.__clickReceived = true; };
+            el.addEventListener('pointerdown', el.__ptrHandler, { once: true });
+            el.__docHandler = (e) => {
+              if (el.contains(e.target) || e.target === el) {
+                el.__clickReceived = true;
+              }
+            };
+            document.addEventListener('pointerdown', el.__docHandler, { capture: true, once: true });
           }
         })()
       `, false));
@@ -479,15 +504,17 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     await inputEmulator.click(x, y);
     await sleep(50);
 
-    // Check if click was received
+    // Check if pointerdown was received
     const verifyResult = await session.send('Runtime.evaluate', frameEvalParams(`
         (function() {
           const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
           if (!el) return { targetReceived: false, reason: 'element not found' };
-          if (el.__clickHandler) el.removeEventListener('click', el.__clickHandler);
+          if (el.__ptrHandler) el.removeEventListener('pointerdown', el.__ptrHandler);
+          if (el.__docHandler) document.removeEventListener('pointerdown', el.__docHandler, { capture: true });
           const received = el.__clickReceived;
           delete el.__clickReceived;
-          delete el.__clickHandler;
+          delete el.__ptrHandler;
+          delete el.__docHandler;
           return { targetReceived: received };
         })()
       `, true));
