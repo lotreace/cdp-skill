@@ -303,8 +303,102 @@ function renderFixLog(container, fixes) {
   `).join('');
 }
 
+function renderFeedbackChart(canvas, feedback, cranks, crankLabels) {
+  const types = ['improvement', 'bug', 'workaround', 'observation'];
+  const typeColors = {
+    improvement: COLORS.blue,
+    bug: COLORS.red,
+    workaround: COLORS.orange,
+    observation: COLORS.cyan
+  };
+
+  const datasets = types.map(type => ({
+    label: type.charAt(0).toUpperCase() + type.slice(1),
+    data: cranks.map(c => feedback.filter(fb => fb.crank === c && fb.type === type).length),
+    backgroundColor: typeColors[type],
+    borderRadius: 3
+  })).filter(ds => ds.data.some(v => v > 0));
+
+  new Chart(canvas, {
+    type: 'bar',
+    data: { labels: crankLabels, datasets },
+    options: {
+      ...CHART_DEFAULTS,
+      scales: {
+        ...CHART_DEFAULTS.scales,
+        x: { ...CHART_DEFAULTS.scales.x, stacked: true },
+        y: { ...CHART_DEFAULTS.scales.y, stacked: true, beginAtZero: true, ticks: { ...CHART_DEFAULTS.scales.y.ticks, stepSize: 1 } }
+      },
+      plugins: {
+        ...CHART_DEFAULTS.plugins,
+        tooltip: { mode: 'index', intersect: false }
+      }
+    }
+  });
+}
+
+function renderFeedbackByArea(canvas, feedback) {
+  const areaCounts = {};
+  for (const fb of feedback) {
+    areaCounts[fb.area] = (areaCounts[fb.area] || 0) + fb.count;
+  }
+  const areas = Object.keys(areaCounts).sort((a, b) => areaCounts[b] - areaCounts[a]);
+  const areaColors = {
+    actions: COLORS.blue, snapshot: COLORS.green, navigation: COLORS.purple,
+    iframe: COLORS.orange, input: COLORS.cyan, 'error-handling': COLORS.red,
+    'shadow-dom': '#a371f7', timing: '#d29922', other: '#8b949e'
+  };
+
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: areas,
+      datasets: [{
+        label: 'Feedback Count',
+        data: areas.map(a => areaCounts[a]),
+        backgroundColor: areas.map(a => areaColors[a] || '#8b949e'),
+        borderRadius: 3
+      }]
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      indexAxis: 'y',
+      scales: {
+        x: { ...CHART_DEFAULTS.scales.x, beginAtZero: true, ticks: { ...CHART_DEFAULTS.scales.x.ticks, stepSize: 1 } },
+        y: { ...CHART_DEFAULTS.scales.y, ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { size: 12 } } }
+      }
+    }
+  });
+}
+
+function renderFeedbackLog(container, feedback) {
+  if (!feedback.length) {
+    container.innerHTML = '<p style="color:#8b949e;font-size:13px;margin-top:12px">No feedback collected from runners yet.</p>';
+    return;
+  }
+
+  const typeEmoji = { improvement: 'lightbulb', bug: 'bug', workaround: 'wrench', observation: 'eye' };
+
+  container.innerHTML = feedback.map(fb => {
+    const typeClass = fb.type || 'improvement';
+    const testsStr = (fb.tests || []).map(shortId).join(', ');
+    const countBadge = fb.count > 1 ? `<span class="fb-count">${fb.count}x</span>` : '';
+    return `
+      <div class="fb-entry">
+        <span class="fb-crank">Crank ${fb.crank}</span>
+        <span class="fb-type ${typeClass}">${typeClass}</span>
+        <span class="fb-area">${fb.area}</span>
+        ${countBadge}
+        <span class="fb-title">${fb.title}</span>
+        <span class="fb-tests">${testsStr}</span>
+      </div>
+    `;
+  }).join('');
+}
+
 function renderDashboard(data) {
   const { trend, fixes, traces, errorDetails } = data;
+  const feedback = data.feedback || [];
   const app = document.getElementById('app');
 
   const cranks = trend.map((_, i) => i + 1);
@@ -351,6 +445,20 @@ function renderDashboard(data) {
         <h2>Fix History</h2>
         <div class="fix-log" id="fix-log"></div>
       </div>
+      <div class="card">
+        <h2>Runner Feedback by Crank</h2>
+        <p class="card-desc">Structured feedback from runner agents — improvements, bugs, workarounds, and observations collected during test execution. This data flows back into improvements.json to close the flywheel loop.</p>
+        <canvas id="feedback-chart"></canvas>
+      </div>
+      <div class="card">
+        <h2>Feedback by Area</h2>
+        <p class="card-desc">Which areas of cdp-skill receive the most feedback. High counts indicate areas needing attention.</p>
+        <canvas id="feedback-area-chart"></canvas>
+      </div>
+      <div class="card grid-full">
+        <h2>Feedback Log</h2>
+        <div class="fb-log" id="feedback-log"></div>
+      </div>
     </div>
   `;
 
@@ -363,6 +471,9 @@ function renderDashboard(data) {
   renderErrorsChart(document.getElementById('errors-chart'), traces, cranks, crankLabels);
   renderErrorLog(document.getElementById('error-log'), errorDetails);
   renderFixLog(document.getElementById('fix-log'), fixes);
+  renderFeedbackChart(document.getElementById('feedback-chart'), feedback, cranks, crankLabels);
+  renderFeedbackByArea(document.getElementById('feedback-area-chart'), feedback);
+  renderFeedbackLog(document.getElementById('feedback-log'), feedback);
 }
 
 async function main() {

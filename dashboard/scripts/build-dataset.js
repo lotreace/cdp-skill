@@ -149,9 +149,71 @@ function matchTrendToRunDir(trendEntry, runDirNames) {
   return candidates.length > 0 ? candidates[0].name : null;
 }
 
+/**
+ * Infer area from observation text (mirrors FeedbackAggregator logic).
+ */
+function inferArea(text) {
+  const lower = text.toLowerCase();
+  if (lower.includes('iframe') || lower.includes('frame')) return 'iframe';
+  if (lower.includes('snapshot') || lower.includes('aria')) return 'snapshot';
+  if (lower.includes('click') || lower.includes('hover') || lower.includes('drag')) return 'actions';
+  if (lower.includes('type') || lower.includes('fill') || lower.includes('keyboard') || lower.includes('input')) return 'input';
+  if (lower.includes('navig') || lower.includes('goto') || lower.includes('url')) return 'navigation';
+  if (lower.includes('shadow')) return 'shadow-dom';
+  if (lower.includes('timeout') || lower.includes('wait') || lower.includes('network') || lower.includes('idle')) return 'timing';
+  if (lower.includes('error') || lower.includes('crash')) return 'error-handling';
+  return 'other';
+}
+
+/**
+ * Extract feedback entries from a single trace.
+ */
+function extractFeedback(trace, testId) {
+  const entries = [];
+
+  if (Array.isArray(trace.feedback)) {
+    for (const fb of trace.feedback) {
+      entries.push({
+        testId,
+        type: fb.type || 'improvement',
+        area: fb.area || 'other',
+        title: fb.title || '',
+        detail: fb.detail || ''
+      });
+    }
+  }
+
+  if (Array.isArray(trace.improvements)) {
+    for (const imp of trace.improvements) {
+      entries.push({
+        testId,
+        type: 'improvement',
+        area: imp.category || 'other',
+        title: imp.description || '',
+        detail: imp.description || ''
+      });
+    }
+  }
+
+  if (Array.isArray(trace.bugs)) {
+    for (const bug of trace.bugs) {
+      const detail = typeof bug === 'string' ? bug : (bug.description || bug.error || JSON.stringify(bug));
+      entries.push({ testId, type: 'bug', area: 'other', title: detail.slice(0, 80), detail });
+    }
+  }
+
+  if (Array.isArray(trace.observations)) {
+    for (const obs of trace.observations) {
+      entries.push({ testId, type: 'observation', area: inferArea(obs), title: obs.slice(0, 80), detail: obs });
+    }
+  }
+
+  return entries;
+}
+
 function readTraces(trend) {
   const runsDir = path.join(BENCH_DIR, 'runs');
-  if (!fs.existsSync(runsDir)) return { traces: [], errorDetails: [] };
+  if (!fs.existsSync(runsDir)) return { traces: [], errorDetails: [], feedback: [] };
 
   const budgets = readBudgets();
   const runDirNames = fs.readdirSync(runsDir)
@@ -160,6 +222,7 @@ function readTraces(trend) {
 
   const traces = [];
   const errorDetails = [];
+  const feedbackRaw = [];
   const claimed = new Set();
 
   for (const trendEntry of trend) {
@@ -191,28 +254,56 @@ function readTraces(trend) {
 
       const errs = extractErrors(trace, crank, testId);
       errorDetails.push(...errs);
+
+      const fbs = extractFeedback(trace, testId);
+      for (const fb of fbs) {
+        feedbackRaw.push({ crank, ...fb });
+      }
     }
   }
 
-  return { traces, errorDetails };
+  // Deduplicate feedback per crank by area+title prefix
+  const feedback = deduplicateFeedback(feedbackRaw);
+
+  return { traces, errorDetails, feedback };
+}
+
+function deduplicateFeedback(feedbackRaw) {
+  const groups = new Map();
+  for (const fb of feedbackRaw) {
+    const key = `${fb.crank}:${fb.area}:${fb.title.toLowerCase().slice(0, 40).trim()}`;
+    if (!groups.has(key)) {
+      groups.set(key, { ...fb, count: 1, tests: [fb.testId] });
+    } else {
+      const existing = groups.get(key);
+      existing.count++;
+      if (!existing.tests.includes(fb.testId)) {
+        existing.tests.push(fb.testId);
+      }
+    }
+  }
+  return [...groups.values()]
+    .map(({ testId, ...rest }) => rest)
+    .sort((a, b) => b.count - a.count || a.crank - b.crank);
 }
 
 function build() {
   const trend = readTrend();
   const fixes = readFixes();
-  const { traces, errorDetails } = readTraces(trend);
+  const { traces, errorDetails, feedback } = readTraces(trend);
 
   const dataset = {
     generated: new Date().toISOString(),
     trend,
     fixes,
     traces,
-    errorDetails
+    errorDetails,
+    feedback
   };
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, JSON.stringify(dataset, null, 2));
-  console.log(`dataset.json written (${trend.length} cranks, ${traces.length} traces, ${fixes.length} fixes, ${errorDetails.length} errors)`);
+  console.log(`dataset.json written (${trend.length} cranks, ${traces.length} traces, ${fixes.length} fixes, ${errorDetails.length} errors, ${feedback.length} feedback)`);
 }
 
 build();
