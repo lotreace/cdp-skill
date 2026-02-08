@@ -396,9 +396,129 @@ function renderFeedbackLog(container, feedback) {
   }).join('');
 }
 
+function renderImprovementsChart(canvas, improvements) {
+  const open = improvements
+    .filter(i => i.status === 'open')
+    .sort((a, b) => b.votes - a.votes)
+    .slice(0, 15);
+
+  if (!open.length) return;
+
+  const sectionColors = {
+    'Timeout / Actionability Issues': COLORS.red,
+    'Frame / Context Issues': COLORS.orange,
+    'Shadow DOM Issues': COLORS.purple,
+    'Input / Typing Issues': COLORS.cyan,
+    'Error Handling Issues': '#f85149',
+    'Snapshot / Query Issues': COLORS.green,
+    'Snapshot Content/Accuracy Issues': '#3fb950',
+    'Snapshot Response Payload Issues': '#56d4dd',
+    'Navigation/Detection Issues': COLORS.blue,
+    'Other Issues': '#8b949e',
+    'Stagehand-Inspired Improvements': '#a371f7',
+    'Session Resilience': '#d29922',
+    'Workflow Shortcuts': '#388bfd',
+    'Site Profile Improvements': '#56d4dd'
+  };
+
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: open.map(i => `#${i.id} ${i.title}`.slice(0, 50)),
+      datasets: [{
+        label: 'Votes',
+        data: open.map(i => i.votes),
+        backgroundColor: open.map(i => sectionColors[i.section] || '#8b949e'),
+        borderRadius: 3
+      }]
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      indexAxis: 'y',
+      scales: {
+        x: { ...CHART_DEFAULTS.scales.x, beginAtZero: true, ticks: { ...CHART_DEFAULTS.scales.x.ticks, stepSize: 1 } },
+        y: {
+          ...CHART_DEFAULTS.scales.y,
+          ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { size: 11 }, crossAlign: 'far' }
+        }
+      },
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+
+function renderImprovementsTable(container, improvements, fixes) {
+  const open = improvements.filter(i => i.status === 'open').sort((a, b) => b.votes - a.votes);
+  const implemented = fixes.map(f => f.issueId);
+
+  if (!open.length && !implemented.length) {
+    container.innerHTML = '<p style="color:#8b949e;font-size:13px;margin-top:12px">No improvements tracked.</p>';
+    return;
+  }
+
+  const sectionBadgeColor = {
+    'Timeout / Actionability Issues': '#f85149',
+    'Frame / Context Issues': '#d29922',
+    'Shadow DOM Issues': '#a371f7',
+    'Input / Typing Issues': '#56d4dd',
+    'Error Handling Issues': '#f85149',
+    'Snapshot / Query Issues': '#3fb950',
+    'Snapshot Content/Accuracy Issues': '#3fb950',
+    'Snapshot Response Payload Issues': '#56d4dd',
+    'Navigation/Detection Issues': '#388bfd',
+    'Other Issues': '#8b949e',
+    'Stagehand-Inspired Improvements': '#a371f7',
+    'Session Resilience': '#d29922',
+    'Workflow Shortcuts': '#388bfd',
+    'Site Profile Improvements': '#56d4dd'
+  };
+
+  function shortSection(s) {
+    return s.replace(/ Issues$/, '').replace(/ Improvements$/, '');
+  }
+
+  const rows = open.map(i => {
+    const color = sectionBadgeColor[i.section] || '#8b949e';
+    const attemptsStr = i.fixAttempts > 0
+      ? `<span class="imp-attempts">${i.fixAttempts} attempt${i.fixAttempts > 1 ? 's' : ''}</span>`
+      : '';
+    const reviewBadge = i.needsDesignReview
+      ? '<span class="imp-review">needs review</span>'
+      : '';
+    const workaroundIcon = i.workaround
+      ? '<span class="imp-workaround" title="Workaround available">W</span>'
+      : '';
+    const symptomsHtml = i.symptoms.length
+      ? `<div class="imp-symptoms">${i.symptoms.map(s => `<span>${s}</span>`).join('')}</div>`
+      : '';
+    const filesHtml = i.files.length
+      ? `<div class="imp-files">${i.files.join(', ')}</div>`
+      : '';
+
+    return `
+      <div class="imp-row">
+        <div class="imp-votes">${i.votes}</div>
+        <div class="imp-main">
+          <div class="imp-header">
+            <span class="imp-id">#${i.id}</span>
+            <span class="imp-title-text">${i.title}</span>
+            <span class="imp-section" style="color:${color};border-color:${color}33;background:${color}15">${shortSection(i.section)}</span>
+            ${workaroundIcon}${attemptsStr}${reviewBadge}
+          </div>
+          ${symptomsHtml}
+          ${filesHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = rows;
+}
+
 function renderDashboard(data) {
   const { trend, fixes, traces, errorDetails } = data;
   const feedback = data.feedback || [];
+  const improvements = data.improvements || [];
   const app = document.getElementById('app');
 
   const cranks = trend.map((_, i) => i + 1);
@@ -445,6 +565,16 @@ function renderDashboard(data) {
         <h2>Fix History</h2>
         <div class="fix-log" id="fix-log"></div>
       </div>
+      <div class="card grid-full">
+        <h2>Improvement Backlog — Top Voted</h2>
+        <p class="card-desc">Open issues from improvements.json ranked by votes. These are the candidates the flywheel's DecisionEngine selects from for each crank. Votes come from runner feedback aggregation and manual triage.</p>
+        <canvas id="improvements-chart" style="max-height:450px"></canvas>
+      </div>
+      <div class="card grid-full">
+        <h2>Improvement Backlog — Details</h2>
+        <p class="card-desc">${improvements.filter(i => i.status === 'open').length} open issues. Sorted by votes. "W" = workaround available. Symptoms and files shown for context.</p>
+        <div class="imp-table" id="improvements-table"></div>
+      </div>
       <div class="card">
         <h2>Runner Feedback by Crank</h2>
         <p class="card-desc">Structured feedback from runner agents — improvements, bugs, workarounds, and observations collected during test execution. This data flows back into improvements.json to close the flywheel loop.</p>
@@ -471,6 +601,8 @@ function renderDashboard(data) {
   renderErrorsChart(document.getElementById('errors-chart'), traces, cranks, crankLabels);
   renderErrorLog(document.getElementById('error-log'), errorDetails);
   renderFixLog(document.getElementById('fix-log'), fixes);
+  renderImprovementsChart(document.getElementById('improvements-chart'), improvements);
+  renderImprovementsTable(document.getElementById('improvements-table'), improvements, fixes);
   renderFeedbackChart(document.getElementById('feedback-chart'), feedback, cranks, crankLabels);
   renderFeedbackByArea(document.getElementById('feedback-area-chart'), feedback);
   renderFeedbackLog(document.getElementById('feedback-log'), feedback);

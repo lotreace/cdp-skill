@@ -10,6 +10,7 @@
  *   ../cdp-bench/baselines/flywheel-history.jsonl -> fixes[]
  *   ../cdp-bench/tests/*.test.json           -> budgets (maxSteps per test)
  *   ../cdp-bench/runs/<runId>/*.trace.json   -> traces[], errorDetails[]
+ *   ../../improvements.json                  -> improvements[]
  */
 
 import fs from 'fs';
@@ -18,6 +19,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BENCH_DIR = path.resolve(__dirname, '../../cdp-bench');
+const IMPROVEMENTS_FILE = path.resolve(__dirname, '../../improvements.json');
 const OUT_FILE = path.resolve(__dirname, '../data/dataset.json');
 
 function readJsonLines(filePath) {
@@ -56,6 +58,25 @@ function readFixes() {
       shsDelta: row.shsDelta ?? 0,
       version: row.version
     }));
+}
+
+function readImprovements() {
+  if (!fs.existsSync(IMPROVEMENTS_FILE)) return [];
+  const data = JSON.parse(fs.readFileSync(IMPROVEMENTS_FILE, 'utf8'));
+  return (data.issues || []).map(issue => ({
+    id: issue.id,
+    section: issue.section,
+    title: issue.title,
+    votes: issue.votes,
+    status: issue.status,
+    symptoms: issue.symptoms || [],
+    expected: issue.expected || '',
+    workaround: issue.workaround || null,
+    files: issue.files || [],
+    fixAttempts: (issue.fixAttempts || []).length,
+    needsDesignReview: issue.needsDesignReview || false,
+    source: issue.source || null
+  }));
 }
 
 function readBudgets() {
@@ -290,20 +311,23 @@ function deduplicateFeedback(feedbackRaw) {
 function build() {
   const trend = readTrend();
   const fixes = readFixes();
+  const improvements = readImprovements();
   const { traces, errorDetails, feedback } = readTraces(trend);
 
   const dataset = {
     generated: new Date().toISOString(),
     trend,
     fixes,
+    improvements,
     traces,
     errorDetails,
     feedback
   };
 
+  const open = improvements.filter(i => i.status === 'open').length;
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, JSON.stringify(dataset, null, 2));
-  console.log(`dataset.json written (${trend.length} cranks, ${traces.length} traces, ${fixes.length} fixes, ${errorDetails.length} errors, ${feedback.length} feedback)`);
+  console.log(`dataset.json written (${trend.length} cranks, ${traces.length} traces, ${fixes.length} fixes, ${errorDetails.length} errors, ${feedback.length} feedback, ${open} open improvements)`);
 }
 
 build();
