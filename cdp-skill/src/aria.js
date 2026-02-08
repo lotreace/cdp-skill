@@ -1451,7 +1451,9 @@ export function createAriaSnapshot(session, options = {}) {
         interactiveElements++;
       }
 
-      if (node.box) {
+      // Count all semantic (non-generic, non-staticText) nodes as viewport elements
+      // since they passed isVisible() checks during tree construction
+      if (role && role !== 'generic' && role !== 'staticText') {
         viewportElements++;
       }
 
