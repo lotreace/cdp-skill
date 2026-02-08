@@ -14,12 +14,13 @@ import fs from 'fs';
 import http from 'http';
 import path from 'path';
 import os from 'os';
+import { evaluateSnapshotOffline } from './VerificationSnapshot.js';
 
 // --- CDP Connection ---
 
 function connectToTarget(host, port, targetId, urlHint) {
   return new Promise((resolve, reject) => {
-    http.get(`http://${host}:${port}/json`, (res) => {
+    const req = http.get(`http://${host}:${port}/json`, (res) => {
       let data = '';
       res.on('data', chunk => { data += chunk; });
       res.on('end', () => {
@@ -35,11 +36,14 @@ function connectToTarget(host, port, targetId, urlHint) {
             target = targets.find(t => t.type === 'page' && t.url && t.url.includes(urlHint));
           }
           if (!target) {
-            // Last resort: first page
-            target = targets.find(t => t.type === 'page');
+            // Last resort: first page — but ONLY if no targetId was specified
+            // (if a specific tab was requested but closed, don't fall back to random tab)
+            if (!targetId) {
+              target = targets.find(t => t.type === 'page');
+            }
           }
           if (!target) {
-            reject(new Error(`No target found${targetId ? ` with id ${targetId}` : ''}`));
+            reject(new Error(`No target found${targetId ? ` with id ${targetId}` : ''}${urlHint ? ` (url hint: ${urlHint})` : ''} — tab may have been closed`));
             return;
           }
           resolve(target);
@@ -48,6 +52,7 @@ function connectToTarget(host, port, targetId, urlHint) {
         }
       });
     }).on('error', reject);
+    req.setTimeout(5000, () => { req.destroy(); reject(new Error('Timeout connecting to Chrome /json')); });
   });
 }
 
@@ -57,13 +62,22 @@ async function createCDPSession(wsUrl) {
     const ws = new WebSocket(wsUrl);
     let msgId = 0;
     const pending = new Map();
+    const connectTimeout = setTimeout(() => {
+      ws.close();
+      reject(new Error(`WebSocket connection timeout for ${wsUrl}`));
+    }, 10000);
 
     ws.onopen = () => {
+      clearTimeout(connectTimeout);
       const session = {
         send(method, params = {}) {
           return new Promise((res, rej) => {
             const id = ++msgId;
-            pending.set(id, { resolve: res, reject: rej });
+            const cmdTimeout = setTimeout(() => {
+              pending.delete(id);
+              rej(new Error(`CDP command timeout: ${method}`));
+            }, 10000);
+            pending.set(id, { resolve: res, reject: rej, timeout: cmdTimeout });
             ws.send(JSON.stringify({ id, method, params }));
           });
         },
@@ -77,16 +91,19 @@ async function createCDPSession(wsUrl) {
     ws.onmessage = (event) => {
       const msg = JSON.parse(typeof event.data === 'string' ? event.data : event.data.toString());
       if (msg.id && pending.has(msg.id)) {
-        const { resolve: res, reject: rej } = pending.get(msg.id);
+        const { resolve: res, reject: rej, timeout } = pending.get(msg.id);
+        clearTimeout(timeout);
         pending.delete(msg.id);
         if (msg.error) rej(new Error(msg.error.message));
         else res(msg.result);
       }
     };
 
-    ws.onerror = (err) => reject(err);
+    ws.onerror = (err) => { clearTimeout(connectTimeout); reject(err); };
     ws.onclose = () => {
-      for (const { reject: rej } of pending.values()) {
+      clearTimeout(connectTimeout);
+      for (const { reject: rej, timeout } of pending.values()) {
+        clearTimeout(timeout);
         rej(new Error('WebSocket closed'));
       }
       pending.clear();
@@ -292,7 +309,29 @@ function computeSHS(testResults) {
 async function validateTest(testPath, host, port, targetId, urlHint, options = {}) {
   const testDef = JSON.parse(fs.readFileSync(testPath, 'utf8'));
 
-  // Find target
+  // Use pre-loaded trace from batch mode, or try loading from runDir
+  let trace = options.trace || null;
+  if (!trace && options.runDir) {
+    const traceFile = path.join(options.runDir, `${testDef.id}.trace.json`);
+    try { trace = JSON.parse(fs.readFileSync(traceFile, 'utf8')); } catch (e) { /* no trace */ }
+  }
+
+  // Snapshot-first path: evaluate offline from captured snapshot
+  if (options.preferSnapshot && trace?.verificationSnapshot) {
+    const validation = evaluateSnapshotOffline(trace.verificationSnapshot, testDef.milestones || []);
+    const scores = computeTestScore(validation.completionScore, trace, testDef.budget);
+    return {
+      testId: testDef.id,
+      category: testDef.category,
+      status: validation.completionScore >= 0.5 ? 'pass' : 'fail',
+      milestones: validation.milestones,
+      scores,
+      wallClockMs: scores.wallClockMs,
+      validationSource: 'snapshot'
+    };
+  }
+
+  // Live CDP path: connect to browser tab
   const target = await connectToTarget(host, port, targetId, urlHint);
   const session = await createCDPSession(target.webSocketDebuggerUrl);
 
@@ -308,13 +347,6 @@ async function validateTest(testPath, host, port, targetId, urlHint, options = {
     // Validate milestones
     const validation = await validateMilestones(session, testDef.milestones || []);
 
-    // Use pre-loaded trace from batch mode, or try loading from runDir
-    let trace = options.trace || null;
-    if (!trace && options.runDir) {
-      const traceFile = path.join(options.runDir, `${testDef.id}.trace.json`);
-      try { trace = JSON.parse(fs.readFileSync(traceFile, 'utf8')); } catch (e) { /* no trace */ }
-    }
-
     // Compute scores
     const scores = computeTestScore(validation.completionScore, trace, testDef.budget);
 
@@ -324,7 +356,8 @@ async function validateTest(testPath, host, port, targetId, urlHint, options = {
       status: validation.completionScore >= 0.5 ? 'pass' : 'fail',
       milestones: validation.milestones,
       scores,
-      wallClockMs: scores.wallClockMs
+      wallClockMs: scores.wallClockMs,
+      validationSource: 'live-cdp'
     };
   } finally {
     session.close();
@@ -350,7 +383,7 @@ function resolveTabAlias(alias) {
 
 // --- Batch Validation ---
 
-async function validateRunDir(runDir, testsDir, host, port) {
+async function validateRunDir(runDir, testsDir, host, port, options = {}) {
   const testFiles = fs.readdirSync(testsDir)
     .filter(f => f.endsWith('.test.json'))
     .map(f => path.join(testsDir, f));
@@ -387,7 +420,7 @@ async function validateRunDir(runDir, testsDir, host, port) {
     } catch (e) { /* no trace */ }
 
     try {
-      const result = await validateTest(testPath, host, port, targetId, urlHint, { trace, runDir });
+      const result = await validateTest(testPath, host, port, targetId, urlHint, { trace, runDir, preferSnapshot: options.preferSnapshot });
       results.push(result);
 
       // Write result file (named by test ID to match trace files)
@@ -419,6 +452,8 @@ async function main() {
     else if (args[i] === '--port') flags.port = parseInt(args[++i], 10);
     else if (args[i] === '--host') flags.host = args[++i];
     else if (args[i] === '--target') flags.target = args[++i];
+    else if (args[i] === '--prefer-snapshot') flags.preferSnapshot = true;
+    else if (args[i] === '--no-prefer-snapshot') flags.preferSnapshot = false;
   }
 
   const host = flags.host || 'localhost';
@@ -434,7 +469,8 @@ async function main() {
   if (flags.runDir) {
     // Batch validation
     const testsDir = flags.testsDir || path.join(path.dirname(flags.runDir), '..', 'tests');
-    const results = await validateRunDir(flags.runDir, testsDir, host, port);
+    const preferSnapshot = flags.preferSnapshot !== false; // default: true
+    const results = await validateRunDir(flags.runDir, testsDir, host, port, { preferSnapshot });
     const shsResult = computeSHS(results);
 
     const summary = {
@@ -464,7 +500,8 @@ export {
   computeTestScore,
   computeSHS,
   validateTest,
-  validateRunDir
+  validateRunDir,
+  extractTraceMetrics
 };
 
 // Run CLI if invoked directly

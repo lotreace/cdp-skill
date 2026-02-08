@@ -5,3 +5,5 @@
 {"type":"crank","ts":"2026-02-08T14:45:37.650Z","crank":4,"shs":100,"shsDelta":0,"fixAttempt":{"issueId":"8.1","outcome":"fixed","version":"1.0.9"},"testsRun":20,"passRate":1,"patternsDetected":[]}
 {"type":"fix_outcome","ts":"2026-02-08T16:49:29.817Z","issueId":"3.1","outcome":"fixed","crank":5,"version":"1.0.9","details":"Shadow DOM ref re-resolution with shadow host path traversal","filesChanged":["cdp-skill/src/aria.js"],"shsDelta":0}
 {"type":"crank","ts":"2026-02-08T16:49:29.817Z","crank":5,"shs":100,"shsDelta":0,"fixAttempt":{"issueId":"3.1","outcome":"fixed","version":"1.0.9"},"testsRun":20,"passRate":1,"patternsDetected":[]}
+{"type":"fix_outcome","ts":"2026-02-08T19:05:30.002Z","issueId":"1.4","outcome":"fixed","crank":6,"version":"1.0.9","shsDelta":0}
+{"type":"crank","ts":"2026-02-08T19:05:30.002Z","crank":6,"shs":100,"shsDelta":0,"fixAttempt":{"issueId":"1.4","outcome":"fixed","version":"1.0.9"},"testsRun":20,"testsPassed":20,"testsPerfect":20,"feedbackExtracted":26,"feedbackMatched":8,"gate":"passed"}

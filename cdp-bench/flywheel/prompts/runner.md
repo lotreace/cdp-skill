@@ -42,12 +42,22 @@ node cdp-skill/src/cdp-skill.js '{"config": {"headless": true}, "steps": [{"open
 
 Work through the task step by step. Use the most appropriate cdp-skill steps for each action. Stay within the budget limits.
 
-### 5. Close the Tab
+### 5. DO NOT Close the Tab
 
-**When finished, close the tab** to free resources:
+**Leave the tab open.** The validator harness may need to connect to the tab for live fallback validation. The conductor handles tab cleanup after validation.
+
+### 5b. Capture Verification Snapshot
+
+After completing all test steps, capture the browser state for offline validation. This allows the validator to score your test even if the tab is later closed:
+
 ```bash
-node cdp-skill/src/cdp-skill.js '{"tab": "<tN>", "steps": [{"closeTab": true}]}'
+SNAP=$(node cdp-bench/flywheel/CaptureVerification.js \
+  --test {{test_file_path}} --tab <tN> --port 9222)
 ```
+
+Replace `<tN>` with the tab alias you used (e.g., `t825`).
+
+Include the result as `"verificationSnapshot"` in your trace JSON (Step 6). If the capture command outputs `null`, set `"verificationSnapshot": null` — the validator will fall back to live-tab verification.
 
 ### 6. Record Your Trace
 
@@ -60,6 +70,7 @@ Write your execution trace to `{{run_dir}}/{{test_id}}.trace.json` with this str
   "testId": "{{test_id}}",
   "tabId": "tN",
   "wallClockMs": <total_time>,
+  "verificationSnapshot": <SNAP_output_or_null>,
   "cliCalls": [
     {
       "seq": 1,

@@ -171,8 +171,35 @@ function matchTrendToRunDir(trendEntry, runDirNames) {
 }
 
 /**
- * Infer area from observation text (mirrors FeedbackAggregator logic).
+ * Robust normalization waterfall for feedback fields.
+ * Handles all runner schema variants: title/issue/summary/observation/message.
  */
+function extractTitle(fb) {
+  return fb.title
+    || fb.issue
+    || fb.summary
+    || (fb.observation ? String(fb.observation).slice(0, 80) : '')
+    || (fb.message ? String(fb.message).slice(0, 80) : '')
+    || '';
+}
+
+function extractDetail(fb) {
+  return fb.detail
+    || fb.description
+    || fb.observation
+    || fb.message
+    || fb.suggestion
+    || '';
+}
+
+function normalizeType(raw) {
+  const lower = (raw || '').toLowerCase();
+  if (lower.includes('bug') || lower.includes('error') || lower.includes('critical') || lower.includes('high')) return 'bug';
+  if (lower.includes('workaround')) return 'workaround';
+  if (lower.includes('observation') || lower.includes('info') || lower.includes('note')) return 'observation';
+  return 'improvement';
+}
+
 function inferArea(text) {
   const lower = text.toLowerCase();
   if (lower.includes('iframe') || lower.includes('frame')) return 'iframe';
@@ -188,30 +215,35 @@ function inferArea(text) {
 
 /**
  * Extract feedback entries from a single trace.
+ * Uses the same normalization waterfall as FeedbackExtractor.
  */
 function extractFeedback(trace, testId) {
   const entries = [];
 
   if (Array.isArray(trace.feedback)) {
     for (const fb of trace.feedback) {
+      const title = extractTitle(fb);
+      const detail = String(extractDetail(fb));
+      const combinedText = `${title} ${detail}`;
       entries.push({
         testId,
-        type: fb.type || 'improvement',
-        area: fb.area || 'other',
-        title: fb.title || '',
-        detail: fb.detail || ''
+        type: normalizeType(fb.type || fb.severity || 'improvement'),
+        area: fb.area || fb.category || fb.component || inferArea(combinedText),
+        title,
+        detail
       });
     }
   }
 
   if (Array.isArray(trace.improvements)) {
     for (const imp of trace.improvements) {
+      const desc = imp.description || '';
       entries.push({
         testId,
         type: 'improvement',
-        area: imp.category || 'other',
-        title: imp.description || '',
-        detail: imp.description || ''
+        area: imp.category || inferArea(desc),
+        title: desc.slice(0, 80),
+        detail: desc
       });
     }
   }
@@ -219,7 +251,7 @@ function extractFeedback(trace, testId) {
   if (Array.isArray(trace.bugs)) {
     for (const bug of trace.bugs) {
       const detail = typeof bug === 'string' ? bug : (bug.description || bug.error || JSON.stringify(bug));
-      entries.push({ testId, type: 'bug', area: 'other', title: detail.slice(0, 80), detail });
+      entries.push({ testId, type: 'bug', area: inferArea(detail), title: detail.slice(0, 80), detail });
     }
   }
 
@@ -292,8 +324,13 @@ function readTraces(trend) {
 
 function deduplicateFeedback(feedbackRaw) {
   const groups = new Map();
+  let emptyCounter = 0;
   for (const fb of feedbackRaw) {
-    const key = `${fb.crank}:${fb.area}:${fb.title.toLowerCase().slice(0, 40).trim()}`;
+    const titleKey = fb.title.toLowerCase().slice(0, 80).trim();
+    // Prevent empty-title collapse: each empty entry gets a unique key
+    const key = titleKey === ''
+      ? `${fb.crank}:${fb.area}:__empty_${emptyCounter++}`
+      : `${fb.crank}:${fb.area}:${titleKey}`;
     if (!groups.has(key)) {
       groups.set(key, { ...fb, count: 1, tests: [fb.testId] });
     } else {

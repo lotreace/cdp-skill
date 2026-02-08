@@ -48,7 +48,8 @@ function createTraceCollector({ runDir, testsDir, timeoutSec = 600, pollSec = 10
             steps: trace.aggregate?.totalSteps || trace.totalSteps || (Array.isArray(trace.steps) ? trace.steps.length : trace.steps) || 0,
             errors: trace.aggregate?.totalErrors || trace.errors || 0,
             wallClockMs: trace.wallClockMs || 0,
-            tabId: trace.tab || trace.tabId || null
+            tabId: trace.tab || trace.tabId || null,
+            hasSnapshot: !!trace.verificationSnapshot
           });
         } catch (e) {
           found.push({ testId: test.id, category: test.category, parseError: e.message });
@@ -70,7 +71,7 @@ function createTraceCollector({ runDir, testsDir, timeoutSec = 600, pollSec = 10
       if (t.parseError) {
         lines.push(`  ${t.testId}: PARSE_ERROR (${t.parseError})`);
       } else {
-        lines.push(`  ${t.testId}: steps=${t.steps} errors=${t.errors} wall=${t.wallClockMs}ms tab=${t.tabId}`);
+        lines.push(`  ${t.testId}: steps=${t.steps} errors=${t.errors} wall=${t.wallClockMs}ms tab=${t.tabId} snap=${t.hasSnapshot ? 'yes' : 'no'}`);
       }
     }
 

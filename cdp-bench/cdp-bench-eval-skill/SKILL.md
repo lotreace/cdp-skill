@@ -193,130 +193,97 @@ cdp-bench/baselines/latest.json
 
 If it exists, note the SHS and per-test scores for comparison. If not, this is the first run.
 
-#### Step 10: Launch Runner Subagents
+#### Step 10: Launch Runner Subagents (Waves)
 
-For each test file, spawn a background Task agent with `run_in_background: true`. **Discard the output_file path** — you will NOT read it. Trace collection happens via file polling in Step 11.
+Divide tests into waves of 5 to avoid overwhelming Chrome. For each wave:
 
-**Batch in groups of 5-8** to avoid overwhelming Chrome. Launch all agents in a batch with a single message (multiple Task tool calls), then immediately proceed to Step 11 to poll. Do NOT wait for individual agents to finish between batches — the TraceCollector handles waiting.
+1. Spawn 5 background Task agents (`run_in_background: true`). **Discard the output_file path** — you will NOT read it. Read and adapt the prompt from `cdp-bench/flywheel/prompts/runner.md`, substituting:
+   - `{{test_file_path}}` = path to the `.test.json` file
+   - `{{run_id}}` = the run ID
+   - `{{run_dir}}` = the run directory
+   - `{{metrics_file}}` = `${runDir}/metrics.jsonl`
+   - `{{url}}` = the test's URL
+   - `{{test_id}}` = the test's ID
 
-**Subagent prompt** — read and adapt from `cdp-bench/flywheel/prompts/runner.md`, substituting:
-- `{{test_file_path}}` = path to the `.test.json` file
-- `{{run_id}}` = the run ID
-- `{{run_dir}}` = the run directory
-- `{{metrics_file}}` = the metrics file path
-- `{{url}}` = the test's URL
-- `{{test_id}}` = the test's ID
-
-**Environment for runners:**
+2. Poll for wave completion:
 ```bash
-export CDP_METRICS_FILE="${metricsFile}"
+node cdp-bench/flywheel/TraceCollector.js --run-dir ${runDir} --tests-dir cdp-bench/tests --timeout 180 --poll 10
 ```
 
-#### Step 11: Collect Traces via File Polling
+3. Note missing traces from the `missing` field in the output.
 
-**IMPORTANT: Do NOT read runner agent outputs via TaskOutput.** Runner conversations contain verbose CLI output (screenshots, snapshots, HTML) that will overflow the conductor's context window.
+After all waves, run one **retry wave** for any missing tests (spawn agents for missing IDs only, poll with 180s timeout).
 
-Instead, use the TraceCollector to poll for trace files on disk:
+**IMPORTANT: Do NOT read runner agent outputs via TaskOutput.** Runner conversations contain verbose CLI output that will overflow the conductor's context window.
 
+**Runner environment:**
 ```bash
-node cdp-bench/flywheel/TraceCollector.js --run-dir ${runDir} --tests-dir cdp-bench/tests --timeout 600 --poll 15
+export CDP_METRICS_FILE="${runDir}/metrics.jsonl"
 ```
 
-This blocks until all expected `.trace.json` files appear (or timeout). It outputs a compact JSON summary with per-test step/error/timing stats — never the full trace content.
+### Phase 4: VALIDATE + SCORE + EXTRACT (~2 min)
 
-**If some traces are missing after timeout**, check which tests failed by examining the `missing` field in the output. You can re-run individual tests with `--test <prefix>`.
+#### Step 11: Validate + Score + Extract Feedback
 
-**Do NOT use `Read` on trace files** unless debugging a specific test failure. The validator harness reads them directly.
-
-### Phase 4: VALIDATE (~5 min)
-
-#### Step 12: Run Validator Harness
+The CrankOrchestrator handles all validation, scoring, regression gate, and feedback extraction in a single command:
 
 ```bash
-node cdp-bench/flywheel/validator-harness.js --run-dir ${runDir} --tests-dir cdp-bench/tests --port 9222
-```
-
-This produces:
-- `${runDir}/${test_id}.result.json` for each test
-- `${runDir}/validation-summary.json` with SHS and aggregate metrics
-
-#### Step 13: Regression Gate
-
-Check regression gate:
-- `SHS(new) >= SHS(baseline) - 1` (1-point margin for flakiness)
-- No ratcheted test (passed 3+ consecutive) drops below 0.7
-
-If gate **fails** and a fix was applied in Phase 2:
-- Revert the fix commit: `git revert HEAD --no-edit`
-- Record outcome as `"reverted"` via FlywheelRecorder
-- Report which tests regressed
-
-### Phase 5: RECORD (~1 min)
-
-#### Step 14: Record Fix Outcome
-
-If a fix was applied, record the outcome using FlywheelRecorder:
-
-```javascript
-import { createFlywheelRecorder } from './cdp-bench/flywheel/FlywheelRecorder.js';
-const recorder = createFlywheelRecorder('improvements.json', 'cdp-bench/baselines/flywheel-history.jsonl');
-
-recorder.recordFixOutcome(issueId, outcome, {
-  crank: crankNumber,
-  version: version,
-  details: whatChanged,
-  filesChanged: files,
-  shsDelta: newShs - baselineShs
-});
-
-// If outcome is "fixed", move to implemented
-if (outcome === 'fixed') {
-  recorder.moveToImplemented(issueId, implementationSummary);
-}
-```
-
-#### Step 15: Update Baseline (if gate passed)
-
-- Update baseline: write `cdp-bench/baselines/latest.json`
-- Append to trend: `cdp-bench/baselines/trend.jsonl`
-
-#### Step 16: Record Crank Summary
-
-```javascript
-recorder.recordCrankSummary({
-  crank: crankNumber,
-  shs: newShs,
-  shsDelta: newShs - baselineShs,
-  fixAttempt: { issueId, outcome, version },
-  testsRun: totalTests,
-  passRate: passRate,
-  patternsDetected: detectedPatterns
-});
-```
-
-#### Step 16b: Aggregate Runner Feedback
-
-Run the FeedbackAggregator to close the flywheel loop — runners report what works and what doesn't, and that data flows back into `improvements.json`:
-
-```bash
-node cdp-bench/flywheel/FeedbackAggregator.js --run-dir ${runDir} --improvements improvements.json --apply
+node cdp-bench/flywheel/CrankOrchestrator.js --phase validate \
+  --run-dir ${runDir} --tests-dir cdp-bench/tests \
+  --improvements improvements.json --baselines-dir cdp-bench/baselines \
+  --port 9222 --version ${version} --crank ${crankNumber}
 ```
 
 This:
-- Extracts structured feedback from all `.trace.json` files in the run
-- Matches feedback to existing open issues (upvotes matches)
-- Creates new issues from unmatched bugs/workarounds (improvements need 2+ reports)
-- Prints a human-readable report + JSON summary
+- Validates each test (snapshot-first from trace data, live CDP fallback)
+- Computes SHS and per-test scores
+- Runs regression gate against baseline
+- Extracts and deduplicates runner feedback
+- Writes `validate-result.json`, `validation-summary.json`, per-test `.result.json`, `extracted-feedback.json`
 
-**Save the JSON output** for inclusion in the crank report (Step 17).
+Read stdout JSON — check `gate` field (`"passed"` or `"failed"`) and `feedbackExtracted` count.
 
-#### Step 16c: Rebuild Dashboard Dataset
+If gate **fails** and a fix was applied in Phase 2:
+- Revert the fix commit: `git revert HEAD --no-edit`
+- Use `--fix-outcome reverted` in Step 13
 
+### Phase 5: FEEDBACK MATCHING + RECORD (~3 min)
+
+#### Step 12: LLM Feedback Matching
+
+Spawn ONE **background** Task agent (subagent_type: `general-purpose`) with the `cdp-bench/flywheel/prompts/feedback-matcher.md` prompt, substituting:
+- `{{run_dir}}` = the run directory path
+- `{{improvements_path}}` = `improvements.json`
+
+**Do NOT read the subagent's output** — poll for the file on disk instead:
 ```bash
-node dashboard/scripts/build-dataset.js
+ls ${runDir}/match-decisions.json
 ```
 
-This regenerates `dashboard/data/dataset.json` from the updated baselines, trend, and run traces. If the Vite dev server is running, it auto-reloads the browser.
+The subagent reads `extracted-feedback.json` + `improvements.json` and writes `${runDir}/match-decisions.json`.
+
+#### Step 13: Record + Apply + Baseline
+
+After `match-decisions.json` exists, run the record phase:
+
+```bash
+node cdp-bench/flywheel/CrankOrchestrator.js --phase record \
+  --run-dir ${runDir} --tests-dir cdp-bench/tests \
+  --improvements improvements.json --baselines-dir cdp-bench/baselines \
+  --version ${version} --crank ${crankNumber} \
+  --fix-issue ${issueId} --fix-outcome ${outcome}
+```
+
+Omit `--fix-issue` and `--fix-outcome` if this is a `--measure` run with no fix.
+
+This:
+- Applies feedback (upvotes matched issues, creates new ones from unmatched)
+- Records fix outcome + crank summary to `flywheel-history.jsonl`
+- Updates baseline + trend (if gate passed)
+- Rebuilds dashboard dataset
+- Writes `crank-summary.json`
+
+Read stdout JSON for the final crank result.
 
 ### Phase 6: REPORT
 
@@ -368,18 +335,25 @@ cdp-bench/
   cdp-bench-eval-skill/
     SKILL.md                         # This file
   flywheel/
-    validator-harness.js             # Deterministic milestone verification via CDP
+    CrankOrchestrator.js             # Two-phase orchestrator (validate + record)
+    VerificationSnapshot.js          # Offline snapshot capture + evaluation
+    CaptureVerification.js           # CLI: runner captures snapshot before trace
+    validator-harness.js             # Deterministic milestone verification (snapshot-first + live CDP)
     metrics-collector.js             # I/O byte aggregation and SHS computation
     baseline-manager.js              # Baseline read/write/compare/regression gate
     diagnosis-engine.js              # Result analysis + improvements.json cross-reference
     DecisionEngine.js                # History-aware recommendation re-ranking
     FlywheelRecorder.js              # Fix outcome + crank summary persistence
-    FeedbackAggregator.js            # Runner feedback → improvements.json closed loop
+    feedback-constants.js            # Shared constants (area mappings, normalization helpers)
+    FeedbackExtractor.js             # Extract + normalize + dedup feedback from traces
+    FeedbackApplier.js               # Apply match decisions to improvements.json
+    TraceCollector.js                # Polls for trace files from runner agents
     prompts/
       runner.md                      # Runner agent prompt template
       diagnostician.md               # Diagnostician prompt template
       fixer.md                       # Fixer prompt template
       verifier.md                    # Verifier prompt template
+      feedback-matcher.md            # LLM feedback matching prompt template
   tests/
     *.test.json                      # v2 test definitions with milestones
     *.json                           # v1 test definitions (legacy, self-assessed)
@@ -392,12 +366,15 @@ cdp-bench/
     v{version}-{timestamp}.json      # Archived baselines
   runs/
     {timestamp}/
-      {test_id}.trace.json           # Raw execution trace (from runner)
-      {test_id}.result.json          # Validated result (from harness)
+      {test_id}.trace.json           # Raw execution trace (from runner, includes verificationSnapshot)
+      {test_id}.result.json          # Validated result (from CrankOrchestrator validate)
       metrics.jsonl                  # I/O byte metrics from CDP_METRICS_FILE
-      validation-summary.json        # Aggregate SHS and scores
-      diagnosis.json                 # Failure analysis and recommendations
-      summary.md                     # Human-readable report
+      validate-result.json           # Phase 1 output: SHS, gate, feedback count
+      validation-summary.json        # Aggregate SHS and scores (detailed)
+      extracted-feedback.json        # Normalized feedback (from FeedbackExtractor)
+      match-decisions.json           # LLM match decisions (from matching subagent)
+      feedback-summary.json          # Applied feedback report (from FeedbackApplier)
+      crank-summary.json             # Phase 2 output: final crank results
 ```
 
 ## Agent Team
