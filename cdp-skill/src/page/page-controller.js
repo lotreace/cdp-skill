@@ -670,7 +670,13 @@ export function createPageController(cdpClient) {
   }
 
   /**
-   * Get frame tree with all iframes
+   * Get frame tree with all iframes, including cross-origin ones.
+   *
+   * Page.getFrameTree only returns same-origin frames. Cross-origin iframes
+   * live in separate renderer processes and are invisible to that API.
+   * We supplement the CDP tree by querying the DOM for all <iframe> elements
+   * and merging any that aren't already represented.
+   *
    * @returns {Promise<{mainFrameId: string, currentFrameId: string, frames: Array}>}
    */
   async function getFrameTree() {
@@ -694,10 +700,60 @@ export function createPageController(cdpClient) {
       return frames;
     }
 
+    const frames = flattenFrames(frameTree);
+
+    // Discover cross-origin iframes via DOM query
+    try {
+      const domResult = await cdpClient.send('Runtime.evaluate', {
+        expression: `
+          (function() {
+            const iframes = document.querySelectorAll('iframe');
+            return Array.from(iframes).map(function(el, i) {
+              var src = el.src || el.getAttribute('src') || '';
+              var name = el.name || el.id || '';
+              var crossOrigin = false;
+              try { var _d = el.contentDocument; } catch(e) { crossOrigin = true; }
+              if (!el.contentDocument) crossOrigin = true;
+              return { index: i, src: src, name: name, crossOrigin: crossOrigin };
+            });
+          })()
+        `,
+        returnByValue: true
+      });
+
+      const domIframes = domResult.result?.value;
+      if (Array.isArray(domIframes)) {
+        for (const iframe of domIframes) {
+          if (!iframe.crossOrigin) continue;
+
+          // Check if this iframe is already in the CDP frame tree
+          const alreadyListed = frames.some(f =>
+            f.parentId && (
+              (iframe.src && f.url === iframe.src) ||
+              (iframe.name && f.name === iframe.name)
+            )
+          );
+
+          if (!alreadyListed) {
+            frames.push({
+              frameId: `cross-origin-${iframe.index}`,
+              url: iframe.src || 'about:blank',
+              name: iframe.name || null,
+              parentId: mainFrameId,
+              depth: 1,
+              crossOrigin: true
+            });
+          }
+        }
+      }
+    } catch {
+      // DOM query failed — return CDP-only tree
+    }
+
     return {
       mainFrameId,
       currentFrameId,
-      frames: flattenFrames(frameTree)
+      frames
     };
   }
 
