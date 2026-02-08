@@ -225,7 +225,8 @@ function extractFeedback(trace, testId) {
 
   if (Array.isArray(trace.observations)) {
     for (const obs of trace.observations) {
-      entries.push({ testId, type: 'observation', area: inferArea(obs), title: obs.slice(0, 80), detail: obs });
+      const text = typeof obs === 'string' ? obs : JSON.stringify(obs);
+      entries.push({ testId, type: 'observation', area: inferArea(text), title: text.slice(0, 80), detail: text });
     }
   }
 

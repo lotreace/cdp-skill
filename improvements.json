@@ -1,7 +1,7 @@
 {
   "meta": {
     "totalVotes": 156,
-    "lastUpdated": "2026-02-08T14:45:37.650Z"
+    "lastUpdated": "2026-02-08T16:49:57.300Z"
   },
   "issues": [
     {
@@ -36,25 +36,6 @@
       "files": [
         "src/cdp-skill.js",
         "src/page.js"
-      ],
-      "fixAttempts": []
-    },
-    {
-      "id": "3.1",
-      "section": "Shadow DOM Issues",
-      "title": "Selectors don't pierce shadow DOM boundaries",
-      "votes": 4,
-      "status": "open",
-      "symptoms": [
-        "Snapshot shows elements inside shadow DOM with refs",
-        "Clicking refs times out because CSS selectors can't reach shadow content",
-        "document.querySelector() can't find elements in shadow roots"
-      ],
-      "expected": "Add piercesShadow option or support >>> combinator",
-      "workaround": "Use eval with manual shadow root traversal",
-      "files": [
-        "src/dom.js",
-        "src/aria.js"
       ],
       "fixAttempts": []
     },
@@ -96,7 +77,7 @@
       "id": "4.2",
       "section": "Input / Typing Issues",
       "title": "Selection lost when clicking toolbar buttons",
-      "votes": 1,
+      "votes": 2,
       "status": "open",
       "symptoms": [
         "Select text in WYSIWYG editor with Shift+Arrow",
@@ -283,7 +264,7 @@
       "id": "7.1",
       "section": "Other Issues",
       "title": "New tab detection/tracking when links open in new tabs",
-      "votes": 2,
+      "votes": 3,
       "status": "open",
       "symptoms": [
         "Click a link that opens in new tab, navigated: false returned",
@@ -302,7 +283,7 @@
       "id": "7.2",
       "section": "Other Issues",
       "title": "getBoundingClientRect() returns empty object in eval",
-      "votes": 1,
+      "votes": 66,
       "status": "open",
       "symptoms": [
         "eval with el.getBoundingClientRect() returns {}",
@@ -406,7 +387,7 @@
       "id": "8.4",
       "section": "Stagehand-Inspired Improvements",
       "title": "XPath support",
-      "votes": 0,
+      "votes": 1,
       "status": "open",
       "symptoms": [
         "Some DOM traversal patterns are awkward with CSS selectors"
@@ -579,7 +560,7 @@
       "id": "9.5",
       "section": "Snapshot Response Payload Issues",
       "title": "Footer/boilerplate noise dominates snapshots",
-      "votes": 3,
+      "votes": 5,
       "status": "open",
       "symptoms": [
         "Amazon homepage: 57% of interactive elements are footer links",
@@ -616,7 +597,7 @@
       "id": "10.1",
       "section": "Snapshot Content/Accuracy Issues",
       "title": "Summary reports 'Viewport elements: 0' incorrectly",
-      "votes": 5,
+      "votes": 6,
       "status": "open",
       "symptoms": [
         "Summary detail level shows Viewport elements: 0 when elements are clearly visible",
@@ -671,7 +652,7 @@
       "id": "10.4",
       "section": "Snapshot Content/Accuracy Issues",
       "title": "since hash ignores element state changes",
-      "votes": 1,
+      "votes": 2,
       "status": "open",
       "symptoms": [
         "Checkbox toggles don't change the hash",
@@ -706,7 +687,7 @@
       "id": "10.6",
       "section": "Snapshot Content/Accuracy Issues",
       "title": "Table cell text missing in default snapshot",
-      "votes": 1,
+      "votes": 2,
       "status": "open",
       "symptoms": [
         "td and th elements show as empty cell and columnheader without includeText",
@@ -775,7 +756,7 @@
       "id": "10.10",
       "section": "Snapshot Content/Accuracy Issues",
       "title": "Unnamed buttons have no fallback text",
-      "votes": 1,
+      "votes": 2,
       "status": "open",
       "symptoms": [
         "Buttons with no ARIA accessible name show as 'button [ref=s1e13]'",
@@ -983,6 +964,27 @@
         "src/site-profiles.js"
       ],
       "fixAttempts": []
+    },
+    {
+      "id": "1.3",
+      "section": "Timeout / Actionability Issues",
+      "title": "",
+      "votes": 2,
+      "status": "open",
+      "symptoms": [
+        "Every click action (5 total) required jsClick-auto fallback. All CDP clicks were intercepted, possibly due to React event handling or z-index layering. The auto-fallback worked correctly but adds latency."
+      ],
+      "expected": "",
+      "workaround": null,
+      "files": [
+        "src/runner/execute-interaction.js",
+        "src/dom/click-executor.js"
+      ],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "001-saucedemo-checkout"
+      ]
     }
   ],
   "implemented": [
@@ -1054,6 +1056,13 @@
       "title": "Network quiet detection",
       "votes": 7,
       "implementedAs": "Best-effort waitForNetworkSettle (2s timeout, 300ms idle) auto-called after goto/reload/back/forward/openTab and before snapshot",
+      "fixedDate": "2026-02-08"
+    },
+    {
+      "id": "3.1",
+      "title": "Selectors don't pierce shadow DOM boundaries",
+      "votes": 4,
+      "implementedAs": "Added shadowHostPath to ref metadata. Re-resolution now traverses shadow roots via stored host path, with last-resort scan of all shadow roots.",
       "fixedDate": "2026-02-08"
     }
   ]

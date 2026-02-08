@@ -3,3 +3,5 @@
 {"type":"crank","ts":"2026-02-07T23:05:28.614Z","crank":3,"shs":100,"shsDelta":1,"fixAttempt":{"issueId":"6.5","outcome":"fixed","version":"1.0.9"},"testsRun":20,"passRate":1,"patternsDetected":["stale_refs"]}
 {"type":"fix_outcome","ts":"2026-02-08T14:45:37.650Z","issueId":"8.1","outcome":"fixed","crank":4,"version":"1.0.9","details":"Added waitForNetworkSettle() to page-controller, wired into step-executors after navigation and before snapshot","filesChanged":["page-controller.js","step-executors.js"],"shsDelta":0}
 {"type":"crank","ts":"2026-02-08T14:45:37.650Z","crank":4,"shs":100,"shsDelta":0,"fixAttempt":{"issueId":"8.1","outcome":"fixed","version":"1.0.9"},"testsRun":20,"passRate":1,"patternsDetected":[]}
+{"type":"fix_outcome","ts":"2026-02-08T16:49:29.817Z","issueId":"3.1","outcome":"fixed","crank":5,"version":"1.0.9","details":"Shadow DOM ref re-resolution with shadow host path traversal","filesChanged":["cdp-skill/src/aria.js"],"shsDelta":0}
+{"type":"crank","ts":"2026-02-08T16:49:29.817Z","crank":5,"shs":100,"shsDelta":0,"fixAttempt":{"issueId":"3.1","outcome":"fixed","version":"1.0.9"},"testsRun":20,"passRate":1,"patternsDetected":[]}

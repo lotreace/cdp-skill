@@ -113,12 +113,13 @@ function createFeedbackAggregator(improvementsPath) {
       // Legacy format: observations (convert to feedback)
       if (Array.isArray(trace.observations)) {
         for (const obs of trace.observations) {
+          const text = typeof obs === 'string' ? obs : JSON.stringify(obs);
           allFeedback.push({
             testId,
             type: 'improvement',
-            area: inferArea(obs),
-            title: obs.slice(0, 80),
-            detail: obs,
+            area: inferArea(text),
+            title: text.slice(0, 80),
+            detail: text,
             files: []
           });
         }
