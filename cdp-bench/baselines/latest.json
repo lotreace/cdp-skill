@@ -1,7 +1,7 @@
 {
   "version": "1.0.9",
-  "timestamp": "2026-02-07T23:05:23.676Z",
-  "runId": "2026-02-07T22-30-14",
+  "timestamp": "2026-02-08T14:45:23.332Z",
+  "runId": "2026-02-08T14-28-58",
   "shs": 100,
   "passRate": 1,
   "avgCompletion": 1,
@@ -56,7 +56,7 @@
     },
     "018-apnews-browse": {
       "score": 1,
-      "composite": 1,
+      "composite": 0.95,
       "ratcheted": true
     },
     "020-archive-wayback": {

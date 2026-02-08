@@ -1,7 +1,7 @@
 {
   "meta": {
     "totalVotes": 156,
-    "lastUpdated": "2026-02-08T14:23:11.092Z"
+    "lastUpdated": "2026-02-08T14:45:37.650Z"
   },
   "issues": [
     {
@@ -365,24 +365,6 @@
       "files": [
         "src/runner.js",
         "src/frameworks.js"
-      ],
-      "fixAttempts": []
-    },
-    {
-      "id": "8.1",
-      "section": "Stagehand-Inspired Improvements",
-      "title": "Network quiet detection",
-      "votes": 7,
-      "status": "open",
-      "symptoms": [
-        "Modern web apps load content dynamically via API calls and lazy-loaded images",
-        "Acting or snapshotting before network settles leads to incomplete data or failed actions",
-        "GDPR consent modal re-appears after navigation due to async scripts loading"
-      ],
-      "expected": "Implement waitForNetworkQuiet tracking in-flight requests with idle period",
-      "workaround": null,
-      "files": [
-        "src/network.js"
       ],
       "fixAttempts": []
     },
@@ -1065,6 +1047,13 @@
       "title": "listFrames doesn't detect cross-origin iframes",
       "votes": 9,
       "implementedAs": "DOM query supplement to Page.getFrameTree discovers cross-origin iframes and merges them tagged with crossOrigin: true",
+      "fixedDate": "2026-02-08"
+    },
+    {
+      "id": "8.1",
+      "title": "Network quiet detection",
+      "votes": 7,
+      "implementedAs": "Best-effort waitForNetworkSettle (2s timeout, 300ms idle) auto-called after goto/reload/back/forward/openTab and before snapshot",
       "fixedDate": "2026-02-08"
     }
   ]
