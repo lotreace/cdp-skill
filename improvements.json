@@ -1,7 +1,7 @@
 {
   "meta": {
     "totalVotes": 156,
-    "lastUpdated": "2026-02-07T23:05:14.201Z"
+    "lastUpdated": "2026-02-08T14:23:11.092Z"
   },
   "issues": [
     {
@@ -36,24 +36,6 @@
       "files": [
         "src/cdp-skill.js",
         "src/page.js"
-      ],
-      "fixAttempts": []
-    },
-    {
-      "id": "2.3",
-      "section": "Frame / Context Issues",
-      "title": "listFrames doesn't detect cross-origin iframes",
-      "votes": 9,
-      "status": "open",
-      "symptoms": [
-        "Page has iframes from different origins but listFrames only returns main frame",
-        "Vue.js about:srcdoc iframes treated as cross-origin",
-        "BBC News consent management in cross-origin iframe unreachable"
-      ],
-      "expected": "listFrames should detect and list all iframes including cross-origin",
-      "workaround": "JavaScript eval to remove iframe elements or coordinate-based clicking",
-      "files": [
-        "src/cdp-skill.js"
       ],
       "fixAttempts": []
     },
@@ -1077,6 +1059,13 @@
       "votes": 14,
       "implementedAs": "Document-wide role+name search fallback for stale element references, inline re-resolution in JS click and verification paths",
       "fixedDate": "2026-02-07"
+    },
+    {
+      "id": "2.3",
+      "title": "listFrames doesn't detect cross-origin iframes",
+      "votes": 9,
+      "implementedAs": "DOM query supplement to Page.getFrameTree discovers cross-origin iframes and merges them tagged with crossOrigin: true",
+      "fixedDate": "2026-02-08"
     }
   ]
 }

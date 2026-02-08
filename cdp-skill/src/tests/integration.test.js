@@ -296,7 +296,8 @@ describe('Integration: Component Instantiation', () => {
 describe('Integration: TestRunner with Mocks', () => {
   it('should work with mock dependencies', async () => {
     const mockPageController = {
-      navigate: async () => {}
+      navigate: async () => {},
+      waitForNetworkSettle: async () => ({ settled: true, pendingCount: 0 })
     };
 
     // Create a full mock handle with stability/scroll methods

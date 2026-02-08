@@ -37,6 +37,7 @@ describe('TestRunner', () => {
         return mockPageController.session.send('Runtime.evaluate', params);
       }),
       getFrameContext: mock.fn(() => null),
+      waitForNetworkSettle: mock.fn(() => Promise.resolve({ settled: true, pendingCount: 0 })),
       session: { send: null } // Will be set after mockElementLocator is created
     };
 

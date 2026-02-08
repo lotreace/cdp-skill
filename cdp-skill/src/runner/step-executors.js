@@ -101,6 +101,9 @@ export async function executeStep(deps, step, options = {}) {
       const gotoOptions = typeof step.goto === 'object' ? step.goto : {};
       await pageController.navigate(url, gotoOptions);
 
+      // Wait for network to settle after navigation (best-effort, never throws)
+      await pageController.waitForNetworkSettle();
+
       // Site profile: load existing or signal that none exists
       try {
         const currentUrl = await pageController.evaluateInFrame('window.location.href', { returnByValue: true });
@@ -122,6 +125,7 @@ export async function executeStep(deps, step, options = {}) {
       stepResult.action = 'reload';
       const reloadOptions = step.reload === true ? {} : step.reload;
       await pageController.reload(reloadOptions);
+      await pageController.waitForNetworkSettle();
     } else if (step.wait !== undefined) {
       stepResult.action = 'wait';
       if (typeof step.wait === 'number') {
@@ -237,6 +241,8 @@ export async function executeStep(deps, step, options = {}) {
       stepResult.output = await executeEval(pageController, step.eval);
     } else if (step.snapshot !== undefined) {
       stepResult.action = 'snapshot';
+      // Brief network settle before capturing — catches async content loading
+      await pageController.waitForNetworkSettle({ timeout: 1500, idleTime: 200 });
       stepResult.output = await executeSnapshot(deps.ariaSnapshot, step.snapshot, { tabAlias: options.tabAlias, inlineLimit: options.inlineLimit });
     } else if (step.snapshotSearch !== undefined) {
       stepResult.action = 'snapshotSearch';
@@ -258,11 +264,13 @@ export async function executeStep(deps, step, options = {}) {
       const backOptions = step.back === true ? {} : step.back;
       const entry = await pageController.goBack(backOptions);
       stepResult.output = entry ? { url: entry.url, title: entry.title } : { noHistory: true };
+      if (entry) await pageController.waitForNetworkSettle();
     } else if (step.forward !== undefined) {
       stepResult.action = 'forward';
       const forwardOptions = step.forward === true ? {} : step.forward;
       const entry = await pageController.goForward(forwardOptions);
       stepResult.output = entry ? { url: entry.url, title: entry.title } : { noHistory: true };
+      if (entry) await pageController.waitForNetworkSettle();
     } else if (step.waitForNavigation !== undefined) {
       stepResult.action = 'waitForNavigation';
       await executeWaitForNavigation(pageController, step.waitForNavigation);
@@ -277,6 +285,7 @@ export async function executeStep(deps, step, options = {}) {
       if (step._openTabHandled) {
         if (step._openTabUrl) {
           await pageController.navigate(step._openTabUrl);
+          await pageController.waitForNetworkSettle();
 
           // Site profile check (same as goto)
           try {

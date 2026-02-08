@@ -1105,6 +1105,7 @@ describe('step-executors goto profile integration', () => {
           });
         }),
         navigate: mock.fn(() => Promise.resolve()),
+        waitForNetworkSettle: mock.fn(() => Promise.resolve({ settled: true, pendingCount: 0 })),
         getUrl: mock.fn(() => Promise.resolve(`https://${testDomain}/page`)),
         session: { send: mockSessionSend }
       },

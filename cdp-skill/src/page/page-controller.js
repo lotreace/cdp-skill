@@ -222,6 +222,54 @@ export function createPageController(cdpClient) {
   }
 
   /**
+   * Best-effort network settle — waits briefly for network to quiet down.
+   * Unlike waitForNetworkQuiet, this NEVER throws on timeout. It resolves
+   * silently so callers (snapshot, post-navigation) don't fail on sites
+   * with persistent connections or long-polling.
+   *
+   * @param {Object} [options]
+   * @param {number} [options.timeout=2000] - Max time to wait
+   * @param {number} [options.idleTime=300] - Idle window to consider settled
+   * @returns {Promise<{settled: boolean, pendingCount: number}>}
+   */
+  function waitForNetworkSettle(options = {}) {
+    const { timeout = 2000, idleTime = 300 } = options;
+
+    return new Promise((resolve) => {
+      // Already idle long enough?
+      if (pendingRequests.size === 0 && (Date.now() - lastNetworkActivity) >= idleTime) {
+        resolve({ settled: true, pendingCount: 0 });
+        return;
+      }
+
+      let resolved = false;
+      let timeoutId = null;
+      let checkInterval = null;
+
+      const finish = (settled) => {
+        if (resolved) return;
+        resolved = true;
+        if (timeoutId) clearTimeout(timeoutId);
+        if (checkInterval) clearInterval(checkInterval);
+        networkIdleWaiters.delete(waiter);
+        resolve({ settled, pendingCount: pendingRequests.size });
+      };
+
+      const waiter = () => finish(true);
+      networkIdleWaiters.add(waiter);
+
+      timeoutId = setTimeout(() => finish(false), timeout);
+
+      checkInterval = setInterval(() => {
+        if (resolved) { clearInterval(checkInterval); return; }
+        if (pendingRequests.size === 0 && (Date.now() - lastNetworkActivity) >= idleTime) {
+          finish(true);
+        }
+      }, 50);
+    });
+  }
+
+  /**
    * Get current network status
    * @returns {{pendingCount: number, totalRequests: number, lastActivity: number, isIdle: boolean}}
    */
@@ -1174,6 +1222,7 @@ export function createPageController(cdpClient) {
     waitForNavigationEvent,
     withNavigation,
     waitForNetworkQuiet,
+    waitForNetworkSettle,
     getNetworkStatus,
     searchAllFrames,
     getFrameContext,
