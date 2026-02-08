@@ -929,6 +929,14 @@ const SNAPSHOT_SCRIPT = `
     // Check if element already has a ref in current snapshot
     if (elementRefs.has(el)) return elementRefs.get(el);
 
+    // Build metadata with shadow host path for shadow DOM elements
+    function buildMeta(element, r, n) {
+      const meta = { selector: generateSelector(element), role: r || '', name: n || '' };
+      const shadowPath = getShadowHostPath(element);
+      if (shadowPath.length > 0) meta.shadowHostPath = shadowPath;
+      return meta;
+    }
+
     // Check if element already has a ref from a previous snapshot
     // This ensures the same element always gets the same ref
     if (window.__ariaRefs) {
@@ -937,7 +945,7 @@ const SNAPSHOT_SCRIPT = `
           elementRefs.set(el, existingRef);
           refElements.set(existingRef, el);
           // Update metadata in case it changed
-          refMeta.set(existingRef, { selector: generateSelector(el), role: role || '', name: name || '' });
+          refMeta.set(existingRef, buildMeta(el, role, name));
           return existingRef;
         }
       }
@@ -949,7 +957,7 @@ const SNAPSHOT_SCRIPT = `
     elementRefs.set(el, ref);
     refElements.set(ref, el);
     // Store metadata for re-resolution fallback
-    refMeta.set(ref, { selector: generateSelector(el), role: role || '', name: name || '' });
+    refMeta.set(ref, buildMeta(el, role, name));
     return ref;
   }
 
@@ -1253,22 +1261,39 @@ const SNAPSHOT_SCRIPT = `
     refs[ref] = generateSelector(el);
   }
 
-  function generateSelector(el) {
+  // Build the shadow host path for an element (empty array if not in shadow DOM)
+  function getShadowHostPath(el) {
+    const hosts = [];
+    let node = el;
+    while (node) {
+      const root = node.getRootNode();
+      if (root instanceof ShadowRoot) {
+        hosts.unshift(generateSelectorForElement(root.host));
+        node = root.host;
+      } else {
+        break;
+      }
+    }
+    return hosts;
+  }
+
+  // Generate a CSS selector for a single element (used by both generateSelector and shadow path)
+  function generateSelectorForElement(el) {
     if (el.id) return '#' + CSS.escape(el.id);
 
-    // Try unique attributes
     for (const attr of ['data-testid', 'data-test-id', 'data-cy', 'name']) {
       if (el.hasAttribute(attr)) {
         const value = el.getAttribute(attr);
         const selector = '[' + attr + '=' + JSON.stringify(value) + ']';
-        if (document.querySelectorAll(selector).length === 1) return selector;
+        try { if (document.querySelectorAll(selector).length === 1) return selector; } catch(e) {}
       }
     }
 
-    // Build path
+    // Build path from element up to its root (document or shadow root)
     const path = [];
     let current = el;
-    while (current && current !== document.body) {
+    const rootNode = el.getRootNode();
+    while (current && current !== document.body && current !== rootNode) {
       let selector = current.tagName.toLowerCase();
       if (current.id) {
         selector = '#' + CSS.escape(current.id);
@@ -1288,6 +1313,10 @@ const SNAPSHOT_SCRIPT = `
     }
 
     return path.join(' > ');
+  }
+
+  function generateSelector(el) {
+    return generateSelectorForElement(el);
   }
 
   const yaml = tree.children ? tree.children.map(c => renderYaml(c, '')).join('\\n') : renderYaml(tree, '');
@@ -1647,14 +1676,57 @@ export function createAriaSnapshot(session, options = {}) {
           return candidateName.toLowerCase().includes(meta.name.toLowerCase().substring(0, 100));
         }
 
+        // Helper to resolve a CSS selector through a chain of shadow hosts
+        function queryShadow(shadowHostPath, selector) {
+          let root = document;
+          for (const hostSel of shadowHostPath) {
+            try {
+              const host = root.querySelector(hostSel);
+              if (!host || !host.shadowRoot) return null;
+              root = host.shadowRoot;
+            } catch (e) { return null; }
+          }
+          try { return root.querySelector(selector); } catch (e) { return null; }
+        }
+
+        // Helper to querySelectorAll through shadow hosts
+        function queryShadowAll(shadowHostPath, selector) {
+          let root = document;
+          for (const hostSel of shadowHostPath) {
+            try {
+              const host = root.querySelector(hostSel);
+              if (!host || !host.shadowRoot) return [];
+              root = host.shadowRoot;
+            } catch (e) { return []; }
+          }
+          try { return Array.from(root.querySelectorAll(selector)); } catch (e) { return []; }
+        }
+
+        // Helper to collect all shadow roots in the document for broad search
+        function collectShadowRoots(node, roots) {
+          if (node.shadowRoot) {
+            roots.push(node.shadowRoot);
+            collectShadowRoots(node.shadowRoot, roots);
+          }
+          const children = node.children || node.childNodes || [];
+          for (const child of children) {
+            if (child.nodeType === 1) collectShadowRoots(child, roots);
+          }
+          return roots;
+        }
+
         // 2. Element is null or stale - attempt re-resolution via metadata
         if (metaMap) {
           const meta = metaMap.get(ref);
           if (meta) {
+            const hasShadowPath = meta.shadowHostPath && meta.shadowHostPath.length > 0;
+
             // 2a. Try stored CSS selector first (fastest)
             if (meta.selector) {
               try {
-                const candidate = document.querySelector(meta.selector);
+                const candidate = hasShadowPath
+                  ? queryShadow(meta.shadowHostPath, meta.selector)
+                  : document.querySelector(meta.selector);
                 if (matchesRoleAndName(candidate, meta)) {
                   if (refsMap) refsMap.set(ref, candidate);
                   return buildResult(candidate, true);
@@ -1664,7 +1736,7 @@ export function createAriaSnapshot(session, options = {}) {
               }
             }
 
-            // 2b. Broader search: find by role + name across the document
+            // 2b. Broader search: find by role + name
             if (meta.role) {
               const roleSelectors = {
                 'link': 'a[href]',
@@ -1680,6 +1752,21 @@ export function createAriaSnapshot(session, options = {}) {
                 'menuitem': '[role="menuitem"]'
               };
               const sel = roleSelectors[meta.role] || '[role="' + meta.role + '"]';
+
+              // Search in known shadow path first, then light DOM
+              if (hasShadowPath) {
+                try {
+                  const candidates = queryShadowAll(meta.shadowHostPath, sel);
+                  for (const candidate of candidates) {
+                    if (matchesRoleAndName(candidate, meta)) {
+                      if (refsMap) refsMap.set(ref, candidate);
+                      return buildResult(candidate, true);
+                    }
+                  }
+                } catch (e) {}
+              }
+
+              // Light DOM search
               try {
                 const candidates = document.querySelectorAll(sel);
                 for (const candidate of candidates) {
@@ -1688,8 +1775,22 @@ export function createAriaSnapshot(session, options = {}) {
                     return buildResult(candidate, true);
                   }
                 }
-              } catch (e) {
-                // fall through
+              } catch (e) {}
+
+              // 2c. Last resort: search ALL shadow roots in the document
+              if (!hasShadowPath) {
+                try {
+                  const shadowRoots = collectShadowRoots(document.body, []);
+                  for (const sr of shadowRoots) {
+                    const candidates = sr.querySelectorAll(sel);
+                    for (const candidate of candidates) {
+                      if (matchesRoleAndName(candidate, meta)) {
+                        if (refsMap) refsMap.set(ref, candidate);
+                        return buildResult(candidate, true);
+                      }
+                    }
+                  }
+                } catch (e) {}
               }
             }
           }
