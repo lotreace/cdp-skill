@@ -430,7 +430,7 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
 
   async function executeBatch(params) {
     if (!params || typeof params !== 'object') {
-      throw new Error('fillForm requires an object mapping selectors to values');
+      throw new Error('fill batch requires an object mapping selectors to values');
     }
 
     // Support both formats:
@@ -450,7 +450,7 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
 
     const entries = Object.entries(fields);
     if (entries.length === 0) {
-      throw new Error('fillForm requires at least one field');
+      throw new Error('fill batch requires at least one field');
     }
 
     const results = [];

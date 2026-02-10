@@ -14,14 +14,14 @@ A lightweight, zero-dependency browser automation library using Chrome DevTools 
 ## Quick Start
 
 ```bash
-# Check Chrome status (auto-launches if needed)
-node src/cdp-skill.js '{"steps":[{"chromeStatus":true}]}'
-
-# Open a tab and navigate
+# Open a tab (Chrome auto-launches if needed)
 node src/cdp-skill.js '{"steps":[{"openTab":"https://google.com"}]}'
 
 # Use the returned tab ID for subsequent calls
-node src/cdp-skill.js '{"config":{"tab":"t1"},"steps":[{"click":"#btn"}]}'
+node src/cdp-skill.js '{"tab":"t1","steps":[{"click":"#btn"}]}'
+
+# Non-default Chrome (rare)
+node src/cdp-skill.js '{"steps":[{"openTab":{"url":"https://google.com","port":9333,"headless":true}}]}'
 ```
 
 ## Features
@@ -34,9 +34,9 @@ node src/cdp-skill.js '{"config":{"tab":"t1"},"steps":[{"click":"#btn"}]}'
 
 ### Chrome Management
 - **Auto-launch** - Detects Chrome path on macOS/Linux/Windows, launches with remote debugging
-- **Status check** - `chromeStatus` step reports running state, version, and open tabs
+- **Status check** - `chromeStatus` step for diagnostics (optional — `openTab` handles launch automatically)
 - **Multi-agent safe** - Multiple agents can share Chrome; each manages their own tabs
-- **Headless support** - Run Chrome without UI via `{"chromeStatus":{"headless":true}}`
+- **Headless support** - Run Chrome without UI via `{"openTab":{"url":"...","headless":true}}`
 
 ### Navigation
 - **URL navigation** - `goto`, `back`, `forward`, `reload`
@@ -72,7 +72,7 @@ node src/cdp-skill.js '{"config":{"tab":"t1"},"steps":[{"click":"#btn"}]}'
 - **CSS queries** - Traditional selector-based queries
 - **Multi-query** - Batch multiple queries in one step
 - **Page inspection** - Quick overview of page structure
-- **Coordinate discovery** - `refAt`, `elementsAt`, `elementsNear` for visual-based targeting
+- **Coordinate discovery** - `elementsAt` for point, batch, and nearby visual-based targeting
 
 ### Dynamic Browser Execution
 - **pageFunction** - Run agent-generated JavaScript in the browser with serialized return values
@@ -80,8 +80,7 @@ node src/cdp-skill.js '{"config":{"tab":"t1"},"steps":[{"click":"#btn"}]}'
 - **pipeline** - Compile micro-operations (find+fill, find+click, waitFor, sleep) into a single async JS function with zero roundtrips
 
 ### Frame Support
-- **List frames** - Enumerate all iframes
-- **Switch context** - Execute in iframe by selector, index, or name
+- **frame** - Unified step: `"selector"` (switch), `0` (by index), `"top"` (main), `{list: true}` (enumerate)
 - **Cross-origin detection** - Identifies cross-origin frames in snapshots
 - **Shadow DOM** - Pierce shadow roots with `pierceShadow` option in snapshots
 
@@ -96,7 +95,7 @@ node src/cdp-skill.js '{"config":{"tab":"t1"},"steps":[{"click":"#btn"}]}'
 - **Text/HTML/attributes** - Extract content from elements
 - **Console logs** - Capture browser console output
 - **Cookies** - Get, set, delete with expiration support
-- **JavaScript eval** - Execute code in page context with serialization
+- **pageFunction** - Execute JS functions or bare expressions in page context with serialization
 
 ### Form Handling
 - **Fill form** - Multiple fields in one step
@@ -162,11 +161,11 @@ src/
     ├── context-helpers.js    #   Step types, action context
     ├── execute-dynamic.js    #   pageFunction, poll, pipeline, site profiles
     ├── execute-interaction.js#   click, hover, drag
-    ├── execute-input.js      #   fill, fillActive, selectOption
+    ├── execute-input.js      #   fill (focused), selectOption
     ├── execute-navigation.js #   wait, scroll, waitForNavigation
     ├── execute-query.js      #   snapshot, query, inspect, getBox, etc.
     ├── execute-form.js       #   validate, submit, extract, assert
-    └── execute-browser.js    #   eval, pdf, cookies, console, tabs
+    └── execute-browser.js    #   pdf, cookies, console, tabs
 ```
 
 ## Requirements

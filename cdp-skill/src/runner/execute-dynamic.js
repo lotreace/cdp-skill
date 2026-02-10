@@ -53,7 +53,7 @@ function processSerializedResult(raw) {
  * @returns {Promise<Object>} serialized return value
  */
 export async function executePageFunction(pageController, params) {
-  const fn = typeof params === 'string' ? params : params.fn;
+  const fn = typeof params === 'string' ? params : (params.fn || params.expression);
   const useRefs = typeof params === 'object' && params.refs === true;
   const timeout = typeof params === 'object' && typeof params.timeout === 'number'
     ? params.timeout : null;

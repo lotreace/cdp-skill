@@ -14,14 +14,14 @@ A lightweight, zero-dependency browser automation library using Chrome DevTools 
 ## Quick Start
 
 ```bash
-# Check Chrome status (auto-launches if needed)
-node src/cdp-skill.js '{"steps":[{"chromeStatus":true}]}'
-
-# Open a tab and navigate
+# Open a tab (Chrome auto-launches if needed)
 node src/cdp-skill.js '{"steps":[{"openTab":"https://google.com"}]}'
 
 # Use the returned tab ID for subsequent calls
-node src/cdp-skill.js '{"config":{"tab":"t1"},"steps":[{"click":"#btn"}]}'
+node src/cdp-skill.js '{"tab":"t1","steps":[{"click":"#btn"}]}'
+
+# Non-default Chrome (rare)
+node src/cdp-skill.js '{"steps":[{"openTab":{"url":"https://google.com","port":9333,"headless":true}}]}'
 ```
 
 ## Features
@@ -34,9 +34,9 @@ node src/cdp-skill.js '{"config":{"tab":"t1"},"steps":[{"click":"#btn"}]}'
 
 ### Chrome Management
 - **Auto-launch** - Detects Chrome path on macOS/Linux/Windows, launches with remote debugging
-- **Status check** - `chromeStatus` step reports running state, version, and open tabs
+- **Status check** - `chromeStatus` step for diagnostics (optional — `openTab` handles launch automatically)
 - **Multi-agent safe** - Multiple agents can share Chrome; each manages their own tabs
-- **Headless support** - Run Chrome without UI via `{"chromeStatus":{"headless":true}}`
+- **Headless support** - Run Chrome without UI via `{"openTab":{"url":"...","headless":true}}`
 
 ### Navigation
 - **URL navigation** - `goto`, `back`, `forward`, `reload`

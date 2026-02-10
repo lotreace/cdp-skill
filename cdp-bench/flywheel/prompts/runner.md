@@ -37,7 +37,7 @@ export CDP_METRICS_FILE="{{metrics_file}}"
 **Always use headless mode.** Launch Chrome and execute the task:
 
 ```bash
-node cdp-skill/src/cdp-skill.js '{"config": {"headless": true}, "steps": [{"openTab": "{{url}}"}]}'
+node cdp-skill/src/cdp-skill.js '{"steps": [{"openTab": {"url": "{{url}}", "headless": true}}]}'
 ```
 
 Work through the task step by step. Use the most appropriate cdp-skill steps for each action. Stay within the budget limits.
@@ -119,7 +119,7 @@ Do NOT include explanations, observations, or debugging info in your response â€
 
 **You MUST include at least one entry in the `feedback` array.** This is how the flywheel learns. After completing the test, reflect on your experience and report:
 
-- **Workarounds** (`type: "workaround"`): Any time you used eval, pageFunction, or a non-obvious approach because the direct cdp-skill step didn't work. Example: "Used eval to click because CDP click was intercepted by overlay"
+- **Workarounds** (`type: "workaround"`): Any time you used pageFunction or a non-obvious approach because the direct cdp-skill step didn't work. Example: "Used pageFunction to click because CDP click was intercepted by overlay"
 - **Bugs** (`type: "bug"`): Errors, crashes, or incorrect behavior from cdp-skill. Example: "snapshot returned empty after navigating to SPA route"
 - **Improvements** (`type: "improvement"`): Missing features or capabilities that would have made the task easier. Example: "No way to wait for specific text to appear without polling via pageFunction"
 
@@ -133,5 +133,5 @@ If the test went perfectly with no issues, still add one entry noting what worke
 - Prefer ref-based clicking over text-based when refs are available
 - If an action fails, try an alternative approach before giving up
 - Record ALL cdp-skill calls in the trace, including failed ones
-- Note any workarounds you had to use (eval clicks, eval fills, etc.)
+- Note any workarounds you had to use (pageFunction clicks, pageFunction fills, etc.)
 - Stay within the step budget â€” efficiency matters

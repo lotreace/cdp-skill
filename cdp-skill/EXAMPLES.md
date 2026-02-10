@@ -6,28 +6,14 @@ Worked examples and JSON code blocks for every step type. See SKILL.md for the c
 
 ## Quick Start
 
-### Check Chrome Status
-```json
-{"steps":[{"chromeStatus":true}]}
-```
-
-Response:
-```json
-{
-  "status": "ok",
-  "chrome": {
-    "running": true,
-    "launched": true,
-    "version": "Chrome/120.0.6099.109",
-    "port": 9222,
-    "tabs": [{"targetId": "ABC123", "url": "about:blank", "title": ""}]
-  }
-}
-```
-
-### Open a Tab
+### Open a Tab (Chrome auto-launches)
 ```json
 {"steps":[{"openTab":"https://google.com"}]}
+```
+
+Non-default Chrome (rare):
+```json
+{"steps":[{"openTab":{"url":"https://google.com","port":9333,"headless":true}}]}
 ```
 
 Separate open and navigate:
@@ -44,19 +30,46 @@ echo '{"steps":[{"openTab":"https://google.com"}]}' | node src/cdp-skill.js
 ```json
 {"steps":[{"openTab":"https://google.com"}]}
 ```
-Response: `{"tab": {"id": "t1", ...}, "steps": [{"output": {"tab": "t1", ...}}]}`
+Response: `{"tab": "t1", "steps": [{"action": "openTab", "status": "ok", ...}]}`
 
 Subsequent calls:
 ```json
-{"config":{"tab":"t1"},"steps":[{"click":"#btn"}]}
+{"tab":"t1","steps":[{"click":"#btn"}]}
 ```
 ```json
-{"config":{"tab":"t1"},"steps":[{"snapshot":true}]}
+{"tab":"t1","steps":[{"snapshot":true}]}
+```
+
+Optional timeout:
+```json
+{"tab":"t1","timeout":60000,"steps":[{"goto":"https://slow-site.com"}]}
 ```
 
 Close when done:
 ```json
 {"steps":[{"closeTab":"t1"}]}
+```
+
+### Check Chrome Status (optional diagnostic)
+```json
+{"steps":[{"chromeStatus":true}]}
+```
+```json
+{"steps":[{"chromeStatus":{"port":9333,"headless":true}}]}
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "chrome": {
+    "running": true,
+    "launched": true,
+    "version": "Chrome/120.0.6099.109",
+    "port": 9222,
+    "tabs": [{"targetId": "ABC123", "url": "about:blank", "title": ""}]
+  }
+}
 ```
 
 ### connectTab — Connect to Existing Tab
@@ -286,23 +299,21 @@ Response when Chrome needed intervention:
 
 ## Frames
 
-### listFrames
+### frame — List frames
 ```json
-{"listFrames": true}
+{"frame": {"list": true}}
 ```
 
-### switchToFrame
+### frame — Switch to frame
 ```json
-{"switchToFrame": "iframe#content"}
-{"switchToFrame": 0}
-{"switchToFrame": {"selector": "iframe.editor"}}
-{"switchToFrame": {"index": 1}}
-{"switchToFrame": {"name": "myFrame"}}
+{"frame": "iframe#content"}
+{"frame": 0}
+{"frame": {"name": "myFrame"}}
 ```
 
-### switchToMainFrame
+### frame — Return to main frame
 ```json
-{"switchToMainFrame": true}
+{"frame": "top"}
 ```
 
 ---
@@ -327,9 +338,9 @@ Response when Chrome needed intervention:
 {"wait": {"urlContains": "/success"}}
 ```
 
-### wait — Fixed time
+### sleep — Fixed time delay
 ```json
-{"wait": 2000}
+{"sleep": 2000}
 ```
 
 ---
@@ -413,20 +424,21 @@ Response: `{clicked: true, matchedSelector: "#submit"}`
 {"fill": {"label": "Password", "value": "secret123", "exact": true}}
 ```
 
-### fillForm — Multiple fields
+### fill — Multiple fields (batch)
 ```json
-{"fillForm": {"#firstName": "John", "#lastName": "Doe"}}
+{"fill": {"#firstName": "John", "#lastName": "Doe"}}
+{"fill": {"fields": {"#firstName": "John"}, "react": true}}
 ```
-Response: `{total, filled, failed, results: [{selector, status, value}]}`
+Response: `{total, filled, failed, results: [{selector, status, value}], mode: "batch"}`
 
-### fillActive — Currently focused element
+### fill — Currently focused element
 ```json
-{"fillActive": "search query"}
-{"fillActive": {"value": "text", "clear": false}}
+{"fill": "search query"}
+{"fill": {"value": "text", "clear": false}}
 ```
 Response:
 ```json
-{"filled": true, "tag": "INPUT", "type": "text", "selector": "#search", "valueBefore": "", "valueAfter": "search query"}
+{"filled": true, "tag": "INPUT", "type": "text", "selector": "#search", "valueBefore": "", "valueAfter": "search query", "mode": "focused"}
 ```
 
 ### Autocomplete pattern
@@ -603,9 +615,11 @@ Multiple refs:
 }
 ```
 
-### refAt
+### elementsAt
+
+Single point (returns the element at a specific coordinate):
 ```json
-{"refAt": {"x": 600, "y": 200}}
+{"elementsAt": {"x": 600, "y": 200}}
 ```
 Response:
 ```json
@@ -621,7 +635,7 @@ Response:
 }
 ```
 
-### elementsAt
+Batch (multiple coordinates):
 ```json
 {"elementsAt": [{"x": 100, "y": 200}, {"x": 300, "y": 400}, {"x": 500, "y": 150}]}
 ```
@@ -637,11 +651,11 @@ Response:
 }
 ```
 
-### elementsNear
+Nearby search (with radius):
 ```json
-{"elementsNear": {"x": 400, "y": 300}}
-{"elementsNear": {"x": 400, "y": 300, "radius": 100}}
-{"elementsNear": {"x": 400, "y": 300, "radius": 75, "limit": 10}}
+{"elementsAt": {"x": 400, "y": 300}}
+{"elementsAt": {"x": 400, "y": 300, "radius": 100}}
+{"elementsAt": {"x": 400, "y": 300, "radius": 75, "limit": 10}}
 ```
 Response:
 ```json
@@ -983,17 +997,17 @@ Updated: 2024-02-03  |  Fingerprint: <hash>
 
 ## JavaScript Execution
 
-### eval
+### pageFunction (bare expressions)
 ```json
-{"eval": "document.title"}
-{"eval": {"expression": "fetch('/api').then(r=>r.json())", "await": true}}
+{"pageFunction": "document.title"}
+{"pageFunction": {"expression": "fetch('/api').then(r=>r.json())", "await": true}}
 ```
 
 ### Shell Escaping Tips
 ```bash
 # Heredoc approach (Unix)
 node src/cdp-skill.js <<'EOF'
-{"steps":[{"eval":"document.querySelectorAll('button').length"}]}
+{"steps":[{"pageFunction":"document.querySelectorAll('button').length"}]}
 EOF
 
 # Or save to file and pipe
@@ -1081,13 +1095,3 @@ Creates files like:
 - `log/003-t1-click-fill.ok.json`
 - `log/004-t1-scroll.error.json`
 
-### Config-Based Debug
-```json
-{
-  "config": {
-    "debug": true,
-    "debugOptions": {"captureScreenshots": true, "captureDom": true}
-  },
-  "steps": []
-}
-```

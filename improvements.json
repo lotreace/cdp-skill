@@ -1,7 +1,7 @@
 {
   "meta": {
     "totalVotes": 87,
-    "lastUpdated": "2026-02-08T19:05:30.002Z"
+    "lastUpdated": "2026-02-08T22:20:24.908Z"
   },
   "issues": [
     {
@@ -25,7 +25,7 @@
       "id": "2.1",
       "section": "Frame / Context Issues",
       "title": "Frame context doesn't persist across CLI invocations",
-      "votes": 3,
+      "votes": 4,
       "status": "open",
       "symptoms": [
         "Call switchToFrame, next CLI call reverts to main frame",
@@ -353,7 +353,7 @@
       "id": "8.2",
       "section": "Stagehand-Inspired Improvements",
       "title": "Lazy selector resolution (eliminate stale refs)",
-      "votes": 2,
+      "votes": 3,
       "status": "open",
       "symptoms": [
         "Cached element handles can become stale creating stale element errors",
@@ -553,25 +553,6 @@
       "workaround": null,
       "files": [
         "src/aria.js"
-      ],
-      "fixAttempts": []
-    },
-    {
-      "id": "9.5",
-      "section": "Snapshot Response Payload Issues",
-      "title": "Footer/boilerplate noise dominates snapshots",
-      "votes": 5,
-      "status": "open",
-      "symptoms": [
-        "Amazon homepage: 57% of interactive elements are footer links",
-        "Wikipedia: ~60-65% of viewport snapshot is site chrome",
-        "HN: table structure noise = ~35% of YAML"
-      ],
-      "expected": "Option to exclude landmark roles or auto-scope to role=main",
-      "workaround": "Use {\"snapshot\": {\"root\": \"role=main\"}} to scope to main content",
-      "files": [
-        "src/aria.js",
-        "src/runner/execute-query.js"
       ],
       "fixAttempts": []
     },
@@ -982,6 +963,107 @@
       "sourceTests": [
         "025-tinymce-editor"
       ]
+    },
+    {
+      "id": "10.11",
+      "section": "Snapshot Content/Accuracy Issues",
+      "title": "Snapshot returns empty YAML inside frameset frames",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "After switching to frame-left (a frame inside a frameset), snapshot returned {yaml: '', refs: {}}. The accessibility tree may not properly traverse frameset-based frames. Had to use pageFunction as fallback to read text content."
+      ],
+      "expected": "",
+      "workaround": null,
+      "files": [
+        "src/cdp-skill.js"
+      ],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "031-herokuapp-nested-frames"
+      ]
+    },
+    {
+      "id": "4.5",
+      "section": "Input / Typing Issues",
+      "title": "No native file upload support - had to use pageFunction with Dropzone API",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "cdp-skill fill step rejects file inputs as 'not editable'. Had to use pageFunction to call Dropzone.forElement().addFile() to programmatically upload. CDP protocol supports DOM.setFileInputFiles which could be exposed as a dedicated step (e.g., 'uploadFile' or 'setFileInput') for native file upload support without requiring pageFunction workarounds."
+      ],
+      "expected": "",
+      "workaround": "cdp-skill fill step rejects file inputs as 'not editable'. Had to use pageFunction to call Dropzone.forElement().addFile() to programmatically upload. CDP protocol supports DOM.setFileInputFiles which could be exposed as a dedicated step (e.g., 'uploadFile' or 'setFileInput') for native file upload support without requiring pageFunction workarounds.",
+      "files": [
+        "src/element-locator.js",
+        "src/cdp-skill.js"
+      ],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "034-herokuapp-upload"
+      ]
+    },
+    {
+      "id": "1.3",
+      "section": "Timeout / Actionability Issues",
+      "title": "Used CSS selector instead of ref after ref-based click failed",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "After two failed attempts to click via ref s1e12, used CSS selector 'table tbody tr:nth-of-type(5) td:nth-of-type(7) a:first-of-type' which succeeded via jsClick-auto fallback. Refs from earlier snapshots should remain valid and clickable regardless of scroll position."
+      ],
+      "expected": "",
+      "workaround": "After two failed attempts to click via ref s1e12, used CSS selector 'table tbody tr:nth-of-type(5) td:nth-of-type(7) a:first-of-type' which succeeded via jsClick-auto fallback. Refs from earlier snapshots should remain valid and clickable regardless of scroll position.",
+      "files": [
+        "src/click-executor.js"
+      ],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "036-herokuapp-challenging-dom"
+      ]
+    },
+    {
+      "id": "1.4",
+      "section": "Timeout / Actionability Issues",
+      "title": "Time list items outside viewport require force click",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "The react-datepicker time list is a scrollable container where most items are outside the browser viewport. Using ref click failed with 'Coordinates must be non-negative' and jsClick also failed with 'outside viewport'. Had to use force:true which fell back to jsClick-fallback. The scrollUntilVisible option could help but it scrolls the page, not the internal container."
+      ],
+      "expected": "",
+      "workaround": "The react-datepicker time list is a scrollable container where most items are outside the browser viewport. Using ref click failed with 'Coordinates must be non-negative' and jsClick also failed with 'outside viewport'. Had to use force:true which fell back to jsClick-fallback. The scrollUntilVisible option could help but it scrolls the page, not the internal container.",
+      "files": [
+        "src/click-executor.js"
+      ],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "037-demoqa-datepicker"
+      ]
+    },
+    {
+      "id": "1.5",
+      "section": "Timeout / Actionability Issues",
+      "title": "Multiselect input click needed jsClick fallback",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Clicking the multiselect input (ref s1e8) required jsClick-auto fallback because the CDP click was intercepted. The auto-fallback handled this transparently."
+      ],
+      "expected": "",
+      "workaround": "Clicking the multiselect input (ref s1e8) required jsClick-auto fallback because the CDP click was intercepted. The auto-fallback handled this transparently.",
+      "files": [
+        "src/click-executor.js"
+      ],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "038-demoqa-selectmenu"
+      ]
     }
   ],
   "implemented": [
@@ -1074,6 +1156,13 @@
       "title": "CDP clicks consistently fall back to jsClick-auto on React sites",
       "votes": 12,
       "implementedAs": "Crank 6: fixed in v1.0.9",
+      "fixedDate": "2026-02-08"
+    },
+    {
+      "id": "9.5",
+      "title": "Footer/boilerplate noise dominates snapshots",
+      "votes": 5,
+      "implementedAs": "Auto-scope aria snapshots to <main> element when available, with landmark header showing other page landmarks. Uses {root: \"body\"} to opt out.",
       "fixedDate": "2026-02-08"
     }
   ]

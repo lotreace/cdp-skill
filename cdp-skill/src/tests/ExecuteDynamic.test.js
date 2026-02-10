@@ -559,14 +559,24 @@ describe('StepValidator - pageFunction validation', () => {
     assert.strictEqual(errors.length, 0);
   });
 
-  it('should reject empty string', () => {
-    const errors = validateStepInternal({ pageFunction: '' });
-    assert.ok(errors.some(e => e.includes('non-empty function string')));
+  it('should accept bare expression string', () => {
+    const errors = validateStepInternal({ pageFunction: 'document.title' });
+    assert.strictEqual(errors.length, 0);
   });
 
-  it('should reject missing fn in object form', () => {
+  it('should accept object form with expression key', () => {
+    const errors = validateStepInternal({ pageFunction: { expression: 'document.title' } });
+    assert.strictEqual(errors.length, 0);
+  });
+
+  it('should reject empty string', () => {
+    const errors = validateStepInternal({ pageFunction: '' });
+    assert.ok(errors.some(e => e.includes('non-empty string')));
+  });
+
+  it('should reject missing fn and expression in object form', () => {
     const errors = validateStepInternal({ pageFunction: { timeout: 1000 } });
-    assert.ok(errors.some(e => e.includes('non-empty fn string')));
+    assert.ok(errors.some(e => e.includes('non-empty fn or expression string')));
   });
 
   it('should reject invalid refs type', () => {
@@ -581,7 +591,7 @@ describe('StepValidator - pageFunction validation', () => {
 
   it('should reject non-string non-object form', () => {
     const errors = validateStepInternal({ pageFunction: 42 });
-    assert.ok(errors.some(e => e.includes('function string or params object')));
+    assert.ok(errors.some(e => e.includes('function/expression string or params object')));
   });
 });
 

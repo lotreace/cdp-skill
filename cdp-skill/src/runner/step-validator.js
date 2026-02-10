@@ -77,11 +77,9 @@ export function validateStepInternal(step) {
       break;
 
     case 'wait':
-      // Support numeric value for simple delay: { "wait": 2000 }
+      // Numeric wait is no longer supported - use sleep instead
       if (typeof params === 'number') {
-        if (params < 0) {
-          errors.push('wait time must be a non-negative number');
-        }
+        errors.push('wait no longer accepts a number — use { "sleep": N } for time delays');
       } else if (typeof params === 'string') {
         if (params.length === 0) {
           errors.push('wait selector cannot be empty');
@@ -92,8 +90,11 @@ export function validateStepInternal(step) {
         const hasTextRegex = params.textRegex !== undefined;
         const hasTime = params.time !== undefined;
         const hasUrlContains = params.urlContains !== undefined;
+        if (hasTime) {
+          errors.push('wait no longer accepts time — use { "sleep": N } for time delays');
+        }
         if (!hasSelector && !hasText && !hasTextRegex && !hasTime && !hasUrlContains) {
-          errors.push('wait requires selector, text, textRegex, time, or urlContains');
+          errors.push('wait requires selector, text, textRegex, or urlContains');
         }
         if (hasSelector && typeof params.selector !== 'string') {
           errors.push('wait selector must be a string');
@@ -103,9 +104,6 @@ export function validateStepInternal(step) {
         }
         if (hasTextRegex && typeof params.textRegex !== 'string') {
           errors.push('wait textRegex must be a string');
-        }
-        if (hasTime && (typeof params.time !== 'number' || params.time < 0)) {
-          errors.push('wait time must be a non-negative number');
         }
         if (hasUrlContains && typeof params.urlContains !== 'string') {
           errors.push('wait urlContains must be a string');
@@ -157,45 +155,52 @@ export function validateStepInternal(step) {
       break;
 
     case 'fill':
-      if (!params || typeof params !== 'object') {
-        errors.push('fill requires an object with selector/ref/label and value');
-      } else {
-        if (!params.selector && !params.ref && !params.label) {
-          errors.push('fill requires selector, ref, or label');
-        } else if (params.selector && typeof params.selector !== 'string') {
-          errors.push('fill selector must be a string');
-        } else if (params.ref && typeof params.ref !== 'string') {
-          errors.push('fill ref must be a string');
-        } else if (params.label && typeof params.label !== 'string') {
-          errors.push('fill label must be a string');
-        }
-        if (params.value === undefined) {
-          errors.push('fill requires value');
-        }
-      }
-      break;
+      // Unified fill: 5 shapes
+      // 1. fill: "text" → focused mode (string)
+      // 2. fill: {selector/ref/label, value} → single field
+      // 3. fill: {value, clear?} → focused with options (no targeting key)
+      // 4. fill: {fields: {...}, react?} → batch with options
+      // 5. fill: {"#a": "v1", "#b": "v2"} → batch (fallback)
+      if (typeof params === 'string') {
+        // Shape 1: focused mode — string value is fine (even empty)
+      } else if (params && typeof params === 'object') {
+        const hasTargeting = params.selector || params.ref || params.label;
+        const hasFields = params.fields && typeof params.fields === 'object';
 
-    case 'fillForm':
-      if (!params || typeof params !== 'object') {
-        errors.push('fillForm requires an object mapping selectors/refs to values');
-      } else {
-        // Support both formats:
-        // Simple: {"#firstName": "John", "#lastName": "Doe"}
-        // Extended: {"fields": {"#firstName": "John"}, "react": true}
-        let fields;
-        if (params.fields && typeof params.fields === 'object') {
-          fields = params.fields;
-          // Validate react option if present
-          if (params.react !== undefined && typeof params.react !== 'boolean') {
-            errors.push('fillForm react option must be a boolean');
+        if (hasTargeting) {
+          // Shape 2: single field with targeting
+          if (params.selector && typeof params.selector !== 'string') {
+            errors.push('fill selector must be a string');
+          } else if (params.ref && typeof params.ref !== 'string') {
+            errors.push('fill ref must be a string');
+          } else if (params.label && typeof params.label !== 'string') {
+            errors.push('fill label must be a string');
           }
+          if (params.value === undefined) {
+            errors.push('fill requires value');
+          }
+        } else if (hasFields) {
+          // Shape 4: batch with options
+          const entries = Object.entries(params.fields);
+          if (entries.length === 0) {
+            errors.push('fill requires at least one field');
+          }
+          if (params.react !== undefined && typeof params.react !== 'boolean') {
+            errors.push('fill react option must be a boolean');
+          }
+        } else if (params.value !== undefined) {
+          // Shape 3: focused with options (has value but no targeting key)
         } else {
-          fields = params;
+          // Shape 5: batch (plain object mapping selectors→values)
+          // Filter out option keys that aren't selector→value mappings
+          const optionKeys = new Set(['clear', 'react', 'force', 'exact', 'timeout', 'readyWhen', 'settledWhen', 'observe', 'optional']);
+          const fieldEntries = Object.entries(params).filter(([k]) => !optionKeys.has(k));
+          if (fieldEntries.length === 0) {
+            errors.push('fill requires at least one field mapping (selector → value)');
+          }
         }
-        const entries = Object.entries(fields);
-        if (entries.length === 0) {
-          errors.push('fillForm requires at least one field');
-        }
+      } else {
+        errors.push('fill requires a string, object with selector/ref/label and value, or object mapping selectors to values');
       }
       break;
 
@@ -269,22 +274,6 @@ export function validateStepInternal(step) {
       }
       break;
 
-    case 'eval':
-      if (typeof params === 'string') {
-        if (params.length === 0) {
-          errors.push('eval expression cannot be empty');
-        }
-      } else if (params && typeof params === 'object') {
-        if (!params.expression) {
-          errors.push('eval requires expression');
-        } else if (typeof params.expression !== 'string') {
-          errors.push('eval expression must be a string');
-        }
-      } else {
-        errors.push('eval requires an expression string or params object');
-      }
-      break;
-
     case 'snapshot':
       // snapshot can be boolean or object with options
       if (params !== true && params !== false && typeof params !== 'object') {
@@ -338,8 +327,16 @@ export function validateStepInternal(step) {
           errors.push('hover selector cannot be empty');
         }
       } else if (params && typeof params === 'object') {
-        if (!params.selector && !params.ref) {
-          errors.push('hover requires selector or ref');
+        const hasCoordinates = typeof params.x === 'number' && typeof params.y === 'number';
+        const hasText = typeof params.text === 'string';
+        if (!params.selector && !params.ref && !hasCoordinates && !hasText) {
+          errors.push('hover requires selector, ref, text, or x/y coordinates');
+        }
+        if (hasText && params.text.length === 0) {
+          errors.push('hover text cannot be empty');
+        }
+        if (hasCoordinates && (params.x < 0 || params.y < 0)) {
+          errors.push('hover coordinates must be non-negative');
         }
       } else {
         errors.push('hover requires a selector string or params object');
@@ -415,12 +412,23 @@ export function validateStepInternal(step) {
       // openTab can be:
       // - true: just open a blank tab
       // - string: open tab and navigate to URL
-      // - object with options: {url: "...", viewport: {...}}
+      // - object with options: {url: "...", host: "...", port: N, headless: bool}
       if (params !== true && typeof params !== 'string' && (typeof params !== 'object' || params === null)) {
         errors.push('openTab must be true, a URL string, or an options object');
       }
-      if (typeof params === 'object' && params !== null && params.url !== undefined && typeof params.url !== 'string') {
-        errors.push('openTab url must be a string');
+      if (typeof params === 'object' && params !== null) {
+        if (params.url !== undefined && typeof params.url !== 'string') {
+          errors.push('openTab url must be a string');
+        }
+        if (params.host !== undefined && typeof params.host !== 'string') {
+          errors.push('openTab host must be a string');
+        }
+        if (params.port !== undefined && typeof params.port !== 'number') {
+          errors.push('openTab port must be a number');
+        }
+        if (params.headless !== undefined && typeof params.headless !== 'boolean') {
+          errors.push('openTab headless must be a boolean');
+        }
       }
       break;
 
@@ -523,19 +531,26 @@ export function validateStepInternal(step) {
       }
       break;
 
-    case 'switchToFrame':
-      // Can be string (selector/name), number (index), or object
-      if (params === null || params === undefined) {
-        errors.push('switchToFrame requires a selector, index, or options object');
+    case 'frame':
+      // Unified frame operations:
+      // frame: "selector" → switch by CSS selector
+      // frame: 0 → switch by index
+      // frame: "top" → return to main frame
+      // frame: {name: "foo"} → switch by name
+      // frame: {list: true} → list all frames
+      if (typeof params === 'string') {
+        if (params.length === 0) {
+          errors.push('frame requires a non-empty selector string');
+        }
+      } else if (typeof params === 'number') {
+        if (params < 0) {
+          errors.push('frame index must be non-negative');
+        }
+      } else if (params && typeof params === 'object') {
+        // Accept any object (name, list, etc.)
+      } else {
+        errors.push('frame requires a selector, index, "top", or options object');
       }
-      break;
-
-    case 'switchToMainFrame':
-      // No validation needed, params can be true or anything
-      break;
-
-    case 'listFrames':
-      // No validation needed
       break;
 
     case 'drag':
@@ -618,77 +633,53 @@ export function validateStepInternal(step) {
       }
       break;
 
-    case 'fillActive':
-      // fillActive: "text" or {"value": "text", "clear": true}
-      if (typeof params === 'string') {
-        // Simple string value is fine
-      } else if (typeof params === 'object' && params !== null) {
-        if (params.value === undefined) {
-          errors.push('fillActive requires value');
-        }
-      } else {
-        errors.push('fillActive requires a string value or options object with value');
-      }
-      break;
-
-    case 'refAt':
-      // refAt: {"x": 100, "y": 200}
-      if (!params || typeof params !== 'object') {
-        errors.push('refAt requires an object with x and y coordinates');
-      } else {
-        if (typeof params.x !== 'number') {
-          errors.push('refAt requires x coordinate as a number');
-        }
-        if (typeof params.y !== 'number') {
-          errors.push('refAt requires y coordinate as a number');
-        }
-      }
-      break;
-
     case 'elementsAt':
-      // elementsAt: [{"x": 100, "y": 200}, {"x": 300, "y": 400}]
-      if (!Array.isArray(params)) {
-        errors.push('elementsAt requires an array of {x, y} coordinates');
-      } else if (params.length === 0) {
-        errors.push('elementsAt array cannot be empty');
-      } else {
-        for (let i = 0; i < params.length; i++) {
-          const coord = params[i];
-          if (!coord || typeof coord !== 'object') {
-            errors.push(`elementsAt[${i}] must be an object with x and y`);
-          } else if (typeof coord.x !== 'number' || typeof coord.y !== 'number') {
-            errors.push(`elementsAt[${i}] requires x and y as numbers`);
+      // Unified coordinate lookups:
+      // elementsAt: {x, y} → single point ref (was refAt)
+      // elementsAt: [{x,y}, ...] → batch (was elementsAt)
+      // elementsAt: {x, y, radius} → nearby search (was elementsNear)
+      if (Array.isArray(params)) {
+        // Batch mode
+        if (params.length === 0) {
+          errors.push('elementsAt array cannot be empty');
+        } else {
+          for (let i = 0; i < params.length; i++) {
+            const coord = params[i];
+            if (!coord || typeof coord !== 'object') {
+              errors.push(`elementsAt[${i}] must be an object with x and y`);
+            } else if (typeof coord.x !== 'number' || typeof coord.y !== 'number') {
+              errors.push(`elementsAt[${i}] requires x and y as numbers`);
+            }
           }
         }
-      }
-      break;
-
-    case 'elementsNear':
-      // elementsNear: {"x": 100, "y": 200, "radius": 50}
-      if (!params || typeof params !== 'object') {
-        errors.push('elementsNear requires an object with x, y, and optional radius');
-      } else {
+      } else if (params && typeof params === 'object') {
+        // Single point or nearby (object with x, y, optional radius)
         if (typeof params.x !== 'number') {
-          errors.push('elementsNear requires x coordinate as a number');
+          errors.push('elementsAt requires x coordinate as a number');
         }
         if (typeof params.y !== 'number') {
-          errors.push('elementsNear requires y coordinate as a number');
+          errors.push('elementsAt requires y coordinate as a number');
         }
         if (params.radius !== undefined && typeof params.radius !== 'number') {
-          errors.push('elementsNear radius must be a number');
+          errors.push('elementsAt radius must be a number');
         }
+      } else {
+        errors.push('elementsAt requires {x, y}, [{x,y}, ...], or {x, y, radius}');
       }
       break;
 
     case 'pageFunction':
-      // pageFunction: "() => document.title" or {fn, refs, timeout}
+      // pageFunction: "() => document.title" or "document.title" (bare expression)
+      // or {fn, refs, timeout} or {expression, ...}
       if (typeof params === 'string') {
         if (params.length === 0) {
-          errors.push('pageFunction requires a non-empty function string');
+          errors.push('pageFunction requires a non-empty string');
         }
       } else if (params && typeof params === 'object') {
-        if (!params.fn || typeof params.fn !== 'string') {
-          errors.push('pageFunction requires a non-empty fn string');
+        const hasFn = params.fn && typeof params.fn === 'string';
+        const hasExpression = params.expression && typeof params.expression === 'string';
+        if (!hasFn && !hasExpression) {
+          errors.push('pageFunction requires a non-empty fn or expression string');
         }
         if (params.refs !== undefined && typeof params.refs !== 'boolean') {
           errors.push('pageFunction refs must be a boolean');
@@ -697,7 +688,7 @@ export function validateStepInternal(step) {
           errors.push('pageFunction timeout must be a non-negative number');
         }
       } else {
-        errors.push('pageFunction requires a function string or params object');
+        errors.push('pageFunction requires a function/expression string or params object');
       }
       break;
 
@@ -799,8 +790,24 @@ export function validateStepInternal(step) {
         if (params.targetId !== undefined && typeof params.targetId !== 'string') {
           errors.push('connectTab targetId must be a string');
         }
+        if (params.host !== undefined && typeof params.host !== 'string') {
+          errors.push('connectTab host must be a string');
+        }
+        if (params.port !== undefined && typeof params.port !== 'number') {
+          errors.push('connectTab port must be a number');
+        }
       } else {
         errors.push('connectTab requires a string (alias/targetId) or object with {targetId} or {url}');
+      }
+      break;
+
+    case 'sleep':
+      if (typeof params !== 'number') {
+        errors.push('sleep requires a number (milliseconds)');
+      } else if (params < 0) {
+        errors.push('sleep time must be non-negative');
+      } else if (params > 60000) {
+        errors.push('sleep time must not exceed 60000ms');
       }
       break;
   }

@@ -311,14 +311,14 @@ describe('FillExecutor', () => {
     it('should throw if params is not an object', async () => {
       await assert.rejects(
         () => executor.executeBatch(null),
-        { message: 'fillForm requires an object mapping selectors to values' }
+        { message: 'fill batch requires an object mapping selectors to values' }
       );
     });
 
     it('should throw if no fields provided', async () => {
       await assert.rejects(
         () => executor.executeBatch({}),
-        { message: 'fillForm requires at least one field' }
+        { message: 'fill batch requires at least one field' }
       );
     });
 

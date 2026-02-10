@@ -195,9 +195,11 @@ If it exists, note the SHS and per-test scores for comparison. If not, this is t
 
 #### Step 10: Launch Runner Subagents (Waves)
 
-Divide tests into waves of 5 to avoid overwhelming Chrome. For each wave:
+Divide tests into waves of 5 to avoid overwhelming Chrome. **Run only one wave at a time — wait for a wave to complete before launching the next.**
 
-1. Spawn 5 background Task agents (`run_in_background: true`). **Discard the output_file path** — you will NOT read it. Read and adapt the prompt from `cdp-bench/flywheel/prompts/runner.md`, substituting:
+For each wave:
+
+1. Spawn all 5 background Task agents for this wave (`run_in_background: true`). **Discard the output_file path** — you will NOT read it. Read and adapt the prompt from `cdp-bench/flywheel/prompts/runner.md`, substituting:
    - `{{test_file_path}}` = path to the `.test.json` file
    - `{{run_id}}` = the run ID
    - `{{run_dir}}` = the run directory
@@ -205,14 +207,16 @@ Divide tests into waves of 5 to avoid overwhelming Chrome. For each wave:
    - `{{url}}` = the test's URL
    - `{{test_id}}` = the test's ID
 
-2. Poll for wave completion:
+2. **Wait for wave completion** by polling the TraceCollector. Do NOT launch the next wave until this returns:
 ```bash
-node cdp-bench/flywheel/TraceCollector.js --run-dir ${runDir} --tests-dir cdp-bench/tests --timeout 180 --poll 10
+node cdp-bench/flywheel/TraceCollector.js --run-dir ${runDir} --tests-dir cdp-bench/tests --timeout 300 --poll 15
 ```
 
 3. Note missing traces from the `missing` field in the output.
 
-After all waves, run one **retry wave** for any missing tests (spawn agents for missing IDs only, poll with 180s timeout).
+4. **Only after the TraceCollector returns**, launch the next wave of 5 tests.
+
+After all waves, run one **retry wave** for any missing tests (spawn agents for missing IDs only, poll with 300s timeout).
 
 **IMPORTANT: Do NOT read runner agent outputs via TaskOutput.** Runner conversations contain verbose CLI output that will overflow the conductor's context window.
 

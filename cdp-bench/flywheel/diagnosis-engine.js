@@ -67,7 +67,7 @@ const FAILURE_PATTERNS = [
     matchTrace: (trace) => {
       const steps = extractSteps(trace);
       const observations = trace.observations || [];
-      return stepsContainText(steps, /iframe|switchToFrame|frame context/i) ||
+      return stepsContainText(steps, /iframe|switchToFrame|frame context|frame:/i) ||
         observations.some(o => o.toLowerCase().includes('iframe'));
     },
     votingIds: ['2.2', '2.3']
@@ -90,7 +90,7 @@ const FAILURE_PATTERNS = [
     matchTrace: (trace) => {
       const steps = extractSteps(trace);
       return steps.some(s =>
-        (s.action === 'fill' || s.action === 'fillForm') &&
+        s.action === 'fill' &&
         (s.status === 'error' || stepsContainText([s], /timeout|not accepting|failed/i))
       );
     },
@@ -136,11 +136,12 @@ const FAILURE_PATTERNS = [
   },
   {
     id: 'eval_workaround',
-    name: 'Used eval workaround instead of native step',
+    name: 'Used pageFunction workaround instead of native step',
     matchTrace: (trace) => {
       const steps = extractSteps(trace);
       return steps.some(s =>
-        s.action === 'eval' && stepsContainText([s], /\.click\(\)|\.value\s*=|dispatchEvent/i)
+        (s.action === 'eval' || s.action === 'pageFunction') &&
+        stepsContainText([s], /\.click\(\)|\.value\s*=|dispatchEvent/i)
       );
     },
     votingIds: []

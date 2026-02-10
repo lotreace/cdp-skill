@@ -60,14 +60,9 @@ describe('StepValidator', () => {
     });
 
     describe('wait validation', () => {
-      it('should accept numeric wait (delay)', () => {
+      it('should reject numeric wait — use sleep instead', () => {
         const errors = validateStepInternal({ wait: 1000 });
-        assert.strictEqual(errors.length, 0);
-      });
-
-      it('should reject negative wait time', () => {
-        const errors = validateStepInternal({ wait: -100 });
-        assert.ok(errors.some(e => e.includes('non-negative')));
+        assert.ok(errors.some(e => e.includes('sleep')));
       });
 
       it('should accept string selector', () => {
@@ -95,9 +90,9 @@ describe('StepValidator', () => {
         assert.strictEqual(errors.length, 0);
       });
 
-      it('should accept object with time', () => {
+      it('should reject object with time — use sleep instead', () => {
         const errors = validateStepInternal({ wait: { time: 500 } });
-        assert.strictEqual(errors.length, 0);
+        assert.ok(errors.some(e => e.includes('sleep')));
       });
 
       it('should accept object with urlContains', () => {
@@ -107,7 +102,7 @@ describe('StepValidator', () => {
 
       it('should reject object without required fields', () => {
         const errors = validateStepInternal({ wait: { timeout: 1000 } });
-        assert.ok(errors.some(e => e.includes('requires selector, text, textRegex, time, or urlContains')));
+        assert.ok(errors.some(e => e.includes('requires selector, text, textRegex, or urlContains')));
       });
 
       it('should reject non-string selector in object', () => {
@@ -128,6 +123,33 @@ describe('StepValidator', () => {
       it('should validate hidden as boolean', () => {
         const errors = validateStepInternal({ wait: { selector: '#el', hidden: 'true' } });
         assert.ok(errors.some(e => e.includes('hidden must be a boolean')));
+      });
+    });
+
+    describe('sleep validation', () => {
+      it('should accept valid sleep', () => {
+        const errors = validateStepInternal({ sleep: 2000 });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should accept zero', () => {
+        const errors = validateStepInternal({ sleep: 0 });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should reject negative', () => {
+        const errors = validateStepInternal({ sleep: -100 });
+        assert.ok(errors.some(e => e.includes('non-negative')));
+      });
+
+      it('should reject over 60000', () => {
+        const errors = validateStepInternal({ sleep: 90000 });
+        assert.ok(errors.some(e => e.includes('60000')));
+      });
+
+      it('should reject non-number', () => {
+        const errors = validateStepInternal({ sleep: '1000' });
+        assert.ok(errors.some(e => e.includes('number')));
       });
     });
 
@@ -188,7 +210,14 @@ describe('StepValidator', () => {
       });
     });
 
-    describe('fill validation', () => {
+    describe('fill validation (unified)', () => {
+      // Shape 1: focused mode (string)
+      it('should accept string for focused mode', () => {
+        const errors = validateStepInternal({ fill: 'hello world' });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      // Shape 2: single field with targeting
       it('should accept object with selector and value', () => {
         const errors = validateStepInternal({ fill: { selector: '#input', value: 'test' } });
         assert.strictEqual(errors.length, 0);
@@ -204,17 +233,7 @@ describe('StepValidator', () => {
         assert.strictEqual(errors.length, 0);
       });
 
-      it('should reject non-object fill', () => {
-        const errors = validateStepInternal({ fill: 'value' });
-        assert.ok(errors.some(e => e.includes('requires an object')));
-      });
-
-      it('should reject missing selector/ref/label', () => {
-        const errors = validateStepInternal({ fill: { value: 'test' } });
-        assert.ok(errors.some(e => e.includes('requires selector, ref, or label')));
-      });
-
-      it('should reject missing value', () => {
+      it('should reject missing value with targeting', () => {
         const errors = validateStepInternal({ fill: { selector: '#input' } });
         assert.ok(errors.some(e => e.includes('requires value')));
       });
@@ -223,17 +242,17 @@ describe('StepValidator', () => {
         const errors = validateStepInternal({ fill: { selector: 123, value: 'test' } });
         assert.ok(errors.some(e => e.includes('selector must be a string')));
       });
-    });
 
-    describe('fillForm validation', () => {
-      it('should accept simple format', () => {
-        const errors = validateStepInternal({ fillForm: { '#a': 'value1', '#b': 'value2' } });
+      // Shape 3: focused with options
+      it('should accept object with value only (focused mode)', () => {
+        const errors = validateStepInternal({ fill: { value: 'test', clear: true } });
         assert.strictEqual(errors.length, 0);
       });
 
-      it('should accept extended format', () => {
+      // Shape 4: batch with fields
+      it('should accept batch with fields key', () => {
         const errors = validateStepInternal({
-          fillForm: {
+          fill: {
             fields: { '#a': 'value1' },
             react: true
           }
@@ -241,24 +260,35 @@ describe('StepValidator', () => {
         assert.strictEqual(errors.length, 0);
       });
 
-      it('should reject non-object fillForm', () => {
-        const errors = validateStepInternal({ fillForm: 'invalid' });
-        assert.ok(errors.some(e => e.includes('requires an object')));
-      });
-
       it('should reject empty fields', () => {
-        const errors = validateStepInternal({ fillForm: {} });
+        const errors = validateStepInternal({ fill: { fields: {} } });
         assert.ok(errors.some(e => e.includes('requires at least one field')));
       });
 
       it('should validate react option as boolean', () => {
         const errors = validateStepInternal({
-          fillForm: {
+          fill: {
             fields: { '#a': 'val' },
             react: 'yes'
           }
         });
         assert.ok(errors.some(e => e.includes('react option must be a boolean')));
+      });
+
+      // Shape 5: batch (plain mapping)
+      it('should accept plain mapping batch', () => {
+        const errors = validateStepInternal({ fill: { '#a': 'value1', '#b': 'value2' } });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should reject empty plain mapping', () => {
+        const errors = validateStepInternal({ fill: {} });
+        assert.ok(errors.some(e => e.includes('requires at least one field')));
+      });
+
+      it('should reject non-string/non-object fill', () => {
+        const errors = validateStepInternal({ fill: 123 });
+        assert.ok(errors.some(e => e.includes('requires a string')));
       });
     });
 
@@ -436,32 +466,27 @@ describe('StepValidator', () => {
       });
     });
 
-    describe('refAt validation', () => {
-      it('should accept valid coordinates', () => {
-        const errors = validateStepInternal({ refAt: { x: 100, y: 200 } });
+    describe('elementsAt validation (unified)', () => {
+      // Point mode (was refAt)
+      it('should accept single point object', () => {
+        const errors = validateStepInternal({ elementsAt: { x: 100, y: 200 } });
         assert.strictEqual(errors.length, 0);
       });
 
-      it('should reject missing x', () => {
-        const errors = validateStepInternal({ refAt: { y: 200 } });
+      it('should reject missing x in point mode', () => {
+        const errors = validateStepInternal({ elementsAt: { y: 200 } });
         assert.ok(errors.some(e => e.includes('requires x coordinate')));
       });
 
-      it('should reject missing y', () => {
-        const errors = validateStepInternal({ refAt: { x: 100 } });
+      it('should reject missing y in point mode', () => {
+        const errors = validateStepInternal({ elementsAt: { x: 100 } });
         assert.ok(errors.some(e => e.includes('requires y coordinate')));
       });
-    });
 
-    describe('elementsAt validation', () => {
+      // Batch mode (was elementsAt array)
       it('should accept array of coordinates', () => {
         const errors = validateStepInternal({ elementsAt: [{ x: 100, y: 200 }] });
         assert.strictEqual(errors.length, 0);
-      });
-
-      it('should reject non-array', () => {
-        const errors = validateStepInternal({ elementsAt: { x: 100, y: 200 } });
-        assert.ok(errors.some(e => e.includes('requires an array')));
       });
 
       it('should reject empty array', () => {
@@ -473,25 +498,130 @@ describe('StepValidator', () => {
         const errors = validateStepInternal({ elementsAt: [{ x: 'abc', y: 200 }] });
         assert.ok(errors.some(e => e.includes('requires x and y as numbers')));
       });
-    });
 
-    describe('elementsNear validation', () => {
-      it('should accept valid coordinates', () => {
-        const errors = validateStepInternal({ elementsNear: { x: 100, y: 200 } });
-        assert.strictEqual(errors.length, 0);
-      });
-
-      it('should accept with radius', () => {
-        const errors = validateStepInternal({ elementsNear: { x: 100, y: 200, radius: 50 } });
+      // Near mode (was elementsNear)
+      it('should accept object with radius', () => {
+        const errors = validateStepInternal({ elementsAt: { x: 100, y: 200, radius: 50 } });
         assert.strictEqual(errors.length, 0);
       });
 
       it('should reject non-numeric radius', () => {
-        const errors = validateStepInternal({ elementsNear: { x: 100, y: 200, radius: 'large' } });
+        const errors = validateStepInternal({ elementsAt: { x: 100, y: 200, radius: 'large' } });
         assert.ok(errors.some(e => e.includes('radius must be a number')));
       });
     });
+
+    describe('frame validation', () => {
+      it('should accept "top" (main frame)', () => {
+        const errors = validateStepInternal({ frame: 'top' });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should accept CSS selector string', () => {
+        const errors = validateStepInternal({ frame: 'iframe.content' });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should accept numeric index', () => {
+        const errors = validateStepInternal({ frame: 0 });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should accept {list: true}', () => {
+        const errors = validateStepInternal({ frame: { list: true } });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should accept {name: "foo"}', () => {
+        const errors = validateStepInternal({ frame: { name: 'myFrame' } });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should reject empty string', () => {
+        const errors = validateStepInternal({ frame: '' });
+        assert.ok(errors.some(e => e.includes('non-empty')));
+      });
+
+      it('should reject negative index', () => {
+        const errors = validateStepInternal({ frame: -1 });
+        assert.ok(errors.some(e => e.includes('non-negative')));
+      });
+
+      it('should reject null', () => {
+        const errors = validateStepInternal({ frame: null });
+        assert.ok(errors.some(e => e.includes('requires')));
+      });
+    });
   });
+
+    describe('openTab validation', () => {
+      it('should accept true', () => {
+        const errors = validateStepInternal({ openTab: true });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should accept URL string', () => {
+        const errors = validateStepInternal({ openTab: 'https://example.com' });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should accept object with url', () => {
+        const errors = validateStepInternal({ openTab: { url: 'https://example.com' } });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should accept object with connection params', () => {
+        const errors = validateStepInternal({ openTab: { url: 'https://example.com', host: 'remote', port: 9333, headless: true } });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should reject non-string host', () => {
+        const errors = validateStepInternal({ openTab: { url: 'https://example.com', host: 123 } });
+        assert.ok(errors.some(e => e.includes('host must be a string')));
+      });
+
+      it('should reject non-number port', () => {
+        const errors = validateStepInternal({ openTab: { url: 'https://example.com', port: '9222' } });
+        assert.ok(errors.some(e => e.includes('port must be a number')));
+      });
+
+      it('should reject non-boolean headless', () => {
+        const errors = validateStepInternal({ openTab: { url: 'https://example.com', headless: 'yes' } });
+        assert.ok(errors.some(e => e.includes('headless must be a boolean')));
+      });
+    });
+
+    describe('connectTab validation', () => {
+      it('should accept string alias', () => {
+        const errors = validateStepInternal({ connectTab: 't1' });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should accept object with targetId', () => {
+        const errors = validateStepInternal({ connectTab: { targetId: 'ABC123' } });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should accept object with url', () => {
+        const errors = validateStepInternal({ connectTab: { url: 'example\\.com' } });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should accept object with connection params', () => {
+        const errors = validateStepInternal({ connectTab: { targetId: 'ABC', host: 'remote', port: 9333 } });
+        assert.strictEqual(errors.length, 0);
+      });
+
+      it('should reject non-string host', () => {
+        const errors = validateStepInternal({ connectTab: { targetId: 'ABC', host: 123 } });
+        assert.ok(errors.some(e => e.includes('host must be a string')));
+      });
+
+      it('should reject non-number port', () => {
+        const errors = validateStepInternal({ connectTab: { targetId: 'ABC', port: '9222' } });
+        assert.ok(errors.some(e => e.includes('port must be a number')));
+      });
+    });
 
   describe('validateSteps', () => {
     it('should return valid for empty array', () => {
@@ -529,7 +659,7 @@ describe('StepValidator', () => {
 
     it('should include all validation errors for each step', () => {
       const result = validateSteps([
-        { fill: {} }  // Missing both selector and value
+        { fill: { selector: 123, value: undefined } }  // Bad selector type and missing value
       ]);
       assert.strictEqual(result.valid, false);
       assert.ok(result.errors[0].errors.length >= 2);

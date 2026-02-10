@@ -400,11 +400,12 @@ describe('TestRunner', () => {
       assert.strictEqual(mockInputEmulator.insertText.mock.calls.length, 1);
     });
 
-    it('should fail without selector, ref, or label', async () => {
+    it('should accept fill with value only as focused mode', async () => {
+      // fill: {value: "test"} is now focused mode (Shape 3), not an error
+      // It requires an active focused element to work, but validation passes
       const result = await testRunner.executeStep({ fill: { value: 'test' } });
-
-      assert.strictEqual(result.status, 'error');
-      assert.ok(result.error.includes('Fill requires selector, ref, or label'));
+      // May error at runtime if no element is focused, but that's a runtime error, not validation
+      assert.ok(result.action === 'fill');
     });
 
     it('should fail without value', async () => {
@@ -489,7 +490,7 @@ describe('TestRunner', () => {
         { wait: '#main' },
         { wait: { selector: '#element', timeout: 5000 } },
         { wait: { text: 'Hello', timeout: 3000 } },
-        { wait: { time: 100 } },
+        { sleep: 100 },
         { click: '#button' },
         { click: { selector: '#link' } },
         { fill: { selector: '#input', value: 'test' } },
@@ -550,15 +551,15 @@ describe('TestRunner', () => {
 
       const result = testRunner.validateSteps(steps);
       assert.strictEqual(result.valid, false);
-      assert.ok(result.errors[0].errors[0].includes('selector, text, textRegex, time, or urlContains'));
+      assert.ok(result.errors[0].errors[0].includes('requires selector, text, textRegex, or urlContains'));
     });
 
-    it('should return errors for negative wait time', () => {
+    it('should return errors for wait with time — use sleep instead', () => {
       const steps = [{ wait: { time: -100 } }];
 
       const result = testRunner.validateSteps(steps);
       assert.strictEqual(result.valid, false);
-      assert.ok(result.errors[0].errors[0].includes('non-negative number'));
+      assert.ok(result.errors[0].errors.some(e => e.includes('sleep')));
     });
 
     it('should return errors for empty click selector', () => {
@@ -577,15 +578,15 @@ describe('TestRunner', () => {
       assert.ok(result.errors[0].errors[0].includes('requires selector'));
     });
 
-    it('should return errors for fill without selector, ref, or label', () => {
+    it('should accept fill with value only as focused mode', () => {
+      // fill: {value: "test"} is now Shape 3: focused with options
       const steps = [{ fill: { value: 'test' } }];
 
       const result = testRunner.validateSteps(steps);
-      assert.strictEqual(result.valid, false);
-      assert.ok(result.errors[0].errors.some(e => e.includes('requires selector, ref, or label')));
+      assert.strictEqual(result.valid, true);
     });
 
-    it('should return errors for fill without value', () => {
+    it('should return errors for fill without value when targeting', () => {
       const steps = [{ fill: { selector: '#input' } }];
 
       const result = testRunner.validateSteps(steps);
@@ -593,12 +594,12 @@ describe('TestRunner', () => {
       assert.ok(result.errors[0].errors.some(e => e.includes('requires value')));
     });
 
-    it('should return errors for fill with non-object', () => {
+    it('should accept fill with string as focused mode', () => {
+      // fill: "text" is now Shape 1: focused mode
       const steps = [{ fill: '#input' }];
 
       const result = testRunner.validateSteps(steps);
-      assert.strictEqual(result.valid, false);
-      assert.ok(result.errors[0].errors[0].includes('object with selector/ref/label and value'));
+      assert.strictEqual(result.valid, true);
     });
 
     it('should accept fill with ref instead of selector', () => {
@@ -608,27 +609,26 @@ describe('TestRunner', () => {
       assert.strictEqual(result.valid, true);
     });
 
-    it('should validate fillForm step', () => {
-      const steps = [{ fillForm: { '#firstName': 'John', '#lastName': 'Doe' } }];
+    it('should validate fill batch step (was fillForm)', () => {
+      const steps = [{ fill: { '#firstName': 'John', '#lastName': 'Doe' } }];
 
       const result = testRunner.validateSteps(steps);
       assert.strictEqual(result.valid, true);
     });
 
-    it('should return errors for empty fillForm', () => {
-      const steps = [{ fillForm: {} }];
+    it('should return errors for empty fill batch', () => {
+      const steps = [{ fill: {} }];
 
       const result = testRunner.validateSteps(steps);
       assert.strictEqual(result.valid, false);
       assert.ok(result.errors[0].errors[0].includes('at least one field'));
     });
 
-    it('should return errors for fillForm with non-object', () => {
-      const steps = [{ fillForm: '#input' }];
+    it('should validate fill focused mode (string)', () => {
+      const steps = [{ fill: 'hello world' }];
 
       const result = testRunner.validateSteps(steps);
-      assert.strictEqual(result.valid, false);
-      assert.ok(result.errors[0].errors[0].includes('object mapping'));
+      assert.strictEqual(result.valid, true);
     });
 
     it('should return errors for empty press key', () => {
@@ -726,10 +726,10 @@ describe('TestRunner', () => {
       assert.ok(result.errors[0].errors[0].includes('cannot be empty'));
     });
 
-    it('should reject hover without selector or ref', () => {
+    it('should reject hover without selector, ref, text, or coordinates', () => {
       const result = validateSteps([{ hover: { duration: 500 } }]);
       assert.strictEqual(result.valid, false);
-      assert.ok(result.errors[0].errors[0].includes('requires selector or ref'));
+      assert.ok(result.errors[0].errors[0].includes('requires selector, ref, text, or x/y'));
     });
   });
 

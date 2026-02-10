@@ -70,8 +70,9 @@ export async function clickWithVerification(elementLocator, inputEmulator, x, y,
  * Feature 13: Supports captureResult to detect new visible elements after hover
  */
 export async function executeHover(elementLocator, inputEmulator, ariaSnapshot, params) {
-  const selector = typeof params === 'string' ? params : params.selector;
+  const selector = typeof params === 'string' ? params : (params.selector || null);
   let ref = typeof params === 'object' ? params.ref : null;
+  const text = typeof params === 'object' ? params.text : null;
   const duration = typeof params === 'object' ? (params.duration || 0) : 0;
 
   // Detect if string selector looks like a ref (e.g., "s1e1", "s2e12")
@@ -80,8 +81,34 @@ export async function executeHover(elementLocator, inputEmulator, ariaSnapshot, 
     ref = selector;
   }
   const force = typeof params === 'object' && params.force === true;
-  const timeout = typeof params === 'object' ? (params.timeout || 10000) : 10000; // Reduced from 30s to 10s
+  const timeout = typeof params === 'object' ? (params.timeout || 10000) : 10000;
   const captureResult = typeof params === 'object' && params.captureResult === true;
+
+  // Handle coordinate-based hover
+  if (typeof params === 'object' && typeof params.x === 'number' && typeof params.y === 'number' && !ref && !selector && !text) {
+    await inputEmulator.hover(params.x, params.y, { duration });
+    if (captureResult) {
+      await sleep(100);
+      return await captureHoverResult(elementLocator.session, []);
+    }
+    return { hovered: true };
+  }
+
+  // Handle text-based hover
+  if (text && ariaSnapshot) {
+    const refInfo = await ariaSnapshot.findByText(text);
+    if (!refInfo) {
+      throw elementNotFoundError(`text:${text}`, 0);
+    }
+    const x = refInfo.box.x + refInfo.box.width / 2;
+    const y = refInfo.box.y + refInfo.box.height / 2;
+    await inputEmulator.hover(x, y, { duration });
+    if (captureResult) {
+      await sleep(100);
+      return await captureHoverResult(elementLocator.session, []);
+    }
+    return { hovered: true };
+  }
 
   const session = elementLocator.session;
   let visibleElementsBefore = [];

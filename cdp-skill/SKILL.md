@@ -64,17 +64,18 @@ Sections are optional — include what's useful. See EXAMPLES.md for a full prof
 ## Quick Start
 
 ```bash
-echo '{"steps":[{"chromeStatus":true}]}' | node src/cdp-skill.js
 echo '{"steps":[{"openTab":"https://google.com"}]}' | node src/cdp-skill.js
-echo '{"config":{"tab":"t1"},"steps":[{"click":"#btn"}]}' | node src/cdp-skill.js
+echo '{"tab":"t1","steps":[{"click":"#btn"}]}' | node src/cdp-skill.js
+echo '{"tab":"t1","steps":[{"snapshot":true}]}' | node src/cdp-skill.js
 ```
 
-Tab IDs (t1, t2, ...) persist across CLI invocations.
+Tab IDs (t1, t2, ...) persist across CLI invocations. Chrome auto-launches if not running.
 
 ## Input / Output Schema
 
 **Input fields:**
-- `config`: `{host, port, tab, timeout, headless}` — tab is required after first call
+- `tab`: tab alias (e.g. "t1") — required after first call
+- `timeout`: step timeout in ms (default 30000)
 - `steps`: array of step objects (one action per step)
 
 **Output fields:**
@@ -125,15 +126,16 @@ Hooks can be combined on any action step. Applies to: click, fill, press, hover,
 
 ## Core Steps
 
-### chromeStatus
-`true` | `{autoLaunch, headless}` — returns `{running, launched, version, port, tabs[]}`
+### chromeStatus (optional diagnostic)
+`true` | `{host, port, headless, autoLaunch}` — returns `{running, launched, version, port, tabs[]}`
 
-> **IMPORTANT**: Never launch Chrome manually via shell commands. Always use `chromeStatus`.
+> **Note**: You rarely need this — `openTab` auto-launches Chrome. Use `chromeStatus` only for diagnostics or non-default ports.
 
 ### openTab
-`true` | `"url"` | `{url}` — returns `{opened, tab, url, navigated, viewportSnapshot, fullSnapshot, context}`
+`true` | `"url"` | `{url, host, port, headless}` — returns `{opened, tab, url, navigated, viewportSnapshot, fullSnapshot, context}`
 Response includes top-level `siteProfile` or `actionRequired` when URL provided (see Site Profiles).
-**REQUIRED as first step** when no tab specified.
+**REQUIRED as first step** when no tab specified. Chrome auto-launches if not running.
+Non-default Chrome: `{"steps":[{"openTab":{"url":"https://example.com","port":9333,"headless":true}}]}`
 
 ### goto
 `"url"` | `{url, waitUntil}` — waitUntil: commit | domcontentloaded | load | networkidle
@@ -193,10 +195,10 @@ These steps are fully functional — see EXAMPLES.md for usage details.
 
 | Step | Description |
 |------|-------------|
-| `fillForm` | Batch fill: `{"#a": "x", "#b": "y"}` → `{total, filled, failed, results[]}` |
-| `fillActive` | Fill focused element: `"value"` or `{value, clear}` |
+| `fill` | Unified fill: `"text"` (focused), `{selector, value}` (single), `{"#a":"x","#b":"y"}` (batch), `{fields:{...}, react}` (batch+options), `{value, clear}` (focused+options) |
 | `type` | Character-by-character with delays: `{selector, text, delay}` |
-| `eval` | JS expression: `"document.title"` — returns typed results |
+| `sleep` | Time delay: `2000` (ms, 0–60000) |
+| `pageFunction` | JS execution: `"() => expr"` (function) or `"document.title"` (bare expression) or `{fn, expression, refs, timeout}` |
 | `poll` | Poll predicate until truthy: `"() => expr"` or `{fn, interval, timeout}` |
 | `pipeline` | Zero-roundtrip micro-ops: `[{find+fill\|click\|type}, {waitFor}, {sleep}, {return}]` |
 | `query` | CSS/ARIA query: `"selector"` or `{role, name}` → `{total, results[]}` |
@@ -204,7 +206,7 @@ These steps are fully functional — see EXAMPLES.md for usage details.
 | `inspect` | Page overview: `true` → `{title, url, counts}` |
 | `getDom` | Raw HTML: `true` or `"selector"` → `{html, tagName, length}` |
 | `getBox` | Bounding boxes: `"ref"` or `["ref1","ref2"]` → `{x, y, width, height}` |
-| `hover` | Hover element: `"selector"` or `{selector, ref, duration}` |
+| `hover` | Hover element: `"selector"` or `{selector, ref, text, x/y, duration}` |
 | `drag` | Drag and drop: `{source, target, steps, delay, method}` — method: `auto`(default)\|`mouse`\|`html5` |
 | `select` | Text selection: `"selector"` or `{selector, start, end}` |
 | `selectOption` | Dropdown: `{selector, value\|label\|index\|values}` |
@@ -212,18 +214,14 @@ These steps are fully functional — see EXAMPLES.md for usage details.
 | `submit` | Submit form: `"selector"` → `{submitted, valid, errors[]}` |
 | `formState` | Form fields: `"selector"` → `{fields[], valid, fieldCount}` |
 | `assert` | Assert conditions: `{url: {contains\|equals\|matches}}` or `{text}` or `{selector, text}` |
-| `refAt` | Element at point: `{x, y}` → `{ref, tag, role, name, box}` |
-| `elementsAt` | Elements at points: `[{x,y}, ...]` → `{count, elements[]}` |
-| `elementsNear` | Nearby elements: `{x, y, radius, limit}` → `{elements[]}` |
+| `elementsAt` | Coordinate lookup: `{x,y}` (point), `[{x,y},...]` (batch), `{x,y,radius}` (nearby) |
+| `frame` | Frame ops: `"selector"` (switch), `0` (by index), `"top"` (main frame), `{name}`, `{list:true}` |
 | `viewport` | Set viewport: `"iphone-14"` or `{width, height, mobile}` |
 | `cookies` | Get/set/delete: `{get: true}`, `{set: [...]}`, `{delete: "name"}`, `{clear: true}` |
 | `console` | Browser console: `true` or `{level, limit, clear}` → `{messages[]}` |
 | `pdf` | Generate PDF: `"filename"` or `{path, landscape, scale, pageRanges}` |
 | `back` / `forward` | History navigation: `true` → `{url, title}` or `{noHistory: true}` |
 | `reload` | Reload page: `true` or `{waitUntil}` |
-| `switchToFrame` | Enter frame: `"selector"` or `{selector, index, name, frameId}` |
-| `switchToMainFrame` | Exit frames: `true` |
-| `listFrames` | List frames: `true` → `{mainFrameId, frames[]}` |
 | `connectTab` | Connect to existing tab: `"t1"` or `{targetId}` or `{url: "regex"}` |
 | `waitForNavigation` | Wait for nav: `true` or `{timeout, waitUntil}` |
 
@@ -235,8 +233,8 @@ Add `"optional": true` to any step to continue on failure (status becomes "skipp
 
 | Issue | Solution |
 |-------|----------|
-| Tabs accumulating | Include `tab` in config |
-| CONNECTION error | Use `chromeStatus` first |
+| Tabs accumulating | Include `tab` at top level |
+| CONNECTION error | Check Chrome is reachable; use `chromeStatus` to diagnose |
 | Chrome not found | Set `CHROME_PATH` env var |
 | Element not found | Add `wait` step first |
 | Clicks not working | Scroll into view first, or `force: true` |
@@ -249,7 +247,7 @@ Add `"optional": true` to any step to continue on failure (status becomes "skipp
 ## Best Practices
 
 - **Handle `actionRequired` immediately** — when a response contains this field, complete it before doing anything else
-- **Never launch Chrome directly** — always use `chromeStatus`
+- **Never launch Chrome directly** — `openTab` handles it automatically
 - **Use openTab** as your first step to create a tab; use the returned tab ID for all subsequent calls
 - **Reuse only your own tabs** — other agents may share the browser
 - **Update the site profile before closing** — add any quirks, selectors, or recipes you discovered

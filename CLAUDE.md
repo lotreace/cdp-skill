@@ -71,6 +71,40 @@ When implementing new or updating existing code in this project, do not maintain
 
 After any code change affecting how agents use the JS code, make sure that `SKILL.md` is up to date. This can be done at the end of the implementation.
 
+## Step Protocol
+
+The step protocol (validate → execute → document) touches many files. When adding, renaming, or merging steps:
+
+**Files checklist:**
+1. `context-helpers.js` — STEP_TYPES, VISUAL_ACTIONS, buildActionContext
+2. `step-validator.js` — validation case
+3. `step-executors.js` — execution branch
+4. `types.js` — StepConfig typedef
+5. `cdp-skill.js` — actionKeys in generateDebugFilename
+6. `diagnosis-engine.js` — hardcoded step name patterns
+7. `coverage-matrix.json` — step name keys
+8. Tests: StepValidator.test.js, ContextHelpers.test.js, TestRunner.test.js
+9. Docs: SKILL.md, EXAMPLES.md, SPEC.md, README.md
+
+**Validation rules:**
+- Validators for union types (string | number | object) must end with a catch-all `else` clause. Never enumerate only specific rejection cases like `null || undefined` — unexpected types like `boolean` slip through silently.
+- When a step accepts both `{selector: value}` data mappings and option keys (`clear`, `react`, `force`), filter out option keys before validating that at least one real mapping exists.
+
+**Shape detection for unified steps:**
+- Check most-specific shapes first (presence of targeting keys like `selector`/`ref`, special keys like `fields`), generic fallback last.
+- Keep internal executor functions intact when merging steps — only the step-level routing changes. This minimizes diff and avoids retesting proven code.
+
+## String Classification
+
+When detecting whether a string is a JS keyword vs an identifier (e.g., distinguishing `async () =>` from `asyncStorage.getItem()`), always require a word boundary after the keyword:
+```javascript
+// WRONG: matches identifiers like asyncStorage, functionName
+str.startsWith('async')
+
+// RIGHT: keyword must be followed by whitespace or punctuation
+/^async[\s(]/.test(str)
+```
+
 ## Memory Management
 
 Always release CDP objectIds when done:

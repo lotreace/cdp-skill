@@ -49,11 +49,39 @@ import { executeWait, executeWaitForNavigation, executeScroll } from './execute-
 import { executeClick, executeHover, executeDrag } from './execute-interaction.js';
 import { executeFillActive, executeSelectOption } from './execute-input.js';
 import { executeSnapshot, executeSnapshotSearch, executeQuery, executeQueryAll, executeInspect, executeGetDom, executeGetBox, executeRefAt, executeElementsAt, executeElementsNear } from './execute-query.js';
+// executeRefAt, executeElementsNear kept for internal dispatch from unified elementsAt
 import { executeValidate, executeSubmit, executeExtract } from './execute-form.js';
 import { executePdf, executeEval, executeCookies, executeListTabs, executeCloseTab, executeConsole, formatCommandConsole } from './execute-browser.js';
+// executeEval kept for internal dispatch from unified pageFunction
 import { executePageFunction, executePoll, executePipeline, executeWriteSiteProfile, executeReadSiteProfile, loadSiteProfile } from './execute-dynamic.js';
 
 const keyValidator = createKeyValidator();
+
+/**
+ * Detect if a string looks like a function expression (vs a bare expression).
+ * Functions start with (, function keyword, async keyword, or match arrow function patterns.
+ * Must use word boundaries to avoid matching identifiers like "asyncStorage" or "functionName".
+ */
+function isFunctionExpression(str) {
+  const trimmed = str.trim();
+  // Parenthesized expression / IIFE / arrow with parens: (...)
+  if (trimmed.startsWith('(')) {
+    return true;
+  }
+  // function keyword followed by space, paren, or * (generator)
+  if (/^function[\s*(]/.test(trimmed)) {
+    return true;
+  }
+  // async keyword followed by space or paren (async function, async () =>)
+  if (/^async[\s(]/.test(trimmed)) {
+    return true;
+  }
+  // Arrow function: identifier => ...
+  if (/^\w+\s*=>/.test(trimmed)) {
+    return true;
+  }
+  return false;
+}
 
 /**
  * Execute a single test step
@@ -126,13 +154,12 @@ export async function executeStep(deps, step, options = {}) {
       const reloadOptions = step.reload === true ? {} : step.reload;
       await pageController.reload(reloadOptions);
       await pageController.waitForNetworkSettle();
+    } else if (step.sleep !== undefined) {
+      stepResult.action = 'sleep';
+      await sleep(step.sleep);
     } else if (step.wait !== undefined) {
       stepResult.action = 'wait';
-      if (typeof step.wait === 'number') {
-        await sleep(step.wait);
-      } else {
-        await executeWait(elementLocator, step.wait);
-      }
+      await executeWait(elementLocator, step.wait);
     } else if (step.click !== undefined) {
       stepResult.action = 'click';
 
@@ -189,27 +216,48 @@ export async function executeStep(deps, step, options = {}) {
       }
     } else if (step.fill !== undefined) {
       stepResult.action = 'fill';
-      const fillExecutor = createFillExecutor(
-        elementLocator.session,
-        elementLocator,
-        inputEmulator,
-        deps.ariaSnapshot
-      );
-      const urlBeforeFill = await getCurrentUrl(elementLocator.session);
-      await fillExecutor.execute(step.fill);
-      const urlAfterFill = await getCurrentUrl(elementLocator.session);
-      if (urlAfterFill !== urlBeforeFill) {
-        stepResult.output = { navigated: true, newUrl: urlAfterFill };
+      const params = step.fill;
+
+      if (typeof params === 'string') {
+        // Shape 1: focused mode — type into active element
+        stepResult.output = await executeFillActive(pageController, inputEmulator, params);
+        stepResult.output.mode = 'focused';
+      } else if (params && typeof params === 'object') {
+        const hasTargeting = params.selector || params.ref || params.label;
+        const hasFields = params.fields && typeof params.fields === 'object';
+
+        if (hasTargeting) {
+          // Shape 2: single field with targeting
+          const fillExecutor = createFillExecutor(
+            elementLocator.session,
+            elementLocator,
+            inputEmulator,
+            deps.ariaSnapshot
+          );
+          const urlBeforeFill = await getCurrentUrl(elementLocator.session);
+          await fillExecutor.execute(params);
+          const urlAfterFill = await getCurrentUrl(elementLocator.session);
+          stepResult.output = { mode: 'single' };
+          if (urlAfterFill !== urlBeforeFill) {
+            stepResult.output.navigated = true;
+            stepResult.output.newUrl = urlAfterFill;
+          }
+        } else if (params.value !== undefined && !hasFields) {
+          // Shape 3: focused with options
+          stepResult.output = await executeFillActive(pageController, inputEmulator, params);
+          stepResult.output.mode = 'focused';
+        } else {
+          // Shape 4 ({fields: ...}) or Shape 5 (plain mapping)
+          const fillExecutor = createFillExecutor(
+            elementLocator.session,
+            elementLocator,
+            inputEmulator,
+            deps.ariaSnapshot
+          );
+          stepResult.output = await fillExecutor.executeBatch(params);
+          stepResult.output.mode = 'batch';
+        }
       }
-    } else if (step.fillForm !== undefined) {
-      stepResult.action = 'fillForm';
-      const fillExecutor = createFillExecutor(
-        elementLocator.session,
-        elementLocator,
-        inputEmulator,
-        deps.ariaSnapshot
-      );
-      stepResult.output = await fillExecutor.executeBatch(step.fillForm);
     } else if (step.press !== undefined) {
       stepResult.action = 'press';
       const keyValidation = keyValidator.validate(step.press);
@@ -236,9 +284,6 @@ export async function executeStep(deps, step, options = {}) {
     } else if (step.pdf !== undefined) {
       stepResult.action = 'pdf';
       stepResult.output = await executePdf(deps.pdfCapture, elementLocator, step.pdf);
-    } else if (step.eval !== undefined) {
-      stepResult.action = 'eval';
-      stepResult.output = await executeEval(pageController, step.eval);
     } else if (step.snapshot !== undefined) {
       stepResult.action = 'snapshot';
       // Brief network settle before capturing — catches async content loading
@@ -337,15 +382,17 @@ export async function executeStep(deps, step, options = {}) {
     } else if (step.queryAll !== undefined) {
       stepResult.action = 'queryAll';
       stepResult.output = await executeQueryAll(elementLocator, step.queryAll);
-    } else if (step.switchToFrame !== undefined) {
-      stepResult.action = 'switchToFrame';
-      stepResult.output = await pageController.switchToFrame(step.switchToFrame);
-    } else if (step.switchToMainFrame !== undefined) {
-      stepResult.action = 'switchToMainFrame';
-      stepResult.output = await pageController.switchToMainFrame();
-    } else if (step.listFrames !== undefined) {
-      stepResult.action = 'listFrames';
-      stepResult.output = await pageController.getFrameTree();
+    } else if (step.frame !== undefined) {
+      stepResult.action = 'frame';
+      const frameParams = step.frame;
+      if (frameParams === 'top') {
+        stepResult.output = await pageController.switchToMainFrame();
+      } else if (typeof frameParams === 'object' && frameParams.list) {
+        stepResult.output = await pageController.getFrameTree();
+      } else {
+        // string selector, number index, or {name: "foo"} — all go to switchToFrame
+        stepResult.output = await pageController.switchToFrame(frameParams);
+      }
     } else if (step.drag !== undefined) {
       stepResult.action = 'drag';
       stepResult.output = await executeDrag(elementLocator, inputEmulator, pageController, deps.ariaSnapshot, step.drag);
@@ -366,21 +413,39 @@ export async function executeStep(deps, step, options = {}) {
     } else if (step.getBox !== undefined) {
       stepResult.action = 'getBox';
       stepResult.output = await executeGetBox(deps.ariaSnapshot, step.getBox);
-    } else if (step.fillActive !== undefined) {
-      stepResult.action = 'fillActive';
-      stepResult.output = await executeFillActive(pageController, inputEmulator, step.fillActive);
-    } else if (step.refAt !== undefined) {
-      stepResult.action = 'refAt';
-      stepResult.output = await executeRefAt(pageController.session, step.refAt);
     } else if (step.elementsAt !== undefined) {
       stepResult.action = 'elementsAt';
-      stepResult.output = await executeElementsAt(pageController.session, step.elementsAt);
-    } else if (step.elementsNear !== undefined) {
-      stepResult.action = 'elementsNear';
-      stepResult.output = await executeElementsNear(pageController.session, step.elementsNear);
+      const eaParams = step.elementsAt;
+      if (Array.isArray(eaParams)) {
+        // Batch mode (array of coordinates)
+        stepResult.output = await executeElementsAt(pageController.session, eaParams);
+      } else if (eaParams && typeof eaParams === 'object' && eaParams.radius !== undefined) {
+        // Nearby mode (has radius)
+        stepResult.output = await executeElementsNear(pageController.session, eaParams);
+      } else {
+        // Single point mode (was refAt)
+        stepResult.output = await executeRefAt(pageController.session, eaParams);
+      }
     } else if (step.pageFunction !== undefined) {
       stepResult.action = 'pageFunction';
-      stepResult.output = await executePageFunction(pageController, step.pageFunction);
+      const pfParams = step.pageFunction;
+      // Check if this is a bare expression (not a function)
+      const pfStr = typeof pfParams === 'string' ? pfParams : (pfParams?.fn || pfParams?.expression);
+      const isBareExpression = pfStr && !isFunctionExpression(pfStr);
+      if (isBareExpression) {
+        // Use eval-style wrapping for bare expressions
+        const evalParams = typeof pfParams === 'string'
+          ? pfStr
+          : { expression: pfStr, await: pfParams?.await, serialize: pfParams?.serialize, timeout: pfParams?.timeout };
+        stepResult.output = await executeEval(pageController, evalParams);
+      } else {
+        // If expression key provided, remap to fn
+        if (typeof pfParams === 'object' && pfParams.expression && !pfParams.fn) {
+          stepResult.output = await executePageFunction(pageController, { ...pfParams, fn: pfParams.expression });
+        } else {
+          stepResult.output = await executePageFunction(pageController, pfParams);
+        }
+      }
     } else if (step.poll !== undefined) {
       stepResult.action = 'poll';
       stepResult.output = await executePoll(pageController, step.poll);

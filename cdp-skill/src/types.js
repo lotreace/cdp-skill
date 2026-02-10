@@ -217,27 +217,27 @@
  * Step configuration
  * @typedef {Object} StepConfig
  * @property {string} [goto] - Navigate to URL
- * @property {string} [click] - Click element selector
- * @property {string} [fill] - Fill element selector
- * @property {string} [value] - Value for fill/type operations
+ * @property {string} [click] - Click element (selector, ref, text, or x/y)
+ * @property {string|Object} [fill] - Fill input: string (focused), {selector,value} (single), {fields} or mapping (batch)
  * @property {string} [type] - Type into element
  * @property {string} [press] - Press key(s)
  * @property {Object} [scroll] - Scroll configuration
  * @property {boolean|Object} [snapshot] - Take ARIA snapshot
  * @property {string|Object} [query] - Query elements
- * @property {string} [hover] - Hover over element
- * @property {Object} [wait] - Wait configuration
- * @property {string} [eval] - Evaluate JavaScript
- * @property {string|Object} [openTab] - Open new tab
+ * @property {string|Object} [hover] - Hover over element (selector, ref, text, or x/y)
+ * @property {string|Object} [wait] - Wait for selector/text/urlContains (no time delay — use sleep)
+ * @property {number} [sleep] - Time delay in ms (0–60000)
+ * @property {string|Object} [pageFunction] - Execute JS: function expression or bare expression
+ * @property {true|string|{url?: string, host?: string, port?: number, headless?: boolean}} [openTab] - Open new tab
  * @property {string} [closeTab] - Close tab by ID
- * @property {boolean|Object} [chromeStatus] - Check/launch Chrome
  * @property {string|Object} [selectOption] - Select dropdown option
  * @property {string|Object} [viewport] - Set viewport
  * @property {Object} [cookies] - Cookie operations
  * @property {boolean} [back] - Navigate back
  * @property {boolean} [forward] - Navigate forward
  * @property {Object} [drag] - Drag and drop
- * @property {Object} [fillForm] - Fill multiple form fields
+ * @property {string|number|Object} [frame] - Frame ops: "selector", index, "top", {name}, {list:true}
+ * @property {Object|Array} [elementsAt] - Coordinate lookup: {x,y} (point), [{x,y},...] (batch), {x,y,radius} (near)
  * @property {Object} [extract] - Extract data from page
  * @property {Object} [formState] - Get form state
  * @property {Object} [assert] - Assert condition

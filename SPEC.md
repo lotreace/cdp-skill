@@ -142,8 +142,8 @@ Responsible for detecting what changed in the viewport between actions.
 ### Data Flow
 
 1. JSON input arrives via CLI argument (preferred) or stdin (fallback)
-2. Input is parsed, validated for structure (must have non-empty `steps` array), and the config is extracted
-3. Special steps (`chromeStatus`, `closeTab`) that do not require a tab session are handled directly
+2. Input is parsed, validated for structure (must have non-empty `steps` array, no legacy `config`), and top-level fields (`tab`, `timeout`) are extracted
+3. Special steps (`chromeStatus`, `closeTab`) that do not require a tab session are handled directly (they resolve their own connection params)
 4. For all other steps: connect to Chrome (auto-launch if needed), resolve or create a tab, attach a session
 5. Module dependencies are created (page controller, element locator, input emulator, screenshot/console/PDF capture, ARIA snapshot, cookie manager) and the page controller is initialized (enabling CDP domains, resetting viewport)
 6. Steps are validated and executed sequentially
@@ -166,16 +166,15 @@ Browser-side state (the `window.__ariaRefs` map for element refs, snapshot IDs, 
 
 The CLI accepts a single JSON object containing:
 
-- **`config`** (optional object): Connection and execution configuration.
-  - `host` (string, default "localhost"): Chrome debugging host.
-  - `port` (number, default 9222): Chrome debugging port.
-  - `tab` (string): Tab alias (e.g., "t1") or CDP targetId to work with. Required for all invocations after the initial tab creation.
-  - `timeout` (number, default 30000): Step timeout in milliseconds.
-  - `headless` (boolean, default false): Whether to launch Chrome in headless mode.
+- **`tab`** (optional string): Tab alias (e.g., "t1") or CDP targetId to work with. Required for all invocations after the initial tab creation.
 
-- **`tab`** (optional string): Tab alias, equivalent to `config.tab`. When present at the top level, it takes precedence over `config.tab`.
+- **`timeout`** (optional number, default 30000): Step timeout in milliseconds.
 
 - **`steps`** (required array): One or more step objects. Each step must contain exactly one action key (e.g., `goto`, `click`, `fill`, `snapshot`). The array must be non-empty.
+
+Connection parameters (host, port, headless) are specified via the `openTab` object form when non-default values are needed: `{"steps":[{"openTab":{"url":"...","port":9333,"headless":true}}]}`. The tab registry stores connection info per alias so subsequent commands just use `tab` and it works.
+
+The `config` object is no longer supported. Passing `config` returns a validation error with migration instructions.
 
 Input is accepted via two channels:
 1. **CLI argument** (preferred): `node src/cdp-skill.js '{"steps":[...]}'`
@@ -280,7 +279,9 @@ On macOS, Chrome can be running as a background process without any visible wind
 
 ### `chromeStatus` Step
 
-The `chromeStatus` step is the canonical way for agents to check Chrome's state and ensure it is running with CDP enabled. Agents must never launch Chrome manually via shell commands.
+The `chromeStatus` step is an optional diagnostic for checking Chrome's state. In normal usage, agents do not need to call `chromeStatus` — `openTab` auto-launches Chrome if needed. Use `chromeStatus` when targeting a non-default port, debugging connection issues, or checking which tabs are open. Agents must never launch Chrome manually via shell commands.
+
+The step accepts `true` (uses defaults) or an object with optional `host`, `port`, `headless`, and `autoLaunch` fields. It is self-contained — all connection parameters come from the step itself, not from any top-level field.
 
 The step is lightweight: it does not require a tab session and is handled before any WebSocket connection is established. It returns:
 
@@ -310,7 +311,7 @@ Connection has a configurable timeout (default 30 seconds). If the initial conne
 
 ### Remote Debugging Port
 
-The default port is 9222, configurable via `config.port`. Each port uses its own user data directory, allowing multiple independent Chrome instances for parallel agent workloads.
+The default port is 9222, overridable via the `openTab` object form (e.g., `{"openTab":{"url":"...","port":9333}}`). Each port uses its own user data directory, allowing multiple independent Chrome instances for parallel agent workloads.
 
 
 ## 5. Tab & Session Lifecycle
@@ -323,18 +324,20 @@ The alias-to-targetId mapping is stored in a JSON registry file at `$TMPDIR/cdp-
 
 When a tab is registered, the system first checks if the target ID already has an alias (returning the existing one) before assigning a new one. Aliases are never reused -- if t1 is closed and a new tab is opened, it becomes t2 (or whatever the next number is).
 
+Each registry entry stores `{ targetId, host, port }` so that subsequent commands using `tab: "t1"` automatically resolve the correct host and port without the agent needing to repeat them.
+
 ### Tab Creation
 
 The `openTab` step creates a new browser tab and registers an alias for it. It accepts:
 - `true`: Open a blank tab.
 - A URL string: Open a tab and navigate to that URL.
-- An object with a `url` field: Open a tab and navigate, with additional options.
+- An object: Open a tab with optional `url`, `host`, `port`, and `headless` fields for non-default Chrome connections.
 
-`openTab` must be the first step in an invocation when no tab is specified in the config. The step is handled during session setup (before the normal step execution loop) because a tab must exist before any other actions can run. The URL navigation (if provided) and site profile lookup are handled as part of the step result.
+`openTab` must be the first step in an invocation when no tab is specified. The step is handled during session setup (before the normal step execution loop) because a tab must exist before any other actions can run. When the object form includes `host`, `port`, or `headless`, those values are used for the browser connection and stored in the tab registry so subsequent commands just use the alias. The URL navigation (if provided) and site profile lookup are handled as part of the step result.
 
 ### Tab Reuse
 
-The `tab` field (top-level or inside `config`) specifies an existing tab to work with. The alias is resolved to a CDP target ID via the registry, and a debugging session is attached to that target.
+The `tab` field (top-level) specifies an existing tab to work with. The alias is resolved to a full registry entry `{ targetId, host, port }` via the registry, and a debugging session is attached to the target using the stored connection parameters.
 
 Agents are expected to reuse their own tabs across invocations. In shared-browser scenarios (multiple agents using the same Chrome instance), each agent should only interact with tabs it created. There is no enforcement mechanism for this -- it is a convention documented in the agent-facing SKILL.md.
 
@@ -346,13 +349,13 @@ The `connectTab` step connects to an existing tab without creating a new one. It
 2. **Target ID** (object with `targetId`): Used directly.
 3. **URL regex** (object with `url`): Finds the first open tab whose URL matches the provided regex pattern.
 
-Like `openTab`, `connectTab` must be the first step when no tab is specified. It attaches a session to the found tab and registers an alias if one does not already exist.
+The object form also accepts optional `host` and `port` fields for connecting to a non-default Chrome instance. Like `openTab`, `connectTab` must be the first step when no tab is specified. It attaches a session to the found tab and registers an alias if one does not already exist.
 
 ### Tab Closure
 
 The `closeTab` step closes a tab by alias or target ID. It is handled specially -- it does not require an active session because it uses Chrome's HTTP close endpoint (`/json/close/<targetId>`) directly. After closure, the tab's alias is removed from the registry.
 
-`closeTab` can be the sole step in an invocation (no session needed). When agents finish their work, they are expected to close their tabs to avoid tab accumulation.
+`closeTab` can be the sole step in an invocation (no session needed). It resolves the host and port from the tab registry to make the HTTP close request, so the agent does not need to specify connection parameters. When agents finish their work, they are expected to close their tabs to avoid tab accumulation.
 
 ### Tab Listing
 
@@ -452,9 +455,7 @@ The `click` step accepts an array of selectors via the `selectors` parameter. Ea
 Some actions support direct `(x, y)` coordinate targeting. This applies to:
 - `click`: `{x: 100, y: 200}` clicks at the specified viewport coordinates
 - `drag`: source and target can each be specified as coordinates
-- `refAt`: returns the element (with ref) at given coordinates
-- `elementsAt`: returns elements at multiple coordinate pairs
-- `elementsNear`: returns elements within a radius of a point
+- `elementsAt`: `{x, y}` returns element at a point, `[{x,y}, ...]` returns batch, `{x, y, radius}` returns nearby elements
 
 Coordinate-based targeting is a fallback for cases where no selector or ref can identify the target (e.g., canvas elements, SVG paths).
 
@@ -702,13 +703,13 @@ Fill is the primary way to input text into form fields.
 
 **React compatibility**: Setting `react: true` uses a specialized fill strategy that works with React's synthetic event system. React intercepts native input events and may not update component state when `Input.insertText` is used. The React fill strategy uses the native property setter on the input's prototype to trigger React's internal event handling.
 
-**Batch fill**: The `fillForm` step accepts a map of selectors (or refs) to values, filling multiple fields in one step:
+**Batch fill**: The `fill` step also accepts a map of selectors (or refs) to values, filling multiple fields in one step:
 ```json
-{"fillForm": {"#firstName": "John", "#lastName": "Doe", "s1e4": "user@example.com"}}
+{"fill": {"#firstName": "John", "#lastName": "Doe", "s1e4": "user@example.com"}}
 ```
-The result reports the count of successful and failed fills with per-field details.
+The result reports the count of successful and failed fills with per-field details. An extended batch form uses `{fields: {...}, react: true}` for options.
 
-**Fill active**: The `fillActive` step fills the currently focused element without needing a selector. This is useful after tabbing into a field or when the focus state is known.
+**Fill focused**: A string value fills the currently focused element without needing a selector: `{"fill": "hello"}`. This is useful after tabbing into a field or when the focus state is known. An object form with `value` (but no targeting keys) also works: `{"fill": {"value": "hello", "clear": true}}`.
 
 **Navigation detection**: Fill checks for URL changes after input, as filling can trigger form submission.
 
@@ -848,7 +849,7 @@ If an optional step fails (element not found, timeout, etc.), it reports `status
 
 ### 10.4 Step Timeout
 
-Each step has a configurable timeout (default 30 seconds, set via `config.timeout` or per-step). The timeout wraps the entire step execution including all hooks (readyWhen, the action itself, settledWhen, observe).
+Each step has a configurable timeout (default 30 seconds, set via top-level `timeout` or per-step). The timeout wraps the entire step execution including all hooks (readyWhen, the action itself, settledWhen, observe).
 
 On timeout:
 - Non-optional steps fail with a timeout error, and the step result includes failure context (visible elements, near matches, scroll position).
@@ -969,7 +970,7 @@ The `extract` step pulls structured data from tables and lists on the page.
 
 **List extraction** returns `{type: "list", items[], itemCount}`. Items are the trimmed text content of direct `<li>` or `[role="listitem"]` children.
 
-The extraction runs in the current frame context, respecting any active `switchToFrame`.
+The extraction runs in the current frame context, respecting any active `frame` switch.
 
 ### 11.7 getDom
 
@@ -997,9 +998,11 @@ The `getBox` step retrieves bounding box information for elements identified by 
 
 When a single ref is provided, the result is returned directly (not wrapped in an object). When multiple refs are provided, results are keyed by ref string.
 
-### 11.9 refAt
+### 11.9 elementsAt
 
-The `refAt` step identifies the element at a specific viewport coordinate and returns (or creates) a ref for it.
+The unified `elementsAt` step provides coordinate-based element discovery with three shapes:
+
+**Single point** (`{x, y}`): Identifies the element at a specific viewport coordinate and returns (or creates) a ref for it.
 
 **Input:** `{x, y}` in viewport pixel coordinates.
 
@@ -1011,17 +1014,13 @@ The `refAt` step identifies the element at a specific viewport coordinate and re
 
 New refs are created in the current snapshot namespace and registered in the global ref map, making them immediately usable with `click`, `fill`, etc.
 
-### 11.10 elementsAt
-
-The `elementsAt` step identifies elements at multiple viewport coordinates in a single round trip.
+**Batch** (`[{x, y}, ...]`): Identifies elements at multiple viewport coordinates in a single round trip.
 
 **Input:** An array of `{x, y}` coordinate objects.
 
 **Return value:** `{count, elements[]}` where `count` is the number of coordinates that resolved to an element. Each element entry includes `x`, `y` (the queried coordinates), `ref`, `existing`, `tag`, `selector`, `clickable`, `role`, `name`, and `box`. Coordinates where no element was found include an `error` field instead.
 
-### 11.11 elementsNear
-
-The `elementsNear` step finds all visible elements within a radius of a point, sorted by distance.
+**Nearby search** (`{x, y, radius}`): Finds all visible elements within a radius of a point, sorted by distance.
 
 **Input:** `{x, y, radius, limit}` where `radius` defaults to 50 pixels and `limit` defaults to 20 elements.
 
@@ -1031,7 +1030,7 @@ Elements with `display: none`, `visibility: hidden`, or zero dimensions are excl
 
 This step is valuable for spatial reasoning -- for example, finding what is near a known landmark, or discovering interactive elements in a region of the page.
 
-### 11.12 Form State
+### 11.10 Form State
 
 The `formState` step inspects form fields without modifying them.
 
@@ -1042,7 +1041,7 @@ The `formState` step inspects form fields without modifying them.
 
 The `valid` top-level field indicates whether all fields pass HTML5 constraint validation.
 
-### 11.13 Validate
+### 11.11 Validate
 
 The `validate` step checks the HTML5 validation state of a specific form element.
 
@@ -1050,7 +1049,7 @@ The `validate` step checks the HTML5 validation state of a specific form element
 
 **Return value:** `{valid, message, validity}` where `message` is the browser's validation message (if any) and `validity` contains the individual validity state flags (valueMissing, typeMismatch, patternMismatch, etc.).
 
-### 11.14 Submit
+### 11.12 Submit
 
 The `submit` step programmatically submits a form.
 
@@ -1058,7 +1057,7 @@ The `submit` step programmatically submits a form.
 
 **Return value:** `{submitted, valid, errors[]}` where `errors` contains validation error details if the form is invalid. When `valid` is false, the form is not submitted and the errors are reported so the agent can address them.
 
-### 11.15 Assert
+### 11.13 Assert
 
 The `assert` step verifies conditions about the page and throws an error if any assertion fails, causing the step to report as failed.
 
@@ -1070,24 +1069,7 @@ The `assert` step verifies conditions about the page and throws an error if any 
 
 **Behavior on failure:** The step throws an error with descriptive messages for each failed assertion, including the actual values for debugging.
 
-### 11.16 Eval
-
-The `eval` step evaluates a JavaScript expression in the page context and returns the result.
-
-**Input:** An expression string or `{expression, await, serialize, timeout}`.
-
-- **expression**: The JavaScript expression to evaluate (not a function -- for functions, use `pageFunction`).
-- **await**: When true, the expression is expected to return a Promise and the result is awaited.
-- **serialize**: When true (the default), the return value is processed through a serializer that handles special types (Date, Map, Set, DOM elements, Infinity, NaN, etc.) and converts them to JSON-safe representations.
-- **timeout**: An optional millisecond timeout for long-running or async expressions.
-
-**Validation:** Before evaluation, the expression is checked for common malformation patterns (unbalanced quotes, braces, parentheses) that typically indicate shell escaping problems. If detected, the error message includes a diagnostic tip.
-
-**Return value:** `{value, type}` where `type` is the JavaScript type of the result. With serialization enabled, complex types are represented with a `type` discriminator and a serialized `value`.
-
-The expression runs in the current frame context, respecting any active `switchToFrame`.
-
-### 11.17 Console
+### 11.14 Console
 
 The `console` step retrieves browser console messages captured during the session.
 
@@ -1112,19 +1094,26 @@ Standard steps cover most browser automation scenarios, but some situations requ
 
 ### 12.1 pageFunction
 
-The `pageFunction` step executes arbitrary JavaScript functions in the browser context. It is the primary escape hatch for scenarios that standard steps cannot handle.
+The `pageFunction` step executes JavaScript in the browser context. It supports two modes: function expressions and bare expressions.
 
-**Input:** A function string or `{fn, refs, timeout}`.
+**Function mode** (primary): A function string or `{fn, refs, timeout}`.
 
-- **fn**: A JavaScript function string. It is automatically wrapped as an IIFE for execution.
+- **fn**: A JavaScript function string. It is automatically wrapped as an IIFE for execution. Detected by strings starting with `(`, `function`, `async` keyword, or matching arrow function patterns (e.g., `x =>`).
 - **refs**: When true, the function receives `window.__ariaRefs` as its argument, giving access to DOM elements identified by snapshot refs. This bridges the gap between the structured ref system and custom JavaScript logic.
 - **timeout**: An optional millisecond timeout. If exceeded, the evaluation is aborted.
 
-**Return value serialization:** The function's return value is automatically serialized to handle types that are not natively JSON-safe. Special handling is applied for Date, Map, Set, DOM elements, NodeList, RegExp, Error, Infinity, NaN, undefined, and null. The serialized result includes a `type` discriminator and a `value`.
+**Bare expression mode**: When the input string does not look like a function expression, it is treated as a bare JavaScript expression and evaluated directly. This also accepts `{expression, await, serialize, timeout}` where `expression` is an alias for `fn`.
 
-**Frame context:** The function executes in the current frame context. If the agent has switched to an iframe via `switchToFrame`, the function runs within that iframe.
+- **await**: When true, the expression is expected to return a Promise and the result is awaited.
+- **serialize**: When true (the default), the return value is processed through a serializer that handles special types.
 
-**Error reporting:** When the function throws, the error message includes the exception description and a preview of the source function string to aid debugging.
+Before evaluation, bare expressions are checked for common malformation patterns (unbalanced quotes, braces, parentheses) that typically indicate shell escaping problems. If detected, the error message includes a diagnostic tip.
+
+**Return value serialization:** The return value is automatically serialized to handle types that are not natively JSON-safe. Special handling is applied for Date, Map, Set, DOM elements, NodeList, RegExp, Error, Infinity, NaN, undefined, and null. The serialized result includes a `type` discriminator and a `value`.
+
+**Frame context:** The function or expression executes in the current frame context. If the agent has switched to an iframe via `frame`, it runs within that iframe.
+
+**Error reporting:** When execution throws, the error message includes the exception description and a preview of the source string to aid debugging.
 
 **Use cases:** Framework detection, complex DOM traversal, reading framework-specific state (e.g., React component props), custom data extraction patterns, and interactions with web APIs not covered by standard steps.
 
@@ -1190,7 +1179,7 @@ Modern web applications frequently use iframes for embedded content and shadow D
 
 ### 13.1 Frame Discovery
 
-The `listFrames` step returns the complete frame hierarchy of the page.
+The `frame` step with `{list: true}` returns the complete frame hierarchy of the page.
 
 **Return value:** `{mainFrameId, currentFrameId, frames[]}` where each frame has:
 - `frameId`: Unique identifier for the frame.
@@ -1206,19 +1195,18 @@ The `listFrames` step returns the complete frame hierarchy of the page.
 
 ### 13.2 Frame Switching
 
-**switchToFrame:** Enters an iframe context. Accepts multiple identifier formats:
+**`frame: "selector"`** or **`frame: {selector}` / `{index}` / `{name}` / `{frameId}`**: Enters an iframe context. Accepts multiple identifier formats:
 - **CSS selector string** (e.g., `"iframe.embed"`): Finds the iframe element in the DOM, then locates its corresponding frame in the CDP frame tree.
-- **Frame name string**: Matches against the `name` attribute of frames in the tree.
-- **Index number**: Selects the Nth child frame (zero-indexed).
+- **Index number** (e.g., `frame: 0`): Selects the Nth child frame (zero-indexed).
 - **Object**: `{selector}`, `{index}`, `{name}`, or `{frameId}` for explicit identification.
 
-Once switched, all subsequent operations -- click, fill, snapshot, eval, pageFunction, extract, and all other steps that evaluate JavaScript -- execute within the iframe's execution context. This is achieved by including the frame's `contextId` in every `Runtime.evaluate` call.
+Once switched, all subsequent operations -- click, fill, snapshot, pageFunction, extract, and all other steps that evaluate JavaScript -- execute within the iframe's execution context. This is achieved by including the frame's `contextId` in every `Runtime.evaluate` call.
 
 **Cross-origin frame warning:** When switching to a cross-origin iframe, the system detects the origin mismatch and emits a warning in the response. Due to browser security restrictions, JavaScript cannot directly access the cross-origin iframe's DOM. The system creates an isolated world in the frame to enable limited interaction, but not all operations may work reliably.
 
 **Isolated world creation:** If no execution context exists for the target frame (which happens with cross-origin frames or frames that have recently navigated), the system creates an isolated world via `Page.createIsolatedWorld`. This context is cached for reuse.
 
-**switchToMainFrame:** Returns to the top-level frame, resetting the execution context to the main frame. All subsequent operations execute in the main document.
+**`frame: "top"`**: Returns to the top-level frame, resetting the execution context to the main frame. All subsequent operations execute in the main document.
 
 **Frame context propagation:** The current frame's execution context ID is propagated via dependency injection to all modules that perform `Runtime.evaluate` calls. A `getFrameContext()` function returns the context ID when in a non-main frame, or null when in the main frame. This ensures consistent frame-aware behavior across the element locator, ARIA snapshot generator, click executor, and other subsystems.
 
@@ -1595,7 +1583,7 @@ This is used by the cdp-bench evaluation system to measure I/O efficiency and tr
 
 ### 17.7 Value Serialization
 
-When agents execute custom JavaScript in the browser via `pageFunction`, `poll`, or `eval`, the return values must be serialized to cross the browser-to-Node.js boundary. The system provides automatic serialization that handles types beyond what JSON natively supports:
+When agents execute custom JavaScript in the browser via `pageFunction` or `poll`, the return values must be serialized to cross the browser-to-Node.js boundary. The system provides automatic serialization that handles types beyond what JSON natively supports:
 
 **Primitive types**: `null`, `undefined`, `boolean`, `number` (including `NaN`, `Infinity`, `-Infinity`), `string`, `bigint`, `symbol`, and `function` (with truncated source representation).
 
@@ -1612,17 +1600,17 @@ Each serialized value includes a `type` field identifying the JavaScript type, e
 
 ### 18.1 Command Configuration
 
-Each command accepts an optional `config` object that controls connection and execution parameters:
+Each command accepts these top-level fields:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `host` | string | `"localhost"` | Chrome DevTools host address |
-| `port` | number | `9222` | Chrome DevTools debugging port |
-| `tab` | string | (none) | Tab alias or target ID to connect to. Can also be specified at the top level of the command object |
+| `tab` | string | (none) | Tab alias or target ID to connect to. Required after the initial `openTab` call |
 | `timeout` | number | `30000` | Step timeout in milliseconds |
-| `headless` | boolean | `false` | Launch Chrome in headless mode when auto-launching |
+| `steps` | array | (required) | Array of step objects to execute |
 
-The `tab` field can appear either inside `config` or at the top level of the command JSON. Top-level takes precedence. After the first `openTab` call, the returned tab alias should be passed in subsequent commands.
+Connection parameters (host, port, headless) are no longer top-level fields. They are specified via `openTab` object form for non-default Chrome connections: `{"steps":[{"openTab":{"url":"...","port":9333,"headless":true}}]}`. The tab registry stores `{ targetId, host, port }` per alias, so subsequent commands just use `tab` and the correct connection is resolved automatically.
+
+The legacy `config` object is no longer supported. Passing it returns a validation error with migration instructions.
 
 ### 18.2 Environment Variables
 
@@ -1637,7 +1625,7 @@ The system uses multiple timeout levels, each serving a different purpose:
 
 | Timeout | Default | Configurable | Purpose |
 |---------|---------|-------------|---------|
-| **Step timeout** | 30s | Yes, via `config.timeout` | Maximum time for any single step to complete |
+| **Step timeout** | 30s | Yes, via top-level `timeout` | Maximum time for any single step to complete |
 | **Actionability timeout** | 5s | No (hardcoded) | Maximum time to wait for an element to become actionable (visible, enabled, stable). Intentionally shorter than step timeout for faster feedback -- when actionability times out, auto-force may retry |
 | **Navigation timeout** | (step timeout) | Indirectly | Uses the step-level timeout for page load waits |
 | **Network idle** | 500ms | No | Idle window duration for `networkidle` wait condition |
@@ -1690,14 +1678,17 @@ The `--debug` flag can appear anywhere in the arguments and is stripped before J
 
 Tab aliases (e.g., `t1`, `t2`) provide stable, short identifiers for browser tabs that persist across CLI invocations. The registry is stored as JSON at `$TMPDIR/cdp-skill-tabs.json`.
 
+**Registry format:**
+Each entry maps an alias to `{ targetId, host, port }`. This allows subsequent commands to resolve the correct Chrome instance from just the alias. For backward compatibility, the system handles stale registry files that contain plain string entries (targetId only) by defaulting to `localhost:9222`.
+
 **Alias assignment:**
-- New tabs created via `openTab` are automatically registered and assigned the next available alias (`t{nextId}`)
+- New tabs created via `openTab` are automatically registered with `{ targetId, host, port }` and assigned the next available alias (`t{nextId}`)
 - Tabs connected via `connectTab` are registered if not already aliased
-- Existing tabs attached via `config.tab` are registered on first use
+- Existing tabs attached via top-level `tab` are registered on first use
 
 **Alias resolution:**
-- Short aliases (e.g., `t1`) are resolved to full CDP target IDs via the registry
-- Full 32-character hex target IDs are used as-is without registry lookup
+- Short aliases (e.g., `t1`) are resolved to full `{ targetId, host, port }` entries via the registry
+- Full 32-character hex target IDs are used as-is with default host/port
 - Unrecognized aliases are passed through as-is (allowing direct target ID use)
 
 **Lifecycle:**
@@ -1712,7 +1703,7 @@ This section documents known limitations, important edge cases, and areas where 
 
 ### 19.1 Cross-Origin Iframes
 
-JavaScript cannot access the DOM content of cross-origin iframes due to browser same-origin policy enforcement. The system detects cross-origin iframes (via `listFrames`) and tags them with `crossOrigin: true`, but actions targeting elements inside these iframes will fail via normal selectors and refs. While `switchToFrame` can switch to a cross-origin frame's execution context for JavaScript evaluation, DOM queries from the parent frame cannot cross the origin boundary.
+JavaScript cannot access the DOM content of cross-origin iframes due to browser same-origin policy enforcement. The system detects cross-origin iframes (via `frame: {list: true}`) and tags them with `crossOrigin: true`, but actions targeting elements inside these iframes will fail via normal selectors and refs. While `frame` can switch to a cross-origin frame's execution context for JavaScript evaluation, DOM queries from the parent frame cannot cross the origin boundary.
 
 ### 19.2 Alert, Confirm, and Prompt Dialogs
 
@@ -1753,7 +1744,7 @@ Open issues in this area include: viewport snapshots that include fixed/sticky n
 
 If agents do not close their tabs when finished, tabs accumulate in the browser instance. The tab registry (`$TMPDIR/cdp-skill-tabs.json`) grows with stale entries that may point to tabs already closed by other means. There is no automatic garbage collection of stale tab entries or orphaned browser tabs.
 
-Best practice: agents should always close their tabs via `closeTab` when done, and include `tab` in the config to reuse existing tabs rather than creating new ones each invocation.
+Best practice: agents should always close their tabs via `closeTab` when done, and include `tab` at the top level to reuse existing tabs rather than creating new ones each invocation.
 
 ### 19.8 Concurrent Multi-Agent Access
 
@@ -1792,7 +1783,7 @@ Stale element references were historically the top-reported issue (14 votes in t
 
 ### 19.12 Frame Context Persistence
 
-Frame context established via `switchToFrame` does not persist across CLI invocations. Each new command execution starts in the main frame context. Agents working with iframes must call `switchToFrame` at the beginning of each command that targets iframe content.
+Frame context established via `frame` does not persist across CLI invocations. Each new command execution starts in the main frame context. Agents working with iframes must use `frame` at the beginning of each command that targets iframe content.
 
 ### 19.13 File Upload
 
@@ -1814,4 +1805,4 @@ Clicking hidden radio buttons and checkboxes via refs reports success with a war
 
 ### 19.17 Same-Page Anchor Navigation
 
-Navigating to a URL that differs from the current URL only in the hash fragment (`#section`) causes a full page reload via CDP's `Page.navigate`. On large pages (e.g., the ECMAScript specification at 2.5MB), this can take 30+ seconds instead of the sub-second scroll that a hash change should produce. Agents should use `scroll` to a selector or `eval` with `location.hash = '#target'` as a workaround for same-page anchor navigation.
+Navigating to a URL that differs from the current URL only in the hash fragment (`#section`) causes a full page reload via CDP's `Page.navigate`. On large pages (e.g., the ECMAScript specification at 2.5MB), this can take 30+ seconds instead of the sub-second scroll that a hash change should produce. Agents should use `scroll` to a selector or `pageFunction` with `location.hash = '#target'` as a workaround for same-page anchor navigation.

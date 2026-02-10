@@ -30,7 +30,6 @@ describe('ContextHelpers', () => {
     });
 
     it('should contain form step types', () => {
-      assert.ok(STEP_TYPES.includes('fillForm'));
       assert.ok(STEP_TYPES.includes('type'));
       assert.ok(STEP_TYPES.includes('select'));
       assert.ok(STEP_TYPES.includes('selectOption'));
@@ -43,16 +42,27 @@ describe('ContextHelpers', () => {
       assert.ok(STEP_TYPES.includes('openTab'));
     });
 
-    it('should contain iframe step types', () => {
-      assert.ok(STEP_TYPES.includes('switchToFrame'));
-      assert.ok(STEP_TYPES.includes('switchToMainFrame'));
-      assert.ok(STEP_TYPES.includes('listFrames'));
+    it('should contain unified frame step', () => {
+      assert.ok(STEP_TYPES.includes('frame'));
+      assert.ok(!STEP_TYPES.includes('switchToFrame'));
+      assert.ok(!STEP_TYPES.includes('switchToMainFrame'));
+      assert.ok(!STEP_TYPES.includes('listFrames'));
     });
 
-    it('should contain coordinate-based step types', () => {
-      assert.ok(STEP_TYPES.includes('refAt'));
+    it('should contain unified elementsAt step', () => {
       assert.ok(STEP_TYPES.includes('elementsAt'));
-      assert.ok(STEP_TYPES.includes('elementsNear'));
+      assert.ok(!STEP_TYPES.includes('refAt'));
+      assert.ok(!STEP_TYPES.includes('elementsNear'));
+    });
+
+    it('should contain sleep step', () => {
+      assert.ok(STEP_TYPES.includes('sleep'));
+    });
+
+    it('should not contain removed steps', () => {
+      assert.ok(!STEP_TYPES.includes('fillForm'));
+      assert.ok(!STEP_TYPES.includes('fillActive'));
+      assert.ok(!STEP_TYPES.includes('eval'));
     });
   });
 
@@ -76,7 +86,7 @@ describe('ContextHelpers', () => {
       assert.ok(VISUAL_ACTIONS.includes('query'));
       assert.ok(VISUAL_ACTIONS.includes('queryAll'));
       assert.ok(VISUAL_ACTIONS.includes('inspect'));
-      assert.ok(VISUAL_ACTIONS.includes('eval'));
+      assert.ok(VISUAL_ACTIONS.includes('pageFunction'));
       assert.ok(VISUAL_ACTIONS.includes('extract'));
     });
 
@@ -84,6 +94,8 @@ describe('ContextHelpers', () => {
       assert.ok(!VISUAL_ACTIONS.includes('cookies'));
       assert.ok(!VISUAL_ACTIONS.includes('listTabs'));
       assert.ok(!VISUAL_ACTIONS.includes('closeTab'));
+      assert.ok(!VISUAL_ACTIONS.includes('eval'));
+      assert.ok(!VISUAL_ACTIONS.includes('fillForm'));
     });
   });
 

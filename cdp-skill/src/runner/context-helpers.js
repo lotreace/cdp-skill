@@ -13,21 +13,21 @@
  */
 
 export const STEP_TYPES = [
-  'goto', 'wait', 'click', 'fill', 'fillForm', 'press', 'query', 'queryAll',
-  'inspect', 'scroll', 'console', 'pdf', 'eval', 'snapshot', 'snapshotSearch',
+  'goto', 'wait', 'click', 'fill', 'press', 'query', 'queryAll',
+  'inspect', 'scroll', 'console', 'pdf', 'snapshot', 'snapshotSearch',
   'hover', 'viewport', 'cookies', 'back', 'forward', 'waitForNavigation', 'listTabs',
   'closeTab', 'openTab', 'type', 'select', 'selectOption', 'validate', 'submit',
-  'assert', 'switchToFrame', 'switchToMainFrame', 'listFrames', 'drag', 'formState',
-  'extract', 'getDom', 'getBox', 'fillActive', 'refAt', 'elementsAt', 'elementsNear',
+  'assert', 'frame', 'drag', 'formState',
+  'extract', 'getDom', 'getBox', 'elementsAt',
   'reload', 'pageFunction', 'poll', 'pipeline', 'writeSiteProfile', 'readSiteProfile',
-  'connectTab'
+  'connectTab', 'sleep'
 ];
 
 // Visual actions that trigger auto-screenshot
 // Actions that should capture a screenshot - anything that interacts with or queries the visible page
 export const VISUAL_ACTIONS = [
-  'goto', 'reload', 'click', 'fill', 'fillForm', 'type', 'hover', 'press', 'scroll', 'wait',  // interactions
-  'snapshot', 'snapshotSearch', 'query', 'queryAll', 'inspect', 'eval', 'extract', 'formState',  // queries
+  'goto', 'reload', 'click', 'fill', 'type', 'hover', 'press', 'scroll', 'wait',  // interactions
+  'snapshot', 'snapshotSearch', 'query', 'queryAll', 'inspect', 'pageFunction', 'extract', 'formState',  // queries
   'drag', 'select', 'selectOption', 'validate', 'submit', 'assert',  // other page interactions
   'openTab', 'connectTab'  // navigation actions - behave like goto for auto-snapshot
 ];
@@ -60,7 +60,18 @@ export function buildActionContext(action, params, context) {
     case 'hover': {
       if (typeof params === 'string') return `Hovered over ${params}`;
       if (params?.selector) return `Hovered over ${params.selector}`;
+      if (params?.ref) return `Hovered over [ref=${params.ref}]`;
+      if (params?.text) return `Hovered over "${params.text}"`;
+      if (typeof params?.x === 'number' && typeof params?.y === 'number') return `Hovered over (${params.x}, ${params.y})`;
       return 'Hovered over element';
+    }
+    case 'frame': {
+      if (params === 'top') return 'Switched to main frame';
+      if (typeof params === 'string') return `Switched to frame ${params}`;
+      if (typeof params === 'number') return `Switched to frame index ${params}`;
+      if (params?.list) return 'Listed frames';
+      if (params?.name) return `Switched to frame "${params.name}"`;
+      return 'Frame operation';
     }
     case 'fill':
     case 'type': {
