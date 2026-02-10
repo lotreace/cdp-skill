@@ -543,6 +543,65 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     }
 
     if (!force && refInfo.isVisible === false) {
+      // Special case: hidden radio/checkbox inputs — try to click associated label
+      const labelResult = await session.send('Runtime.evaluate', frameEvalParams(`
+        (function() {
+          const ref = ${JSON.stringify(ref)};
+          const el = window.__ariaRefs && window.__ariaRefs.get(ref);
+          if (!el) return { found: false };
+
+          const tag = el.tagName.toUpperCase();
+          const type = (el.type || '').toLowerCase();
+          if (tag === 'INPUT' && (type === 'radio' || type === 'checkbox')) {
+            // Look for associated label
+            let label = null;
+            if (el.id) {
+              label = document.querySelector('label[for="' + el.id + '"]');
+            }
+            if (!label) {
+              label = el.closest('label');
+            }
+
+            if (label) {
+              const rect = label.getBoundingClientRect();
+              const style = window.getComputedStyle(label);
+              const isVisible = style.display !== 'none' &&
+                                style.visibility !== 'hidden' &&
+                                style.opacity !== '0' &&
+                                rect.width > 0 && rect.height > 0;
+
+              if (isVisible) {
+                return {
+                  found: true,
+                  clickedLabel: true,
+                  box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+                };
+              }
+            }
+          }
+          return { found: false };
+        })()
+      `, true));
+
+      const labelInfo = labelResult.result?.value || { found: false };
+      if (labelInfo.found && labelInfo.clickedLabel) {
+        // Click the label instead
+        const labelCenter = calculateVisibleCenter(labelInfo.box);
+        const urlBefore = await getCurrentUrl(session);
+        await inputEmulator.click(labelCenter.x, labelCenter.y);
+        const urlAfter = await getCurrentUrl(session);
+        const navigated = urlAfter !== urlBefore;
+
+        return {
+          clicked: true,
+          method: 'label-proxy',
+          ref,
+          warning: `Element ref:${ref} is a hidden radio/checkbox input. Clicked associated label instead.`,
+          navigated
+        };
+      }
+
+      // No label found or element isn't radio/checkbox — return original error
       return {
         clicked: false,
         warning: `Element ref:${ref} exists but is not visible. It may be hidden or have zero dimensions.`
