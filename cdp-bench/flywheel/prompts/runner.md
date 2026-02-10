@@ -34,11 +34,15 @@ export CDP_METRICS_FILE="{{metrics_file}}"
 
 ### 4. Execute the Test
 
-**Always use headless mode.** Launch Chrome and execute the task:
+**CRITICAL: ALWAYS use headless mode.** Never omit `"headless": true` from your newTab step.
+
+Launch Chrome in headless mode and execute the task:
 
 ```bash
-node cdp-skill/src/cdp-skill.js '{"steps": [{"openTab": {"url": "{{url}}", "headless": true}}]}'
+node cdp-skill/src/cdp-skill.js '{"steps": [{"newTab": {"url": "{{url}}", "headless": true}}]}'
 ```
+
+**Every cdp-skill invocation must include `"headless": true` in the newTab step.** This prevents GUI windows from appearing.
 
 Work through the task step by step. Use the most appropriate cdp-skill steps for each action. Stay within the budget limits.
 

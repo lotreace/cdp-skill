@@ -193,27 +193,25 @@ cdp-bench/baselines/latest.json
 
 If it exists, note the SHS and per-test scores for comparison. If not, this is the first run.
 
-#### Step 10: Launch Runner Subagents (Waves)
+#### Step 10: Launch Runner Subagents
 
-Divide tests into waves of 5 to avoid overwhelming Chrome. **Run only one wave at a time — wait for a wave to complete before launching the next.**
+Spawn ALL test runner agents at once in parallel (`run_in_background: true`). **Discard the output_file path** — you will NOT read it.
 
-For each wave:
+Read and adapt the prompt from `cdp-bench/flywheel/prompts/runner.md`, substituting for each test:
+- `{{test_file_path}}` = path to the `.test.json` file
+- `{{run_id}}` = the run ID
+- `{{run_dir}}` = the run directory
+- `{{metrics_file}}` = `${runDir}/metrics.jsonl`
+- `{{url}}` = the test's URL
+- `{{test_id}}` = the test's ID
 
-1. Spawn all 5 background Task agents for this wave (`run_in_background: true`). **Discard the output_file path** — you will NOT read it. Read and adapt the prompt from `cdp-bench/flywheel/prompts/runner.md`, substituting:
-   - `{{test_file_path}}` = path to the `.test.json` file
-   - `{{run_id}}` = the run ID
-   - `{{run_dir}}` = the run directory
-   - `{{metrics_file}}` = `${runDir}/metrics.jsonl`
-   - `{{url}}` = the test's URL
-   - `{{test_id}}` = the test's ID
+Spawn all agents in a single message with multiple Task tool calls.
 
-2. **Wait for all 5 agents to complete.** You will receive automatic completion notifications for each agent. Do NOT launch the next wave until all 5 notifications arrive.
-
-3. After all waves, check for missing traces:
+**Wait for all agents to complete.** You will receive automatic completion notifications for each agent. Once all notifications arrive, check for missing traces:
 ```bash
 ls ${runDir}/*.trace.json | wc -l
 ```
-If any tests are missing, note them for a retry wave.
+If any tests are missing, spawn retry agents for those tests only.
 
 **IMPORTANT: Do NOT read runner agent outputs via TaskOutput.** Runner conversations contain verbose CLI output that will overflow the conductor's context window.
 
