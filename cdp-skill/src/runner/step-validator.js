@@ -408,72 +408,53 @@ export function validateStepInternal(step) {
       }
       break;
 
-    case 'openTab':
-      // openTab can be:
+    case 'newTab':
+      // newTab can be:
       // - true: just open a blank tab
       // - string: open tab and navigate to URL
       // - object with options: {url: "...", host: "...", port: N, headless: bool}
       if (params !== true && typeof params !== 'string' && (typeof params !== 'object' || params === null)) {
-        errors.push('openTab must be true, a URL string, or an options object');
+        errors.push('newTab must be true, a URL string, or an options object');
       }
       if (typeof params === 'object' && params !== null) {
         if (params.url !== undefined && typeof params.url !== 'string') {
-          errors.push('openTab url must be a string');
+          errors.push('newTab url must be a string');
         }
         if (params.host !== undefined && typeof params.host !== 'string') {
-          errors.push('openTab host must be a string');
+          errors.push('newTab host must be a string');
         }
         if (params.port !== undefined && typeof params.port !== 'number') {
-          errors.push('openTab port must be a number');
+          errors.push('newTab port must be a number');
         }
         if (params.headless !== undefined && typeof params.headless !== 'boolean') {
-          errors.push('openTab headless must be a boolean');
+          errors.push('newTab headless must be a boolean');
         }
       }
       break;
 
-    case 'type':
-      if (!params || typeof params !== 'object') {
-        errors.push('type requires an object with selector and text');
-      } else {
-        if (!params.selector) {
-          errors.push('type requires selector');
-        } else if (typeof params.selector !== 'string') {
-          errors.push('type selector must be a string');
-        }
-        if (params.text === undefined) {
-          errors.push('type requires text');
-        }
-      }
-      break;
 
-    case 'select':
+    case 'selectText':
       if (typeof params === 'string') {
         if (params.length === 0) {
-          errors.push('select selector cannot be empty');
+          errors.push('selectText selector cannot be empty');
         }
       } else if (params && typeof params === 'object') {
         if (!params.selector) {
-          errors.push('select requires selector');
+          errors.push('selectText requires selector');
         } else if (typeof params.selector !== 'string') {
-          errors.push('select selector must be a string');
+          errors.push('selectText selector must be a string');
         }
         if (params.start !== undefined && typeof params.start !== 'number') {
-          errors.push('select start must be a number');
+          errors.push('selectText start must be a number');
         }
         if (params.end !== undefined && typeof params.end !== 'number') {
-          errors.push('select end must be a number');
+          errors.push('selectText end must be a number');
         }
       } else {
-        errors.push('select requires a selector string or params object');
+        errors.push('selectText requires a selector string or params object');
       }
       break;
 
-    case 'validate':
-      if (typeof params !== 'string' || params.length === 0) {
-        errors.push('validate requires a non-empty selector string');
-      }
-      break;
 
     case 'submit':
       if (typeof params === 'string') {
@@ -575,9 +556,21 @@ export function validateStepInternal(step) {
       }
       break;
 
-    case 'extract':
-      if (typeof params !== 'string' && (!params || !params.selector)) {
-        errors.push('extract requires a selector string or object with selector');
+    case 'get':
+      // Unified content extraction: get: "selector" or {selector, mode: "text"|"html"|"value"|"box"|"attributes"}
+      if (typeof params === 'string') {
+        if (params.length === 0) {
+          errors.push('get selector cannot be empty');
+        }
+      } else if (params && typeof params === 'object') {
+        if (!params.selector && !params.ref) {
+          errors.push('get requires selector or ref');
+        }
+        if (params.mode && !['text', 'html', 'value', 'box', 'attributes'].includes(params.mode)) {
+          errors.push('get mode must be one of: text, html, value, box, attributes');
+        }
+      } else {
+        errors.push('get requires a selector string or object with selector/ref');
       }
       break;
 
@@ -713,39 +706,6 @@ export function validateStepInternal(step) {
       }
       break;
 
-    case 'pipeline':
-      // pipeline: [{find, fill}, ...] or {steps, timeout}
-      {
-        const pipelineSteps = Array.isArray(params) ? params : (params && params.steps);
-        if (!Array.isArray(pipelineSteps) || pipelineSteps.length === 0) {
-          errors.push('pipeline requires a non-empty array of micro-operations');
-        } else {
-          for (let pi = 0; pi < pipelineSteps.length; pi++) {
-            const op = pipelineSteps[pi];
-            if (!op || typeof op !== 'object') {
-              errors.push(`pipeline step ${pi}: must be an object`);
-              continue;
-            }
-            const hasMicroOp = op.find || op.waitFor || op.sleep !== undefined || op.return;
-            if (!hasMicroOp) {
-              errors.push(`pipeline step ${pi}: unrecognized micro-op (need find, waitFor, sleep, or return)`);
-            }
-            if (op.find) {
-              const hasAction = op.fill !== undefined || op.click !== undefined ||
-                op.type !== undefined || op.check !== undefined || op.select !== undefined;
-              if (!hasAction) {
-                errors.push(`pipeline step ${pi}: find requires an action (fill, click, type, check, or select)`);
-              }
-            }
-          }
-        }
-        if (!Array.isArray(params) && params && params.timeout !== undefined) {
-          if (typeof params.timeout !== 'number' || params.timeout < 0) {
-            errors.push('pipeline timeout must be a non-negative number');
-          }
-        }
-      }
-      break;
 
     case 'writeSiteProfile':
       if (!params || typeof params !== 'object') {
@@ -775,29 +735,29 @@ export function validateStepInternal(step) {
       }
       break;
 
-    case 'connectTab':
+    case 'switchTab':
       if (typeof params === 'string') {
         if (params.length === 0) {
-          errors.push('connectTab requires a non-empty alias or targetId string');
+          errors.push('switchTab requires a non-empty alias or targetId string');
         }
       } else if (params && typeof params === 'object') {
         if (!params.targetId && !params.url) {
-          errors.push('connectTab object requires targetId or url');
+          errors.push('switchTab object requires targetId or url');
         }
         if (params.url !== undefined && typeof params.url !== 'string') {
-          errors.push('connectTab url must be a string (regex pattern)');
+          errors.push('switchTab url must be a string (regex pattern)');
         }
         if (params.targetId !== undefined && typeof params.targetId !== 'string') {
-          errors.push('connectTab targetId must be a string');
+          errors.push('switchTab targetId must be a string');
         }
         if (params.host !== undefined && typeof params.host !== 'string') {
-          errors.push('connectTab host must be a string');
+          errors.push('switchTab host must be a string');
         }
         if (params.port !== undefined && typeof params.port !== 'number') {
-          errors.push('connectTab port must be a number');
+          errors.push('switchTab port must be a number');
         }
       } else {
-        errors.push('connectTab requires a string (alias/targetId) or object with {targetId} or {url}');
+        errors.push('switchTab requires a string (alias/targetId) or object with {targetId} or {url}');
       }
       break;
 
@@ -808,6 +768,18 @@ export function validateStepInternal(step) {
         errors.push('sleep time must be non-negative');
       } else if (params > 60000) {
         errors.push('sleep time must not exceed 60000ms');
+      }
+      break;
+
+    case 'getUrl':
+      if (params !== true) {
+        errors.push('getUrl requires true');
+      }
+      break;
+
+    case 'getTitle':
+      if (params !== true) {
+        errors.push('getTitle requires true');
       }
       break;
   }

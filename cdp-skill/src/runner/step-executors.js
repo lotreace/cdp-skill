@@ -50,10 +50,10 @@ import { executeClick, executeHover, executeDrag } from './execute-interaction.j
 import { executeFillActive, executeSelectOption } from './execute-input.js';
 import { executeSnapshot, executeSnapshotSearch, executeQuery, executeQueryAll, executeInspect, executeGetDom, executeGetBox, executeRefAt, executeElementsAt, executeElementsNear } from './execute-query.js';
 // executeRefAt, executeElementsNear kept for internal dispatch from unified elementsAt
-import { executeValidate, executeSubmit, executeExtract } from './execute-form.js';
+import { executeSubmit, executeExtract } from './execute-form.js';
 import { executePdf, executeEval, executeCookies, executeListTabs, executeCloseTab, executeConsole, formatCommandConsole } from './execute-browser.js';
 // executeEval kept for internal dispatch from unified pageFunction
-import { executePageFunction, executePoll, executePipeline, executeWriteSiteProfile, executeReadSiteProfile, loadSiteProfile } from './execute-dynamic.js';
+import { executePageFunction, executePoll, executeWriteSiteProfile, executeReadSiteProfile, loadSiteProfile } from './execute-dynamic.js';
 
 const keyValidator = createKeyValidator();
 
@@ -325,17 +325,17 @@ export async function executeStep(deps, step, options = {}) {
     } else if (step.closeTab !== undefined) {
       stepResult.action = 'closeTab';
       stepResult.output = await executeCloseTab(deps.browser, step.closeTab);
-    } else if (step.openTab !== undefined) {
-      stepResult.action = 'openTab';
-      if (step._openTabHandled) {
-        if (step._openTabUrl) {
-          await pageController.navigate(step._openTabUrl);
+    } else if (step.newTab !== undefined) {
+      stepResult.action = 'newTab';
+      if (step._newTabHandled) {
+        if (step._newTabUrl) {
+          await pageController.navigate(step._newTabUrl);
           await pageController.waitForNetworkSettle();
 
           // Site profile check (same as goto)
           try {
             const currentUrl = await pageController.evaluateInFrame('window.location.href', { returnByValue: true });
-            const resolvedUrl = currentUrl.result?.value || step._openTabUrl;
+            const resolvedUrl = currentUrl.result?.value || step._newTabUrl;
             const domain = new URL(resolvedUrl).hostname.replace(/^www\./, '');
 
             const existingProfile = await loadSiteProfile(domain);
@@ -350,29 +350,18 @@ export async function executeStep(deps, step, options = {}) {
             // Profile errors are non-fatal
           }
         }
-        stepResult.output = { tab: step._openTabAlias };
+        stepResult.output = { tab: step._newTabAlias };
       } else {
         throw new Error('openTab must be the first step when no targetId is provided');
       }
-    } else if (step.type !== undefined) {
-      stepResult.action = 'type';
+    } else if (step.selectText !== undefined) {
+      stepResult.action = 'selectText';
       const keyboardExecutor = createKeyboardExecutor(
         elementLocator.session,
         elementLocator,
         inputEmulator
       );
-      stepResult.output = await keyboardExecutor.executeType(step.type);
-    } else if (step.select !== undefined) {
-      stepResult.action = 'select';
-      const keyboardExecutor = createKeyboardExecutor(
-        elementLocator.session,
-        elementLocator,
-        inputEmulator
-      );
-      stepResult.output = await keyboardExecutor.executeSelect(step.select);
-    } else if (step.validate !== undefined) {
-      stepResult.action = 'validate';
-      stepResult.output = await executeValidate(elementLocator, step.validate);
+      stepResult.output = await keyboardExecutor.executeSelect(step.selectText);
     } else if (step.submit !== undefined) {
       stepResult.action = 'submit';
       stepResult.output = await executeSubmit(elementLocator, step.submit);
@@ -396,14 +385,30 @@ export async function executeStep(deps, step, options = {}) {
     } else if (step.drag !== undefined) {
       stepResult.action = 'drag';
       stepResult.output = await executeDrag(elementLocator, inputEmulator, pageController, deps.ariaSnapshot, step.drag);
-    } else if (step.formState !== undefined) {
-      stepResult.action = 'formState';
-      const formValidator = createFormValidator(elementLocator.session, elementLocator);
-      const formSelector = typeof step.formState === 'string' ? step.formState : step.formState.selector;
-      stepResult.output = await formValidator.getFormState(formSelector);
-    } else if (step.extract !== undefined) {
-      stepResult.action = 'extract';
-      stepResult.output = await executeExtract(deps, step.extract);
+    } else if (step.get !== undefined) {
+      stepResult.action = 'get';
+      const getParams = step.get;
+      const mode = typeof getParams === 'object' ? getParams.mode : null;
+
+      if (mode === 'html') {
+        // HTML extraction mode → use getDom
+        stepResult.output = await executeGetDom(pageController, getParams);
+        stepResult.output.mode = 'html';
+      } else if (mode === 'box') {
+        // Bounding box mode → use getBox (requires ref format)
+        stepResult.output = await executeGetBox(deps.ariaSnapshot, getParams.ref || getParams.selector);
+        stepResult.output.mode = 'box';
+      } else if (mode === 'value') {
+        // Form value extraction → use formState
+        const formValidator = createFormValidator(elementLocator.session, elementLocator);
+        const selector = typeof getParams === 'string' ? getParams : getParams.selector;
+        stepResult.output = await formValidator.getFormState(selector);
+        stepResult.output.mode = 'value';
+      } else {
+        // Default: text/attributes extraction → use extract
+        stepResult.output = await executeExtract(deps, getParams);
+        stepResult.output.mode = mode || 'text';
+      }
     } else if (step.selectOption !== undefined) {
       stepResult.action = 'selectOption';
       stepResult.output = await executeSelectOption(elementLocator, step.selectOption);
@@ -449,22 +454,27 @@ export async function executeStep(deps, step, options = {}) {
     } else if (step.poll !== undefined) {
       stepResult.action = 'poll';
       stepResult.output = await executePoll(pageController, step.poll);
-    } else if (step.pipeline !== undefined) {
-      stepResult.action = 'pipeline';
-      stepResult.output = await executePipeline(pageController, step.pipeline);
     } else if (step.writeSiteProfile !== undefined) {
       stepResult.action = 'writeSiteProfile';
       stepResult.output = await executeWriteSiteProfile(step.writeSiteProfile);
     } else if (step.readSiteProfile !== undefined) {
       stepResult.action = 'readSiteProfile';
       stepResult.output = await executeReadSiteProfile(step.readSiteProfile);
-    } else if (step.connectTab !== undefined) {
-      stepResult.action = 'connectTab';
-      if (step._connectTabHandled) {
-        stepResult.output = { tab: step._connectTabAlias, connected: true };
+    } else if (step.switchTab !== undefined) {
+      stepResult.action = 'switchTab';
+      if (step._switchTabHandled) {
+        stepResult.output = { tab: step._switchTabAlias, connected: true };
       } else {
-        throw new Error('connectTab must be the first step when no tab is specified');
+        throw new Error('switchTab must be the first step when no tab is specified');
       }
+    } else if (step.getUrl !== undefined) {
+      stepResult.action = 'getUrl';
+      const urlResult = await pageController.evaluateInFrame('window.location.href', { returnByValue: true });
+      stepResult.output = { url: urlResult.result?.value };
+    } else if (step.getTitle !== undefined) {
+      stepResult.action = 'getTitle';
+      const titleResult = await pageController.evaluateInFrame('document.title', { returnByValue: true });
+      stepResult.output = { title: titleResult.result?.value };
     }
 
     // Process hooks on action steps (settledWhen, observe)

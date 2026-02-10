@@ -444,28 +444,6 @@ describe('StepValidator', () => {
       });
     });
 
-    describe('getBox validation', () => {
-      it('should accept single ref string', () => {
-        const errors = validateStepInternal({ getBox: 's1e1' });
-        assert.strictEqual(errors.length, 0);
-      });
-
-      it('should accept array of refs', () => {
-        const errors = validateStepInternal({ getBox: ['s1e1', 's1e2', 's2e3'] });
-        assert.strictEqual(errors.length, 0);
-      });
-
-      it('should reject invalid ref format', () => {
-        const errors = validateStepInternal({ getBox: 'invalid' });
-        assert.ok(errors.some(e => e.includes('format "s{N}e{M}"')));
-      });
-
-      it('should reject empty array', () => {
-        const errors = validateStepInternal({ getBox: [] });
-        assert.ok(errors.some(e => e.includes('cannot be empty')));
-      });
-    });
-
     describe('elementsAt validation (unified)', () => {
       // Point mode (was refAt)
       it('should accept single point object', () => {
@@ -554,71 +532,71 @@ describe('StepValidator', () => {
     });
   });
 
-    describe('openTab validation', () => {
+    describe('newTab validation', () => {
       it('should accept true', () => {
-        const errors = validateStepInternal({ openTab: true });
+        const errors = validateStepInternal({ newTab: true });
         assert.strictEqual(errors.length, 0);
       });
 
       it('should accept URL string', () => {
-        const errors = validateStepInternal({ openTab: 'https://example.com' });
+        const errors = validateStepInternal({ newTab: 'https://example.com' });
         assert.strictEqual(errors.length, 0);
       });
 
       it('should accept object with url', () => {
-        const errors = validateStepInternal({ openTab: { url: 'https://example.com' } });
+        const errors = validateStepInternal({ newTab: { url: 'https://example.com' } });
         assert.strictEqual(errors.length, 0);
       });
 
       it('should accept object with connection params', () => {
-        const errors = validateStepInternal({ openTab: { url: 'https://example.com', host: 'remote', port: 9333, headless: true } });
+        const errors = validateStepInternal({ newTab: { url: 'https://example.com', host: 'remote', port: 9333, headless: true } });
         assert.strictEqual(errors.length, 0);
       });
 
       it('should reject non-string host', () => {
-        const errors = validateStepInternal({ openTab: { url: 'https://example.com', host: 123 } });
+        const errors = validateStepInternal({ newTab: { url: 'https://example.com', host: 123 } });
         assert.ok(errors.some(e => e.includes('host must be a string')));
       });
 
       it('should reject non-number port', () => {
-        const errors = validateStepInternal({ openTab: { url: 'https://example.com', port: '9222' } });
+        const errors = validateStepInternal({ newTab: { url: 'https://example.com', port: '9222' } });
         assert.ok(errors.some(e => e.includes('port must be a number')));
       });
 
       it('should reject non-boolean headless', () => {
-        const errors = validateStepInternal({ openTab: { url: 'https://example.com', headless: 'yes' } });
+        const errors = validateStepInternal({ newTab: { url: 'https://example.com', headless: 'yes' } });
         assert.ok(errors.some(e => e.includes('headless must be a boolean')));
       });
     });
 
-    describe('connectTab validation', () => {
+    describe('switchTab validation', () => {
       it('should accept string alias', () => {
-        const errors = validateStepInternal({ connectTab: 't1' });
+        const errors = validateStepInternal({ switchTab: 't1' });
         assert.strictEqual(errors.length, 0);
       });
 
       it('should accept object with targetId', () => {
-        const errors = validateStepInternal({ connectTab: { targetId: 'ABC123' } });
+        const errors = validateStepInternal({ switchTab: { targetId: 'ABC123' } });
         assert.strictEqual(errors.length, 0);
       });
 
       it('should accept object with url', () => {
-        const errors = validateStepInternal({ connectTab: { url: 'example\\.com' } });
+        const errors = validateStepInternal({ switchTab: { url: 'example\\.com' } });
         assert.strictEqual(errors.length, 0);
       });
 
       it('should accept object with connection params', () => {
-        const errors = validateStepInternal({ connectTab: { targetId: 'ABC', host: 'remote', port: 9333 } });
+        const errors = validateStepInternal({ switchTab: { targetId: 'ABC', host: 'remote', port: 9333 } });
         assert.strictEqual(errors.length, 0);
       });
 
       it('should reject non-string host', () => {
-        const errors = validateStepInternal({ connectTab: { targetId: 'ABC', host: 123 } });
+        const errors = validateStepInternal({ switchTab: { targetId: 'ABC', host: 123 } });
         assert.ok(errors.some(e => e.includes('host must be a string')));
       });
 
       it('should reject non-number port', () => {
-        const errors = validateStepInternal({ connectTab: { targetId: 'ABC', port: '9222' } });
+        const errors = validateStepInternal({ switchTab: { targetId: 'ABC', port: '9222' } });
         assert.ok(errors.some(e => e.includes('port must be a number')));
       });
     });

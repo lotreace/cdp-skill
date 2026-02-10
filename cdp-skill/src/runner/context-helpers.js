@@ -16,20 +16,19 @@ export const STEP_TYPES = [
   'goto', 'wait', 'click', 'fill', 'press', 'query', 'queryAll',
   'inspect', 'scroll', 'console', 'pdf', 'snapshot', 'snapshotSearch',
   'hover', 'viewport', 'cookies', 'back', 'forward', 'waitForNavigation', 'listTabs',
-  'closeTab', 'openTab', 'type', 'select', 'selectOption', 'validate', 'submit',
-  'assert', 'frame', 'drag', 'formState',
-  'extract', 'getDom', 'getBox', 'elementsAt',
-  'reload', 'pageFunction', 'poll', 'pipeline', 'writeSiteProfile', 'readSiteProfile',
-  'connectTab', 'sleep'
+  'closeTab', 'newTab', 'selectText', 'selectOption', 'submit',
+  'assert', 'frame', 'drag', 'get', 'elementsAt', 'getUrl', 'getTitle',
+  'reload', 'pageFunction', 'poll', 'writeSiteProfile', 'readSiteProfile',
+  'switchTab', 'sleep'
 ];
 
 // Visual actions that trigger auto-screenshot
 // Actions that should capture a screenshot - anything that interacts with or queries the visible page
 export const VISUAL_ACTIONS = [
-  'goto', 'reload', 'click', 'fill', 'type', 'hover', 'press', 'scroll', 'wait',  // interactions
-  'snapshot', 'snapshotSearch', 'query', 'queryAll', 'inspect', 'pageFunction', 'extract', 'formState',  // queries
-  'drag', 'select', 'selectOption', 'validate', 'submit', 'assert',  // other page interactions
-  'openTab', 'connectTab'  // navigation actions - behave like goto for auto-snapshot
+  'goto', 'reload', 'click', 'fill', 'hover', 'press', 'scroll', 'wait',  // interactions
+  'snapshot', 'snapshotSearch', 'query', 'queryAll', 'inspect', 'pageFunction', 'get',  // queries
+  'drag', 'selectText', 'selectOption', 'submit', 'assert',  // other page interactions
+  'newTab', 'switchTab'  // navigation actions - behave like goto for auto-snapshot
 ];
 
 /**
@@ -105,8 +104,8 @@ export function buildCommandContext(steps) {
   if (actions.includes('hover')) return 'Hovered';
   if (actions.includes('fill') || actions.includes('type')) return 'Typed';
   if (actions.includes('press')) return 'Pressed key';
-  if (actions.includes('goto') || actions.includes('openTab')) return 'Navigated';
-  if (actions.includes('select')) return 'Selected';
+  if (actions.includes('goto') || actions.includes('newTab')) return 'Navigated';
+  if (actions.includes('selectText')) return 'Selected';
   if (actions.includes('drag')) return 'Dragged';
 
   // Default: list the actions

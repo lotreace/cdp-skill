@@ -30,8 +30,7 @@ describe('ContextHelpers', () => {
     });
 
     it('should contain form step types', () => {
-      assert.ok(STEP_TYPES.includes('type'));
-      assert.ok(STEP_TYPES.includes('select'));
+      assert.ok(STEP_TYPES.includes('selectText'));
       assert.ok(STEP_TYPES.includes('selectOption'));
       assert.ok(STEP_TYPES.includes('submit'));
     });
@@ -39,7 +38,8 @@ describe('ContextHelpers', () => {
     it('should contain tab step types', () => {
       assert.ok(STEP_TYPES.includes('listTabs'));
       assert.ok(STEP_TYPES.includes('closeTab'));
-      assert.ok(STEP_TYPES.includes('openTab'));
+      assert.ok(STEP_TYPES.includes('newTab'));
+      assert.ok(STEP_TYPES.includes('switchTab'));
     });
 
     it('should contain unified frame step', () => {
@@ -75,7 +75,6 @@ describe('ContextHelpers', () => {
       assert.ok(VISUAL_ACTIONS.includes('goto'));
       assert.ok(VISUAL_ACTIONS.includes('click'));
       assert.ok(VISUAL_ACTIONS.includes('fill'));
-      assert.ok(VISUAL_ACTIONS.includes('type'));
       assert.ok(VISUAL_ACTIONS.includes('hover'));
       assert.ok(VISUAL_ACTIONS.includes('press'));
       assert.ok(VISUAL_ACTIONS.includes('scroll'));
@@ -87,7 +86,7 @@ describe('ContextHelpers', () => {
       assert.ok(VISUAL_ACTIONS.includes('queryAll'));
       assert.ok(VISUAL_ACTIONS.includes('inspect'));
       assert.ok(VISUAL_ACTIONS.includes('pageFunction'));
-      assert.ok(VISUAL_ACTIONS.includes('extract'));
+      assert.ok(VISUAL_ACTIONS.includes('get'));
     });
 
     it('should not contain non-visual actions', () => {
@@ -177,11 +176,6 @@ describe('ContextHelpers', () => {
         assert.strictEqual(result, 'Typed in "Email"');
       });
 
-      it('should describe type with selector', () => {
-        const result = buildActionContext('type', { selector: '#search' }, {});
-        assert.strictEqual(result, 'Typed in #search');
-      });
-
       it('should return generic for no params', () => {
         const result = buildActionContext('fill', {}, {});
         assert.strictEqual(result, 'Typed in input');
@@ -234,10 +228,6 @@ describe('ContextHelpers', () => {
       assert.strictEqual(result, 'Typed');
     });
 
-    it('should return Typed for type step', () => {
-      const result = buildCommandContext([{ type: { selector: '#input', text: 'test' } }]);
-      assert.strictEqual(result, 'Typed');
-    });
 
     it('should return Pressed key for press step', () => {
       const result = buildCommandContext([{ press: 'Enter' }]);
@@ -249,13 +239,13 @@ describe('ContextHelpers', () => {
       assert.strictEqual(result, 'Navigated');
     });
 
-    it('should return Navigated for openTab step', () => {
-      const result = buildCommandContext([{ openTab: 'https://example.com' }]);
+    it('should return Navigated for newTab step', () => {
+      const result = buildCommandContext([{ newTab: 'https://example.com' }]);
       assert.strictEqual(result, 'Navigated');
     });
 
-    it('should return Selected for select step', () => {
-      const result = buildCommandContext([{ select: '#dropdown' }]);
+    it('should return Selected for selectText step', () => {
+      const result = buildCommandContext([{ selectText: '#dropdown' }]);
       assert.strictEqual(result, 'Selected');
     });
 

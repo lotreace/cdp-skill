@@ -172,7 +172,7 @@ The CLI accepts a single JSON object containing:
 
 - **`steps`** (required array): One or more step objects. Each step must contain exactly one action key (e.g., `goto`, `click`, `fill`, `snapshot`). The array must be non-empty.
 
-Connection parameters (host, port, headless) are specified via the `openTab` object form when non-default values are needed: `{"steps":[{"openTab":{"url":"...","port":9333,"headless":true}}]}`. The tab registry stores connection info per alias so subsequent commands just use `tab` and it works.
+Connection parameters (host, port, headless) are specified via the `newTab` object form when non-default values are needed: `{"steps":[{"newTab":{"url":"...","port":9333,"headless":true}}]}`. The tab registry stores connection info per alias so subsequent commands just use `tab` and it works.
 
 The `config` object is no longer supported. Passing `config` returns a validation error with migration instructions.
 
@@ -190,7 +190,7 @@ On success, the CLI writes a single JSON object to stdout:
 
 - **`status`** (string): "ok" when all steps succeeded, "error" when any step failed.
 - **`tab`** (string): The tab alias (e.g., "t1") for the session used.
-- **`siteProfile`** (string): Full markdown content of an existing site profile for the navigated domain. Present only after `goto` or `openTab` when a profile exists.
+- **`siteProfile`** (string): Full markdown content of an existing site profile for the navigated domain. Present only after `goto` or `newTab` when a profile exists.
 - **`actionRequired`** (object): A mandatory instruction the agent must handle immediately before continuing. Contains `action` (what to do), `domain` (which site), and `message` (detailed instructions). Present only after navigating to a domain with no site profile.
 - **`navigated`** (boolean): True when the URL pathname changed during execution. Omitted when false/undefined.
 - **`fullSnapshot`** (string): File path to a full-page accessibility snapshot saved to disk. Present after visual actions.
@@ -279,7 +279,7 @@ On macOS, Chrome can be running as a background process without any visible wind
 
 ### `chromeStatus` Step
 
-The `chromeStatus` step is an optional diagnostic for checking Chrome's state. In normal usage, agents do not need to call `chromeStatus` — `openTab` auto-launches Chrome if needed. Use `chromeStatus` when targeting a non-default port, debugging connection issues, or checking which tabs are open. Agents must never launch Chrome manually via shell commands.
+The `chromeStatus` step is an optional diagnostic for checking Chrome's state. In normal usage, agents do not need to call `chromeStatus` — `newTab` auto-launches Chrome if needed. Use `chromeStatus` when targeting a non-default port, debugging connection issues, or checking which tabs are open. Agents must never launch Chrome manually via shell commands.
 
 The step accepts `true` (uses defaults) or an object with optional `host`, `port`, `headless`, and `autoLaunch` fields. It is self-contained — all connection parameters come from the step itself, not from any top-level field.
 
@@ -311,7 +311,7 @@ Connection has a configurable timeout (default 30 seconds). If the initial conne
 
 ### Remote Debugging Port
 
-The default port is 9222, overridable via the `openTab` object form (e.g., `{"openTab":{"url":"...","port":9333}}`). Each port uses its own user data directory, allowing multiple independent Chrome instances for parallel agent workloads.
+The default port is 9222, overridable via the `newTab` object form (e.g., `{"newTab":{"url":"...","port":9333}}`). Each port uses its own user data directory, allowing multiple independent Chrome instances for parallel agent workloads.
 
 
 ## 5. Tab & Session Lifecycle
@@ -328,12 +328,12 @@ Each registry entry stores `{ targetId, host, port }` so that subsequent command
 
 ### Tab Creation
 
-The `openTab` step creates a new browser tab and registers an alias for it. It accepts:
+The `newTab` step creates a new browser tab and registers an alias for it. It accepts:
 - `true`: Open a blank tab.
 - A URL string: Open a tab and navigate to that URL.
 - An object: Open a tab with optional `url`, `host`, `port`, and `headless` fields for non-default Chrome connections.
 
-`openTab` must be the first step in an invocation when no tab is specified. The step is handled during session setup (before the normal step execution loop) because a tab must exist before any other actions can run. When the object form includes `host`, `port`, or `headless`, those values are used for the browser connection and stored in the tab registry so subsequent commands just use the alias. The URL navigation (if provided) and site profile lookup are handled as part of the step result.
+`newTab` must be the first step in an invocation when no tab is specified. The step is handled during session setup (before the normal step execution loop) because a tab must exist before any other actions can run. When the object form includes `host`, `port`, or `headless`, those values are used for the browser connection and stored in the tab registry so subsequent commands just use the alias. The URL navigation (if provided) and site profile lookup are handled as part of the step result.
 
 ### Tab Reuse
 
@@ -343,13 +343,13 @@ Agents are expected to reuse their own tabs across invocations. In shared-browse
 
 ### Tab Connection
 
-The `connectTab` step connects to an existing tab without creating a new one. It supports three resolution modes:
+The `switchTab` step connects to an existing tab without creating a new one. It supports three resolution modes:
 
 1. **Alias** (string, e.g., "t1"): Resolved via the tab registry.
 2. **Target ID** (object with `targetId`): Used directly.
 3. **URL regex** (object with `url`): Finds the first open tab whose URL matches the provided regex pattern.
 
-The object form also accepts optional `host` and `port` fields for connecting to a non-default Chrome instance. Like `openTab`, `connectTab` must be the first step when no tab is specified. It attaches a session to the found tab and registers an alias if one does not already exist.
+The object form also accepts optional `host` and `port` fields for connecting to a non-default Chrome instance. Like `newTab`, `switchTab` must be the first step when no tab is specified. It attaches a session to the found tab and registers an alias if one does not already exist.
 
 ### Tab Closure
 
@@ -363,7 +363,7 @@ The `listTabs` step returns all open tabs with their aliases, target IDs, URLs, 
 
 ### New Tab Detection
 
-After click actions, the system checks for newly opened tabs (e.g., from `target="_blank"` links or `window.open()` calls). If new tabs are detected, they are reported in the click step's result as a `newTabs` array containing each new tab's target ID, URL, and title. The agent can then use `connectTab` to switch to one of these tabs.
+After click actions, the system checks for newly opened tabs (e.g., from `target="_blank"` links or `window.open()` calls). If new tabs are detected, they are reported in the click step's result as a `newTabs` array containing each new tab's target ID, URL, and title. The agent can then use `switchTab` to switch to one of these tabs.
 
 ### Session Initialization
 
@@ -588,15 +588,15 @@ Different actions require different preconditions:
 | Action | Required States |
 |--------|----------------|
 | `click` | attached (element exists in DOM) |
-| `fill` / `type` | attached + editable (not readonly, is a form element or contenteditable, correct input type) |
+| `fill` | attached + editable (not readonly, is a form element or contenteditable, correct input type) |
 | `hover` | attached |
-| `select` | attached |
+| `selectText` | attached |
 
 The "attached" check verifies that the element's `isConnected` property is true -- meaning it is part of the live DOM tree.
 
 ### 8.2 Editable Check
 
-The editable check (for `fill` and `type`) verifies:
+The editable check (for `fill`) verifies:
 - The element is enabled (not `disabled`, not `aria-disabled="true"`, not inside a disabled `<fieldset>` unless within its `<legend>`)
 - The element is not readonly (`readOnly` property or `aria-readonly="true"`)
 - The element is a form element (`input`, `textarea`, `select`) or has `contentEditable`
@@ -715,18 +715,7 @@ The result reports the count of successful and failed fills with per-field detai
 
 **Output**: `{filled, navigated, newUrl, method}`
 
-### 9.3 Type
-
-Type simulates character-by-character keyboard input with realistic key events (`char` events dispatched per character) and configurable inter-keystroke delay.
-
-**Different from fill**: `type` sends individual keystroke events, while `fill` sets the value in bulk using `Input.insertText`. Type is appropriate for:
-- Rich text editors that respond to individual keystrokes
-- Autocomplete/typeahead inputs that trigger search on each character
-- Inputs that apply formatting or validation per keystroke
-
-**Options**: `selector` (element to focus first), `text` (characters to type), `delay` (milliseconds between keystrokes)
-
-### 9.4 Press
+### 9.3 Press
 
 Press dispatches keyboard events for special keys and modifier combinations.
 
@@ -953,50 +942,55 @@ The `inspect` step provides a lightweight page overview without generating a ful
 
 This step is useful for quick orientation on a page before deciding whether to take a full snapshot.
 
-### 11.6 Extract
+### 11.6 get (Unified Content Extraction)
 
-The `extract` step pulls structured data from tables and lists on the page.
+The `get` step is a unified content extraction mechanism that replaces the separate `extract`, `getDom`, `getBox`, and `formState` steps. It supports multiple extraction modes via a `mode` parameter.
 
-**Input:** A CSS selector (string) or an object with `selector`, `type`, and `limit` fields.
+**Input forms:**
+- String: `"selector"` (defaults to text mode)
+- Object: `{selector, mode}` or `{ref, mode}` where mode is one of: `text`, `html`, `value`, `box`, `attributes`
+- For structured data (tables/lists): `{selector, type, includeHeaders}` (legacy form, auto-detected)
 
-**Type detection:** When `type` is not specified, the system auto-detects the data structure by examining the matched element:
-1. If the element is a `<table>`, or contains one, it extracts table data.
-2. If the element is a `<ul>`, `<ol>`, or has `role="list"`, or contains such an element, it extracts list data.
-3. If the element contains elements with `role="row"` or `<tr>`, it treats it as a table.
-4. If the element contains `role="listitem"` or `<li>` elements, it treats it as a list.
-5. If no structure is detected, an error is returned suggesting the agent specify a type explicitly.
+**Modes:**
 
-**Table extraction** returns `{type: "table", headers[], rows[][], rowCount}`. Headers are extracted from `<thead>` or the first `<tr>`. Data rows are extracted from `<tbody>` or subsequent `<tr>` elements, up to the `limit` (default 100).
+**text** (default): Extracts the text content of the matched element.
+- Returns: `{text}`
 
-**List extraction** returns `{type: "list", items[], itemCount}`. Items are the trimmed text content of direct `<li>` or `[role="listitem"]` children.
+**html**: Retrieves raw HTML from the page.
+- Returns: `{html, tagName, length}` where `length` is the character count
+
+**value**: Extracts form field state (similar to former `formState`).
+- Returns: `{fields[], valid, fieldCount, action, method}` for form containers, or `{value, label, name, type}` for individual inputs
+
+**box**: Retrieves bounding box information for elements.
+- Returns: `{x, y, width, height, center: {x, y}}` where coordinates are in viewport pixels
+- Error cases: `{error: "not found"}`, `{error: "stale"}`, `{error: "hidden", box}`
+
+**attributes**: Extracts all attributes from the matched element.
+- Returns: `{attributes: {name: value, ...}}`
+
+**Structured data extraction** (tables and lists) works when `type` is specified or auto-detected:
+- **Type detection**: Examines the matched element for `<table>`, `<ul>`, `<ol>`, `role="list"`, or similar structures
+- **Table extraction**: Returns `{type: "table", headers[], rows[][], rowCount, columnCount}`
+- **List extraction**: Returns `{type: "list", items[], itemCount}`
 
 The extraction runs in the current frame context, respecting any active `frame` switch.
 
-### 11.7 getDom
+### 11.7 getUrl
 
-The `getDom` step retrieves raw HTML from the page. It operates in two modes:
+The `getUrl` step is a convenience shortcut that returns the current page URL without requiring a `pageFunction` call.
 
-- **Full page:** When passed `true`, returns the entire `document.documentElement.outerHTML`.
-- **Scoped:** When passed a CSS selector string, returns the HTML of the first matching element. An object form `{selector, outer}` is also accepted, where setting `outer: false` returns `innerHTML` instead of `outerHTML`.
+**Input:** `true`
 
-**Return value:** `{html, tagName, selector, length}` where `length` is the character count of the returned HTML.
+**Return value:** `{url}`
 
-This step is a fallback for when the ARIA snapshot does not capture the information an agent needs (e.g., custom widgets without ARIA roles, or when raw markup inspection is required).
+### 11.8 getTitle
 
-### 11.8 getBox
+The `getTitle` step is a convenience shortcut that returns the page title without requiring a `pageFunction` call.
 
-The `getBox` step retrieves bounding box information for elements identified by their snapshot refs.
+**Input:** `true`
 
-**Input:** A single ref string, an array of ref strings, or an object `{ref}` or `{refs: [...]}`.
-
-**Return value per ref:** `{x, y, width, height, center: {x, y}}` where coordinates are in viewport pixels and `center` is the computed midpoint.
-
-**Error cases per ref:**
-- `{error: "not found"}` -- the ref does not exist in the ref map.
-- `{error: "stale", message}` -- the element has left the DOM.
-- `{error: "hidden", box}` -- the element exists but is not visible (box is still provided).
-
-When a single ref is provided, the result is returned directly (not wrapped in an object). When multiple refs are provided, results are keyed by ref string.
+**Return value:** `{title}`
 
 ### 11.9 elementsAt
 
@@ -1135,32 +1129,7 @@ The predicate is evaluated through the serializer, so its return value benefits 
 
 **Use cases:** Waiting for dynamic content to load, animations to complete, API responses to populate the DOM, or any asynchronous condition that standard `wait` cannot express.
 
-### 12.3 pipeline
-
-The `pipeline` step compiles multiple micro-operations into a single JavaScript function that executes in one browser evaluation. This eliminates the per-step round-trip overhead for sequences of simple operations.
-
-**Input:** An array of micro-operation objects, or `{steps: [...], timeout}`.
-
-**Available micro-operations:**
-
-- **`{find, fill}`**: Locates an element by CSS selector and sets its value. Uses the native property setter on the element's prototype (HTMLInputElement or HTMLTextAreaElement) to ensure React-compatible value setting, then dispatches `input` and `change` events.
-- **`{find, click}`**: Locates an element by CSS selector and calls `.click()` on it.
-- **`{find, type}`**: Locates an element by CSS selector, focuses it, and types text character-by-character, dispatching `keydown`, `keypress`, `input`, and `keyup` events for each character.
-- **`{find, check}`**: Locates an element by CSS selector and sets its `checked` property, dispatching `input` and `change` events.
-- **`{find, select}`**: Locates an element by CSS selector and sets its `value` property (for `<select>` elements), dispatching `input` and `change` events.
-- **`{waitFor}`**: Polls a predicate function string (inline) at 100ms intervals with a configurable timeout (default 10 seconds). Blocks subsequent operations until the predicate returns truthy.
-- **`{sleep}`**: Pauses execution for a specified number of milliseconds.
-- **`{return}`**: Evaluates an expression function string and captures its return value in the results array.
-
-**Execution:** All micro-operations are compiled into a single async IIFE and executed in one `Runtime.evaluate` call. Operations run sequentially within the function. A pipeline-level timeout (default 30 seconds) guards against infinite hangs.
-
-**Return value:** `{completed: true, steps, results[]}` on success, or `{completed: false, failedAt, error, results[]}` on failure. The `failedAt` field identifies the zero-indexed step number that failed, and `results` contains the outcomes of steps that completed before the failure.
-
-**Error specificity:** When an element is not found or a `waitFor` times out, the error message identifies the exact step index that failed.
-
-**Use cases:** Filling and submitting a multi-field form in one shot, performing a sequence of clicks and waits without round trips, or any batch of simple DOM operations where latency matters.
-
-### 12.4 Site Profiles
+### 12.3 Site Profiles
 
 Site profiles are per-domain knowledge files stored at `~/.cdp-skill/sites/{domain}.md`. They capture what the agent has learned about a site -- framework, quirks, stable selectors, and interaction recipes.
 
@@ -1168,7 +1137,7 @@ Site profiles are per-domain knowledge files stored at `~/.cdp-skill/sites/{doma
 
 **writeSiteProfile:** Accepts `{domain, content}` where content is markdown text. The domain is sanitized for filesystem safety (stripping `www.` prefix and replacing special characters). Returns `{written: true, path, domain}`.
 
-**Automatic profile loading:** Whenever a navigation occurs (via `goto`, `openTab` with a URL, or `connectTab`), the system checks for a profile matching the destination domain. If found, it is included in the response as `siteProfile`. If not found, the response includes `actionRequired` prompting the agent to create one.
+**Automatic profile loading:** Whenever a navigation occurs (via `goto`, `newTab` with a URL, or `switchTab`), the system checks for a profile matching the destination domain. If found, it is included in the response as `siteProfile`. If not found, the response includes `actionRequired` prompting the agent to create one.
 
 The rationale for site profiles is to accumulate domain-specific knowledge across sessions, reducing repeated discovery work and avoiding known pitfalls.
 
@@ -1326,7 +1295,7 @@ Domain normalization rules:
 
 #### Automatic Profile Lookup on Navigation
 
-Every navigation action that targets a URL -- `goto`, `openTab` with a URL, and `connectTab` -- triggers an automatic profile lookup for the target domain. The outcome appears as a top-level field in the command response:
+Every navigation action that targets a URL -- `goto`, `newTab` with a URL, and `switchTab` -- triggers an automatic profile lookup for the target domain. The outcome appears as a top-level field in the command response:
 
 - **`siteProfile` present**: The full markdown content of an existing profile is returned. The agent should read it before interacting with the page, applying any documented strategies, quirks, and hooks.
 - **`actionRequired` present**: No profile exists for this domain. The response includes an `actionRequired` object with:
@@ -1390,7 +1359,7 @@ Both `domain` and `content` are required. An error is returned if either is miss
 
 #### loadSiteProfile (internal)
 
-Used internally during navigation to check for an existing profile. Returns the markdown content as a string, or `null` if no profile exists. This is not exposed as a step -- it runs automatically as part of `goto`, `openTab`, and `connectTab` handling.
+Used internally during navigation to check for an existing profile. Returns the markdown content as a string, or `null` if no profile exists. This is not exposed as a step -- it runs automatically as part of `goto`, `newTab`, and `switchTab` handling.
 
 
 ## 16. Failure Diagnostics
@@ -1604,11 +1573,11 @@ Each command accepts these top-level fields:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `tab` | string | (none) | Tab alias or target ID to connect to. Required after the initial `openTab` call |
+| `tab` | string | (none) | Tab alias or target ID to connect to. Required after the initial `newTab` call |
 | `timeout` | number | `30000` | Step timeout in milliseconds |
 | `steps` | array | (required) | Array of step objects to execute |
 
-Connection parameters (host, port, headless) are no longer top-level fields. They are specified via `openTab` object form for non-default Chrome connections: `{"steps":[{"openTab":{"url":"...","port":9333,"headless":true}}]}`. The tab registry stores `{ targetId, host, port }` per alias, so subsequent commands just use `tab` and the correct connection is resolved automatically.
+Connection parameters (host, port, headless) are no longer top-level fields. They are specified via `newTab` object form for non-default Chrome connections: `{"steps":[{"newTab":{"url":"...","port":9333,"headless":true}}]}`. The tab registry stores `{ targetId, host, port }` per alias, so subsequent commands just use `tab` and the correct connection is resolved automatically.
 
 The legacy `config` object is no longer supported. Passing it returns a validation error with migration instructions.
 
@@ -1682,8 +1651,8 @@ Tab aliases (e.g., `t1`, `t2`) provide stable, short identifiers for browser tab
 Each entry maps an alias to `{ targetId, host, port }`. This allows subsequent commands to resolve the correct Chrome instance from just the alias. For backward compatibility, the system handles stale registry files that contain plain string entries (targetId only) by defaulting to `localhost:9222`.
 
 **Alias assignment:**
-- New tabs created via `openTab` are automatically registered with `{ targetId, host, port }` and assigned the next available alias (`t{nextId}`)
-- Tabs connected via `connectTab` are registered if not already aliased
+- New tabs created via `newTab` are automatically registered with `{ targetId, host, port }` and assigned the next available alias (`t{nextId}`)
+- Tabs connected via `switchTab` are registered if not already aliased
 - Existing tabs attached via top-level `tab` are registered on first use
 
 **Alias resolution:**

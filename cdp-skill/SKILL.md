@@ -19,7 +19,7 @@ Site profiles are per-domain cheatsheets stored at `~/.cdp-skill/sites/{domain}.
 
 ### How navigation uses profiles
 
-Every `goto`, `openTab` (with URL), and `connectTab` checks for a profile. The result appears as a **top-level field** in the response:
+Every `goto`, `newTab` (with URL), and `switchTab` checks for a profile. The result appears as a **top-level field** in the response:
 
 - **`siteProfile`** present → read it before doing anything else. It contains strategies, quirks, and recipes. Apply its `settledWhen`/`readyWhen` hooks, use its selectors, and respect its quirks.
 - **`actionRequired`** present → **STOP. Create the profile NOW** before continuing your task:
@@ -129,13 +129,13 @@ Hooks can be combined on any action step. Applies to: click, fill, press, hover,
 ### chromeStatus (optional diagnostic)
 `true` | `{host, port, headless, autoLaunch}` — returns `{running, launched, version, port, tabs[]}`
 
-> **Note**: You rarely need this — `openTab` auto-launches Chrome. Use `chromeStatus` only for diagnostics or non-default ports.
+> **Note**: You rarely need this — `newTab` auto-launches Chrome. Use `chromeStatus` only for diagnostics or non-default ports.
 
-### openTab
+### newTab
 `true` | `"url"` | `{url, host, port, headless}` — returns `{opened, tab, url, navigated, viewportSnapshot, fullSnapshot, context}`
 Response includes top-level `siteProfile` or `actionRequired` when URL provided (see Site Profiles).
 **REQUIRED as first step** when no tab specified. Chrome auto-launches if not running.
-Non-default Chrome: `{"steps":[{"openTab":{"url":"https://example.com","port":9333,"headless":true}}]}`
+Non-default Chrome: `{"steps":[{"newTab":{"url":"https://example.com","port":9333,"headless":true}}]}`
 
 ### goto
 `"url"` | `{url, waitUntil}` — waitUntil: commit | domcontentloaded | load | networkidle
@@ -173,11 +173,17 @@ Returns: `{matches[], matchCount, searchedElements}`
 Notes: refs from snapshotSearch persist across subsequent commands.
 
 ### wait
-`"selector"` | `number(ms)` | `{selector, hidden, minCount}` | `{text}` | `{textRegex}` | `{urlContains}`
+`"selector"` | `{selector, hidden, minCount}` | `{text}` | `{textRegex}` | `{urlContains}`
 
-### extract
-`"selector"` | `{selector, type: auto|table|list|text, includeHeaders}`
-Returns: table → `{type, headers, rows, rowCount, columnCount}`; list → `{type, items, itemCount}`
+### get
+`"selector"` (text) | `{selector, mode: "text"|"html"|"value"|"box"|"attributes"}` — unified content extraction.
+Returns: text → `{text}`, html → `{html, tagName, length}`, value → `{fields[], valid, fieldCount}`, box → `{x, y, width, height}`, attributes → `{attributes}`
+
+### getUrl
+`true` — returns `{url}`
+
+### getTitle
+`true` — returns `{title}`
 
 ### pageFunction
 `"() => expr"` | `{fn, refs(bool), timeout}` — run custom JavaScript in the browser.
@@ -195,24 +201,21 @@ These steps are fully functional — see EXAMPLES.md for usage details.
 
 | Step | Description |
 |------|-------------|
-| `fill` | Unified fill: `"text"` (focused), `{selector, value}` (single), `{"#a":"x","#b":"y"}` (batch), `{fields:{...}, react}` (batch+options), `{value, clear}` (focused+options) |
-| `type` | Character-by-character with delays: `{selector, text, delay}` |
+| `fill` | Unified fill (replaces `type`): `"text"` (focused), `{selector, value}` (single), `{"#a":"x","#b":"y"}` (batch), `{fields:{...}, react}` (batch+options), `{value, clear}` (focused+options) |
 | `sleep` | Time delay: `2000` (ms, 0–60000) |
 | `pageFunction` | JS execution: `"() => expr"` (function) or `"document.title"` (bare expression) or `{fn, expression, refs, timeout}` |
 | `poll` | Poll predicate until truthy: `"() => expr"` or `{fn, interval, timeout}` |
-| `pipeline` | Zero-roundtrip micro-ops: `[{find+fill\|click\|type}, {waitFor}, {sleep}, {return}]` |
 | `query` | CSS/ARIA query: `"selector"` or `{role, name}` → `{total, results[]}` |
 | `queryAll` | Batch queries: `{"label": "selector", ...}` |
 | `inspect` | Page overview: `true` → `{title, url, counts}` |
-| `getDom` | Raw HTML: `true` or `"selector"` → `{html, tagName, length}` |
-| `getBox` | Bounding boxes: `"ref"` or `["ref1","ref2"]` → `{x, y, width, height}` |
+| `get` | Unified content extraction (replaces `extract`, `getDom`, `getBox`, `formState`): `"selector"` (text), `{selector, mode: "text"\|"html"\|"value"\|"box"\|"attributes"}` |
+| `getUrl` | Get current URL: `true` → `{url}` |
+| `getTitle` | Get page title: `true` → `{title}` |
 | `hover` | Hover element: `"selector"` or `{selector, ref, text, x/y, duration}` |
 | `drag` | Drag and drop: `{source, target, steps, delay, method}` — method: `auto`(default)\|`mouse`\|`html5` |
-| `select` | Text selection: `"selector"` or `{selector, start, end}` |
+| `selectText` | Text selection (renamed from `select`): `"selector"` or `{selector, start, end}` |
 | `selectOption` | Dropdown: `{selector, value\|label\|index\|values}` |
-| `validate` | Check validity: `"selector"` → `{valid, message, validity}` |
 | `submit` | Submit form: `"selector"` → `{submitted, valid, errors[]}` |
-| `formState` | Form fields: `"selector"` → `{fields[], valid, fieldCount}` |
 | `assert` | Assert conditions: `{url: {contains\|equals\|matches}}` or `{text}` or `{selector, text}` |
 | `elementsAt` | Coordinate lookup: `{x,y}` (point), `[{x,y},...]` (batch), `{x,y,radius}` (nearby) |
 | `frame` | Frame ops: `"selector"` (switch), `0` (by index), `"top"` (main frame), `{name}`, `{list:true}` |
@@ -222,7 +225,10 @@ These steps are fully functional — see EXAMPLES.md for usage details.
 | `pdf` | Generate PDF: `"filename"` or `{path, landscape, scale, pageRanges}` |
 | `back` / `forward` | History navigation: `true` → `{url, title}` or `{noHistory: true}` |
 | `reload` | Reload page: `true` or `{waitUntil}` |
-| `connectTab` | Connect to existing tab: `"t1"` or `{targetId}` or `{url: "regex"}` |
+| `newTab` | Create new tab (renamed from `openTab`): `"url"` or `{url, wait}` → `{tab, url}` |
+| `switchTab` | Switch to existing tab (renamed from `connectTab`): `"t1"` or `{targetId}` or `{url: "regex"}` |
+| `closeTab` | Close tab: `"t1"` or `true` (current) |
+| `listTabs` | List all tabs: `true` → `{tabs[]}` |
 | `waitForNavigation` | Wait for nav: `true` or `{timeout, waitUntil}` |
 
 ### Optional Steps
@@ -241,20 +247,20 @@ Add `"optional": true` to any step to continue on failure (status becomes "skipp
 | `back` returns noHistory | New tabs start at about:blank; navigate first |
 | Select dropdown not working | Use click+click or press arrow keys |
 | Type not appearing | Click input first to focus, then type |
-| Elements missing from snapshot | Custom widgets may lack ARIA roles; use `pageFunction` or `getDom` as fallback |
+| Elements missing from snapshot | Custom widgets may lack ARIA roles; use `pageFunction` or `get` with `mode: "html"` as fallback |
 | macOS: Chrome running but no CDP | `chromeStatus` launches new instance with CDP enabled |
 
 ## Best Practices
 
 - **Handle `actionRequired` immediately** — when a response contains this field, complete it before doing anything else
-- **Never launch Chrome directly** — `openTab` handles it automatically
-- **Use openTab** as your first step to create a tab; use the returned tab ID for all subsequent calls
+- **Never launch Chrome directly** — `newTab` handles it automatically
+- **Use newTab** as your first step to create a tab; use the returned tab ID for all subsequent calls
 - **Reuse only your own tabs** — other agents may share the browser
 - **Update the site profile before closing** — add any quirks, selectors, or recipes you discovered
 - **Close your tab when done** — `closeTab` with your tab ID
 - **Discover before interacting** — use `snapshot` to understand the page structure
 - **Use website navigation** — click links and submit forms; don't guess URLs
 - **Prefer refs** over CSS selectors — use `snapshot` + refs for resilient targeting
-- **Check `newTabs` after click** — clicks on `target="_blank"` links report new tabs; use `connectTab` to switch
-- **Use `connectTab` for popups** — connect by alias (`"t2"`), targetId, or URL regex (`{url: "pattern"}`)
+- **Check `newTabs` after click** — clicks on `target="_blank"` links report new tabs; use `switchTab` to switch
+- **Use `switchTab` for popups** — connect by alias (`"t2"`), targetId, or URL regex (`{url: "pattern"}`)
 - **Be persistent** — try alternative selectors, add waits, scroll first

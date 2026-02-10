@@ -8,29 +8,29 @@ Worked examples and JSON code blocks for every step type. See SKILL.md for the c
 
 ### Open a Tab (Chrome auto-launches)
 ```json
-{"steps":[{"openTab":"https://google.com"}]}
+{"steps":[{"newTab":"https://google.com"}]}
 ```
 
 Non-default Chrome (rare):
 ```json
-{"steps":[{"openTab":{"url":"https://google.com","port":9333,"headless":true}}]}
+{"steps":[{"newTab":{"url":"https://google.com","port":9333,"headless":true}}]}
 ```
 
 Separate open and navigate:
 ```json
-{"steps":[{"openTab":true},{"goto":"https://google.com"}]}
+{"steps":[{"newTab":true},{"goto":"https://google.com"}]}
 ```
 
 Stdin pipe:
 ```bash
-echo '{"steps":[{"openTab":"https://google.com"}]}' | node src/cdp-skill.js
+echo '{"steps":[{"newTab":"https://google.com"}]}' | node src/cdp-skill.js
 ```
 
 ### Tab Lifecycle
 ```json
-{"steps":[{"openTab":"https://google.com"}]}
+{"steps":[{"newTab":"https://google.com"}]}
 ```
-Response: `{"tab": "t1", "steps": [{"action": "openTab", "status": "ok", ...}]}`
+Response: `{"tab": "t1", "steps": [{"action": "newTab", "status": "ok", ...}]}`
 
 Subsequent calls:
 ```json
@@ -72,23 +72,23 @@ Response:
 }
 ```
 
-### connectTab — Connect to Existing Tab
+### switchTab — Connect to Existing Tab
 By alias:
 ```json
-{"steps":[{"connectTab":"t2"},{"snapshot":true}]}
+{"steps":[{"switchTab":"t2"},{"snapshot":true}]}
 ```
 
 By URL regex:
 ```json
-{"steps":[{"connectTab":{"url":"github\\.com"}},{"snapshot":true}]}
+{"steps":[{"switchTab":{"url":"github\\.com"}},{"snapshot":true}]}
 ```
 
 By targetId:
 ```json
-{"steps":[{"connectTab":{"targetId":"ABC123..."}},{"snapshot":true}]}
+{"steps":[{"switchTab":{"targetId":"ABC123..."}},{"snapshot":true}]}
 ```
 
-### New Tab Handling — click → detect → connectTab
+### New Tab Handling — click → detect → switchTab
 When a click opens a new tab (e.g. `target="_blank"`), the response includes `newTabs`:
 ```json
 {
@@ -101,7 +101,7 @@ When a click opens a new tab (e.g. `target="_blank"`), the response includes `ne
 
 Then connect to the new tab:
 ```json
-{"steps":[{"connectTab":{"url":"other\\.com"}},{"snapshot":true}]}
+{"steps":[{"switchTab":{"url":"other\\.com"}},{"snapshot":true}]}
 ```
 
 ---
@@ -463,12 +463,7 @@ Or with keyboard:
 
 ---
 
-## Type / Press / Select
-
-### type
-```json
-{"type": {"selector": "#search", "text": "query", "delay": 50}}
-```
+## Press / SelectText
 
 ### press
 ```json
@@ -477,10 +472,10 @@ Or with keyboard:
 {"press": "Meta+Shift+Enter"}
 ```
 
-### select
+### selectText
 ```json
-{"select": "#input"}
-{"select": {"selector": "#input", "start": 0, "end": 5}}
+{"selectText": "#input"}
+{"selectText": {"selector": "#input", "start": 0, "end": 5}}
 ```
 
 ---
@@ -556,12 +551,50 @@ Response:
 
 ## Data Extraction
 
-### extract
+### get (unified content extraction)
 ```json
-{"extract": "table.results"}
-{"extract": {"selector": "table.results"}}
-{"extract": {"selector": "ul.items", "type": "list"}}
-{"extract": {"selector": "#data-grid", "type": "table", "includeHeaders": true}}
+// Text extraction (default)
+{"get": "#content"}
+{"get": {"selector": "#content"}}
+{"get": {"selector": "#content", "mode": "text"}}
+
+// HTML extraction
+{"get": {"selector": "#content", "mode": "html"}}
+
+// Form value extraction
+{"get": {"selector": "#form", "mode": "value"}}
+
+// Bounding box extraction
+{"get": {"selector": "#element", "mode": "box"}}
+{"get": {"ref": "s1e1", "mode": "box"}}
+
+// Attributes extraction
+{"get": {"selector": "#link", "mode": "attributes"}}
+
+// Table/list extraction (auto-detected)
+{"get": "table.results"}
+{"get": {"selector": "ul.items", "type": "list"}}
+{"get": {"selector": "#data-grid", "type": "table", "includeHeaders": true}}
+```
+
+Text response:
+```json
+{"text": "Extracted content text"}
+```
+
+HTML response:
+```json
+{"html": "<div>...</div>", "tagName": "DIV", "length": 1245}
+```
+
+Box response:
+```json
+{"x": 100, "y": 200, "width": 150, "height": 40, "center": {"x": 175, "y": 220}}
+```
+
+Attributes response:
+```json
+{"attributes": {"href": "/page", "class": "link", "id": "main-link"}}
 ```
 
 Table response:
@@ -578,41 +611,43 @@ Table response:
 }
 ```
 
-List response:
+Form value response:
 ```json
 {
-  "type": "list",
-  "items": ["Item 1", "Item 2", "Item 3"],
-  "itemCount": 3
+  "selector": "#checkout-form",
+  "action": "/api/checkout",
+  "method": "POST",
+  "fields": [
+    {
+      "name": "email",
+      "type": "email",
+      "value": "user@example.com",
+      "label": "Email Address",
+      "required": true,
+      "valid": true
+    }
+  ],
+  "valid": true,
+  "fieldCount": 3
 }
 ```
 
-### getDom
+### getUrl
 ```json
-{"getDom": true}
-{"getDom": "#content"}
-{"getDom": {"selector": "#content", "outer": false}}
+{"getUrl": true}
+```
+Response:
+```json
+{"url": "https://example.com/page"}
 ```
 
-### getBox
+### getTitle
 ```json
-{"getBox": "s1e1"}
-{"getBox": ["s1e1", "s1e2", "s2e3"]}
-{"getBox": {"refs": ["s1e1", "s1e5"]}}
+{"getTitle": true}
 ```
-
-Single ref:
+Response:
 ```json
-{"x": 100, "y": 200, "width": 150, "height": 40, "center": {"x": 175, "y": 220}}
-```
-
-Multiple refs:
-```json
-{
-  "s1e1": {"x": 100, "y": 200, "width": 150, "height": 40, "center": {"x": 175, "y": 220}},
-  "s1e2": {"error": "stale", "message": "Element no longer in DOM"},
-  "s2e3": {"error": "hidden", "box": {"x": 0, "y": 0, "width": 100, "height": 50}}
-}
+{"title": "Page Title"}
 ```
 
 ### elementsAt
@@ -670,51 +705,6 @@ Response:
 }
 ```
 
-### formState
-```json
-{"formState": "#checkout-form"}
-{"formState": {"selector": "form.registration", "includeHidden": true}}
-```
-Response:
-```json
-{
-  "selector": "#checkout-form",
-  "action": "/api/checkout",
-  "method": "POST",
-  "fields": [
-    {
-      "name": "email",
-      "type": "email",
-      "value": "user@example.com",
-      "label": "Email Address",
-      "required": true,
-      "valid": true
-    },
-    {
-      "name": "quantity",
-      "type": "number",
-      "value": "2",
-      "label": "Quantity",
-      "required": true,
-      "valid": true,
-      "min": 1,
-      "max": 100
-    },
-    {
-      "name": "country",
-      "type": "select",
-      "value": "US",
-      "label": "Country",
-      "options": [
-        {"value": "US", "text": "United States", "selected": true},
-        {"value": "CA", "text": "Canada", "selected": false}
-      ]
-    }
-  ],
-  "valid": true,
-  "fieldCount": 3
-}
-```
 
 ---
 
@@ -896,23 +886,6 @@ Object form:
 {"poll": {"fn": "() => !document.querySelector('.spinner') && document.querySelector('.results')?.children.length > 0", "interval": 100, "timeout": 10000}}
 ```
 
-### pipeline
-```json
-{"pipeline": [
-  {"find": "#username", "fill": "admin"},
-  {"find": "#password", "fill": "secret_sauce"},
-  {"find": "#login-button", "click": true},
-  {"waitFor": "() => location.pathname.includes('/inventory')"},
-  {"sleep": 500},
-  {"return": "() => document.querySelector('.title')?.textContent"}
-]}
-```
-
-Object form with timeout:
-```json
-{"pipeline": {"steps": [{"find": "#btn", "click": true}], "timeout": 15000}}
-```
-
 ---
 
 ## Action Hooks
@@ -984,11 +957,11 @@ Updated: 2024-02-03  |  Fingerprint: <hash>
 ## Recipes
 ### Login
 \`\`\`json
-{"pipeline": [
-  {"find": "#username", "fill": "{{user}}"},
-  {"find": "#password", "fill": "{{pass}}"},
-  {"find": "#login", "click": true},
-  {"waitFor": "() => location.pathname !== '/login'"}
+{"steps": [
+  {"fill": {"selector": "#username", "value": "{{user}}"}},
+  {"fill": {"selector": "#password", "value": "{{pass}}"}},
+  {"click": "#login"},
+  {"wait": {"urlContains": "/dashboard"}}
 ]}
 \`\`\`
 ```
@@ -1048,12 +1021,7 @@ cat steps.json | node src/cdp-skill.js
 
 ---
 
-## Form Validation
-
-### validate
-```json
-{"validate": "#email"}
-```
+## Form Submission
 
 ### submit
 ```json
@@ -1091,7 +1059,7 @@ node src/cdp-skill.js --debug '{"steps":[{"goto":"https://google.com"}]}'
 
 Creates files like:
 - `log/001-chromeStatus.ok.json`
-- `log/002-t1-openTab.ok.json`
+- `log/002-t1-newTab.ok.json`
 - `log/003-t1-click-fill.ok.json`
 - `log/004-t1-scroll.error.json`
 

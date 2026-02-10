@@ -15,28 +15,28 @@ A lightweight, zero-dependency browser automation library using Chrome DevTools 
 
 ```bash
 # Open a tab (Chrome auto-launches if needed)
-node src/cdp-skill.js '{"steps":[{"openTab":"https://google.com"}]}'
+node src/cdp-skill.js '{"steps":[{"newTab":"https://google.com"}]}'
 
 # Use the returned tab ID for subsequent calls
 node src/cdp-skill.js '{"tab":"t1","steps":[{"click":"#btn"}]}'
 
 # Non-default Chrome (rare)
-node src/cdp-skill.js '{"steps":[{"openTab":{"url":"https://google.com","port":9333,"headless":true}}]}'
+node src/cdp-skill.js '{"steps":[{"newTab":{"url":"https://google.com","port":9333,"headless":true}}]}'
 ```
 
 ## Features
 
 ### Site Profiles
 - **Per-domain knowledge** - Agents record quirks, selectors, and strategies at `~/.cdp-skill/sites/{domain}.md`
-- **Automatic prompting** - `goto`/`openTab` returns `actionRequired` for unknown sites, `siteProfile` for known ones
+- **Automatic prompting** - `goto`/`newTab` returns `actionRequired` for unknown sites, `siteProfile` for known ones
 - **Read/write** - `readSiteProfile` and `writeSiteProfile` steps for ad-hoc profile access
 - **Collaborative** - Multiple agents share and improve profiles across sessions
 
 ### Chrome Management
 - **Auto-launch** - Detects Chrome path on macOS/Linux/Windows, launches with remote debugging
-- **Status check** - `chromeStatus` step for diagnostics (optional — `openTab` handles launch automatically)
+- **Status check** - `chromeStatus` step for diagnostics (optional — `newTab` handles launch automatically)
 - **Multi-agent safe** - Multiple agents can share Chrome; each manages their own tabs
-- **Headless support** - Run Chrome without UI via `{"openTab":{"url":"...","headless":true}}`
+- **Headless support** - Run Chrome without UI via `{"newTab":{"url":"...","headless":true}}`
 
 ### Navigation
 - **URL navigation** - `goto`, `back`, `forward`, `reload`
@@ -77,7 +77,6 @@ node src/cdp-skill.js '{"steps":[{"openTab":{"url":"https://google.com","port":9
 ### Dynamic Browser Execution
 - **pageFunction** - Run agent-generated JavaScript in the browser with serialized return values
 - **poll** - Poll a predicate function until truthy or timeout
-- **pipeline** - Compile micro-operations (find+fill, find+click, waitFor, sleep) into a single async JS function with zero roundtrips
 
 ### Frame Support
 - **frame** - Unified step: `"selector"` (switch), `0` (by index), `"top"` (main), `{list: true}` (enumerate)
@@ -91,8 +90,9 @@ node src/cdp-skill.js '{"steps":[{"openTab":{"url":"https://google.com","port":9
 - **PDF generation** - With metadata (page count, dimensions)
 
 ### Data Extraction
-- **Structured extraction** - Tables and lists with auto-detection
-- **Text/HTML/attributes** - Extract content from elements
+- **get** - Unified content extraction with modes: text, html, value, box, attributes
+- **getUrl / getTitle** - Convenience shortcuts for common page metadata
+- **Structured extraction** - Tables and lists with auto-detection via `get`
 - **Console logs** - Capture browser console output
 - **Cookies** - Get, set, delete with expiration support
 - **pageFunction** - Execute JS functions or bare expressions in page context with serialization
@@ -159,12 +159,12 @@ src/
     ├── step-executors.js     #   Main step dispatch and execution
     ├── step-validator.js     #   Step definition validation
     ├── context-helpers.js    #   Step types, action context
-    ├── execute-dynamic.js    #   pageFunction, poll, pipeline, site profiles
+    ├── execute-dynamic.js    #   pageFunction, poll, site profiles
     ├── execute-interaction.js#   click, hover, drag
-    ├── execute-input.js      #   fill (focused), selectOption
+    ├── execute-input.js      #   fill (focused), selectOption, selectText
     ├── execute-navigation.js #   wait, scroll, waitForNavigation
-    ├── execute-query.js      #   snapshot, query, inspect, getBox, etc.
-    ├── execute-form.js       #   validate, submit, extract, assert
+    ├── execute-query.js      #   snapshot, query, inspect, get, etc.
+    ├── execute-form.js       #   submit, assert
     └── execute-browser.js    #   pdf, cookies, console, tabs
 ```
 
