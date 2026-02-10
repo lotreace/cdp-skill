@@ -13,11 +13,11 @@ Improvement-first evaluation system for cdp-skill. Each "crank turn" selects the
 **The conductor agent MUST protect its context window.** Previous crashes occurred because runner agent outputs (containing verbose CLI responses with screenshots and snapshots) were read back into the conductor's context via `TaskOutput` or `Read`.
 
 Rules:
-1. **Never call `TaskOutput`** on runner agents — their output is irrelevant to the conductor. Runners write trace files to disk; the conductor reads only the TraceCollector summary.
+1. **Never call `TaskOutput`** on runner agents — their output is irrelevant to the conductor. Runners write trace files to disk.
 2. **Never `Read` trace files** unless debugging a specific single-test failure. The validator harness reads them.
 3. **Never `Read` validation result files individually.** Use `validation-summary.json` which the harness writes.
 4. **Use `head_limit` on Grep/Read** when you must inspect run artifacts — cap at 20-30 lines.
-5. **Runner agents are fire-and-forget.** Launch them in background, then poll for completion via TraceCollector.
+5. **Runner agents are fire-and-forget.** Launch them in background, wait for completion notifications.
 
 ## Usage
 
@@ -207,16 +207,13 @@ For each wave:
    - `{{url}}` = the test's URL
    - `{{test_id}}` = the test's ID
 
-2. **Wait for wave completion** by polling the TraceCollector. Do NOT launch the next wave until this returns:
+2. **Wait for all 5 agents to complete.** You will receive automatic completion notifications for each agent. Do NOT launch the next wave until all 5 notifications arrive.
+
+3. After all waves, check for missing traces:
 ```bash
-node cdp-bench/flywheel/TraceCollector.js --run-dir ${runDir} --tests-dir cdp-bench/tests --timeout 300 --poll 15
+ls ${runDir}/*.trace.json | wc -l
 ```
-
-3. Note missing traces from the `missing` field in the output.
-
-4. **Only after the TraceCollector returns**, launch the next wave of 5 tests.
-
-After all waves, run one **retry wave** for any missing tests (spawn agents for missing IDs only, poll with 300s timeout).
+If any tests are missing, note them for a retry wave.
 
 **IMPORTANT: Do NOT read runner agent outputs via TaskOutput.** Runner conversations contain verbose CLI output that will overflow the conductor's context window.
 
@@ -351,7 +348,6 @@ cdp-bench/
     feedback-constants.js            # Shared constants (area mappings, normalization helpers)
     FeedbackExtractor.js             # Extract + normalize + dedup feedback from traces
     FeedbackApplier.js               # Apply match decisions to improvements.json
-    TraceCollector.js                # Polls for trace files from runner agents
     prompts/
       runner.md                      # Runner agent prompt template
       diagnostician.md               # Diagnostician prompt template
