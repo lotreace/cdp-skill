@@ -232,7 +232,8 @@ export async function executeStep(deps, step, options = {}) {
             elementLocator.session,
             elementLocator,
             inputEmulator,
-            deps.ariaSnapshot
+            deps.ariaSnapshot,
+            { getFrameContext: pageController.getFrameContext }
           );
           const urlBeforeFill = await getCurrentUrl(elementLocator.session);
           await fillExecutor.execute(params);
@@ -252,7 +253,8 @@ export async function executeStep(deps, step, options = {}) {
             elementLocator.session,
             elementLocator,
             inputEmulator,
-            deps.ariaSnapshot
+            deps.ariaSnapshot,
+            { getFrameContext: pageController.getFrameContext }
           );
           stepResult.output = await fillExecutor.executeBatch(params);
           stepResult.output.mode = 'batch';

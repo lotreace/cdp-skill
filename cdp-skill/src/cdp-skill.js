@@ -458,6 +458,7 @@ async function handleCloseTab(step) {
 
     await new Promise((resolve, reject) => {
       const req = http.get(closeUrl, (res) => {
+        res.resume(); // Drain response body to prevent memory leak
         if (res.statusCode === 200) {
           resolve();
         } else {

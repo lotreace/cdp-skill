@@ -229,8 +229,8 @@ export async function executeFillActive(pageController, inputEmulator, params) {
   const session = pageController.session;
 
   // Parse params
-  const value = typeof params === 'string' ? params : params.value;
-  const clear = typeof params === 'object' ? params.clear !== false : true;
+  const value = typeof params === 'string' ? params : (params && params.value);
+  const clear = typeof params === 'object' && params !== null ? params.clear !== false : true;
 
   // Check if there's an active element and if it's editable
   const checkResult = await session.send('Runtime.evaluate', {

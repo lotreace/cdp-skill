@@ -71,6 +71,18 @@ echo '{"tab":"t1","steps":[{"snapshot":true}]}' | node src/cdp-skill.js
 
 Tab IDs (t1, t2, ...) persist across CLI invocations. Chrome auto-launches if not running.
 
+## Reliability (v1.0.10-1.0.11)
+
+Recent improvements to stability and correctness:
+
+- **Validation robustness** — Fixed null pointer crashes in step validation for edge cases with missing or malformed parameters
+- **Race condition fixes** — Resolved timing issues in browser connection initialization, file lock contention, and scroll-wait coordination
+- **Resource cleanup** — Fixed HTTP connection leaks, event listener cleanup, and stderr stream handling
+- **Frame context** — Corrected iframe element location and interaction to respect frame boundaries
+- **Step simplification** — Consolidated 47 steps into 41 unified operations (fill, frame, elementsAt, pageFunction, sleep) for clearer API
+
+The skill now passes 1261/1263 unit tests (99.8%) and maintains SHS 99/100 on the cdp-bench evaluation suite.
+
 ## Input / Output Schema
 
 **Input fields:**

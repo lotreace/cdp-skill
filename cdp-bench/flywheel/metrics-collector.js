@@ -7,6 +7,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { computeSHS as computeSHSScore } from './shs-calculator.js';
 
 // --- Metrics from Trace ---
 
@@ -96,13 +97,7 @@ function computeSHS(testResults) {
   );
   const categoryCoverage = categories.size > 0 ? passedCategories.size / categories.size : 0;
 
-  const shs = Math.round(
-    40 * passRate +
-    25 * avgCompletion +
-    15 * perfectRate +
-    10 * avgEfficiency +
-    10 * categoryCoverage
-  );
+  const shs = computeSHSScore(passRate, avgCompletion, perfectRate, avgEfficiency, categoryCoverage);
 
   return {
     shs,

@@ -8,8 +8,10 @@
  */
 
 import fs from 'fs';
+import { createFileLock } from './file-lock.js';
 
 function createDecisionEngine(improvementsPath, historyPath) {
+  const fileLock = createFileLock();
 
   function readImprovements() {
     if (!fs.existsSync(improvementsPath)) return { issues: [], implemented: [] };
@@ -100,9 +102,15 @@ function createDecisionEngine(improvementsPath, historyPath) {
         needsDesignReview,
         skipped: modifier === 0
       };
-    })
-    .filter(r => !r.skipped)
-    .sort((a, b) => b.priority - a.priority);
+    });
+
+    const regularRecs = ranked.filter(r => !r.needsDesignReview && !r.skipped);
+    const designReviewRecs = ranked.filter(r => r.needsDesignReview);
+
+    return {
+      recommendations: regularRecs.sort((a, b) => b.priority - a.priority),
+      needsDesignReview: designReviewRecs
+    };
   }
 
   return { rank, getAttemptHistory };

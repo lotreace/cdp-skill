@@ -96,7 +96,11 @@ function buildVerifyCapture(verify) {
   }
 
   if (verify.eval_truthy) {
-    return `(function() { try { return !!(${verify.eval_truthy}); } catch(e) { return false; } })()`;
+    const expr = verify.eval_truthy;
+    const isAsync = /^async[\s(]/.test(expr) || expr.includes('await');
+    return isAsync
+      ? `(async function() { try { return !!(${expr}); } catch(e) { return false; } })()`
+      : `(function() { try { return !!(${expr}); } catch(e) { return false; } })()`;
   }
 
   if (verify.dom_exists) {

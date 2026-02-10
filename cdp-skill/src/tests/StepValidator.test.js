@@ -643,4 +643,42 @@ describe('StepValidator', () => {
       assert.ok(result.errors[0].errors.length >= 2);
     });
   });
+
+  describe('null pointer crash fixes', () => {
+    it('should not crash on reload with null params', () => {
+      const errors = validateStepInternal({ reload: null });
+      // Should reject but not crash
+      assert.ok(errors.some(e => e.includes('requires true or params object')));
+    });
+
+    it('should not crash on snapshot with null params', () => {
+      const errors = validateStepInternal({ snapshot: null });
+      // Should reject but not crash
+      assert.ok(errors.some(e => e.includes('requires true or params object')));
+    });
+
+    it('should not crash on waitForNavigation with null params', () => {
+      const errors = validateStepInternal({ waitForNavigation: null });
+      // Should reject but not crash
+      assert.ok(errors.some(e => e.includes('requires true or params object')));
+    });
+
+    it('should handle reload with null params object properties', () => {
+      const errors = validateStepInternal({ reload: { waitUntil: undefined } });
+      // Should accept (waitUntil is optional)
+      assert.strictEqual(errors.length, 0);
+    });
+
+    it('should handle snapshot with null params object properties', () => {
+      const errors = validateStepInternal({ snapshot: { mode: 'ai' } });
+      // Should accept valid mode
+      assert.strictEqual(errors.length, 0);
+    });
+
+    it('should handle waitForNavigation with null timeout', () => {
+      const errors = validateStepInternal({ waitForNavigation: { timeout: undefined } });
+      // Should accept (timeout is optional)
+      assert.strictEqual(errors.length, 0);
+    });
+  });
 });

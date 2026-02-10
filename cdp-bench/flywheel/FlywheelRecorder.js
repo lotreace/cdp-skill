@@ -8,8 +8,10 @@
 
 import fs from 'fs';
 import path from 'path';
+import { createFileLock } from './file-lock.js';
 
 function createFlywheelRecorder(improvementsPath, historyPath) {
+  const fileLock = createFileLock();
 
   function readImprovements() {
     return JSON.parse(fs.readFileSync(improvementsPath, 'utf8'));
@@ -27,28 +29,32 @@ function createFlywheelRecorder(improvementsPath, historyPath) {
     }
   }
 
-  function appendToHistory(entry) {
+  async function appendToHistory(entry) {
     ensureHistoryDir();
-    fs.appendFileSync(historyPath, JSON.stringify(entry) + '\n');
+    await fileLock.withLock(historyPath, () => {
+      fs.appendFileSync(historyPath, JSON.stringify(entry) + '\n');
+    });
   }
 
-  function recordFixOutcome(issueId, outcome, details = {}) {
-    const data = readImprovements();
-    const issue = data.issues.find(i => i.id === issueId);
-    if (!issue) {
-      throw new Error(`Issue "${issueId}" not found in improvements.json`);
-    }
+  async function recordFixOutcome(issueId, outcome, details = {}) {
+    await fileLock.withLock(improvementsPath, () => {
+      const data = readImprovements();
+      const issue = data.issues.find(i => i.id === issueId);
+      if (!issue) {
+        throw new Error(`Issue "${issueId}" not found in improvements.json`);
+      }
 
-    const attempt = {
-      date: new Date().toISOString().slice(0, 10),
-      outcome,
-      ...details
-    };
+      const attempt = {
+        date: new Date().toISOString().slice(0, 10),
+        outcome,
+        ...details
+      };
 
-    issue.fixAttempts.push(attempt);
-    writeImprovements(data);
+      issue.fixAttempts.push(attempt);
+      writeImprovements(data);
+    });
 
-    appendToHistory({
+    await appendToHistory({
       type: 'fix_outcome',
       ts: new Date().toISOString(),
       issueId,
@@ -57,28 +63,30 @@ function createFlywheelRecorder(improvementsPath, historyPath) {
     });
   }
 
-  function moveToImplemented(issueId, implementedAs) {
-    const data = readImprovements();
-    const idx = data.issues.findIndex(i => i.id === issueId);
-    if (idx === -1) {
-      throw new Error(`Issue "${issueId}" not found in improvements.json`);
-    }
+  async function moveToImplemented(issueId, implementedAs) {
+    await fileLock.withLock(improvementsPath, () => {
+      const data = readImprovements();
+      const idx = data.issues.findIndex(i => i.id === issueId);
+      if (idx === -1) {
+        throw new Error(`Issue "${issueId}" not found in improvements.json`);
+      }
 
-    const [issue] = data.issues.splice(idx, 1);
+      const [issue] = data.issues.splice(idx, 1);
 
-    data.implemented.push({
-      id: issue.id,
-      title: issue.title,
-      votes: issue.votes,
-      implementedAs,
-      fixedDate: new Date().toISOString().slice(0, 10)
+      data.implemented.push({
+        id: issue.id,
+        title: issue.title,
+        votes: issue.votes,
+        implementedAs,
+        fixedDate: new Date().toISOString().slice(0, 10)
+      });
+
+      writeImprovements(data);
     });
-
-    writeImprovements(data);
   }
 
-  function recordCrankSummary(crankData) {
-    appendToHistory({
+  async function recordCrankSummary(crankData) {
+    await appendToHistory({
       type: 'crank',
       ts: new Date().toISOString(),
       ...crankData

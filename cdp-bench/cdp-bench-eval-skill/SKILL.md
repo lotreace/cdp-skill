@@ -70,6 +70,40 @@ Tests are `.test.json` files in `cdp-bench/tests/` with programmatic milestones:
 SHS = 40 * passRate + 25 * avgCompletion + 15 * perfectRate + 10 * avgEfficiency + 10 * categoryCoverage
 ```
 
+**Centralized computation:** SHS calculation is now centralized in `flywheel/shs-calculator.js` to eliminate duplication between `validator-harness.js` and `metrics-collector.js`. Both modules import the same `computeSHS()` function to ensure consistent scoring.
+
+## Flywheel Components
+
+### Baseline Manager (`baseline-manager.js`)
+
+Manages baseline persistence with **ratchet state tracking**. When a test passes 3+ consecutive runs, it becomes "ratcheted" and triggers regression blocking if it later drops below 0.7 completion.
+
+**Ratchet state persistence:** The `writeBaseline()` function now persists two additional fields per test:
+- `ratcheted` (boolean): Whether the test has achieved 3+ consecutive passes
+- `consecutivePasses` (number): Current streak of passing runs
+
+This enables the regression gate in `checkRegressionGate()` to enforce stricter thresholds on previously-stable tests.
+
+### Verification Snapshot (`VerificationSnapshot.js`)
+
+Captures browser state for offline milestone validation. **Async expression handling:** The `buildCaptureExpression()` function now correctly detects async functions using `/^async[\s(]/` regex to distinguish actual async keywords from identifiers like `asyncStorage`. Async expressions are wrapped in `async function()` blocks to prevent evaluation errors.
+
+### Decision Engine (`DecisionEngine.js`)
+
+History-aware recommendation ranking with fix attempt tracking. **Design review separation:** The `rank()` function now returns `{ recommendations, needsDesignReview }` where:
+- `recommendations`: Regular issues sorted by priority
+- `needsDesignReview`: Issues with 3+ consecutive failed attempts, flagged for manual review
+
+This prevents the flywheel from repeatedly attempting fixes that have failed multiple times.
+
+### Diagnosis Engine (`diagnosis-engine.js`)
+
+Pattern detection with **step registry integration**. Failure patterns now use `STEP_TYPES` constants from `cdp-skill/src/runner/step-registry.js` instead of hardcoded strings:
+- `STEP_TYPES.FILL` for fill action detection
+- `STEP_TYPES.PAGE_FUNCTION` for workaround detection
+
+This eliminates coupling to step name strings and ensures consistency with the main step validation system.
+
 ## Implementation
 
 <eval-implementation>
@@ -335,13 +369,14 @@ cdp-bench/
     SKILL.md                         # This file
   flywheel/
     CrankOrchestrator.js             # Two-phase orchestrator (validate + record)
-    VerificationSnapshot.js          # Offline snapshot capture + evaluation
+    VerificationSnapshot.js          # Offline snapshot capture + evaluation (async expression support)
     CaptureVerification.js           # CLI: runner captures snapshot before trace
     validator-harness.js             # Deterministic milestone verification (snapshot-first + live CDP)
-    metrics-collector.js             # I/O byte aggregation and SHS computation
-    baseline-manager.js              # Baseline read/write/compare/regression gate
-    diagnosis-engine.js              # Result analysis + improvements.json cross-reference
-    DecisionEngine.js                # History-aware recommendation re-ranking
+    metrics-collector.js             # I/O byte aggregation and per-test scoring
+    shs-calculator.js                # Centralized SHS computation (shared by validator + metrics)
+    baseline-manager.js              # Baseline read/write/compare/regression gate (ratchet state)
+    diagnosis-engine.js              # Result analysis + pattern detection (step registry integration)
+    DecisionEngine.js                # History-aware recommendation re-ranking (design review separation)
     FlywheelRecorder.js              # Fix outcome + crank summary persistence
     feedback-constants.js            # Shared constants (area mappings, normalization helpers)
     FeedbackExtractor.js             # Extract + normalize + dedup feedback from traces

@@ -220,10 +220,13 @@ export async function launchChrome(options = {}) {
     stdio: ['ignore', 'ignore', 'pipe'] // capture stderr
   });
 
-  // Collect stderr output for error reporting
+  // Collect stderr output for error reporting (capped at 50KB)
+  const MAX_STDERR_BYTES = 50 * 1024;
   let stderrOutput = '';
   chromeProcess.stderr.on('data', (data) => {
-    stderrOutput += data.toString();
+    if (stderrOutput.length < MAX_STDERR_BYTES) {
+      stderrOutput += data.toString().substring(0, MAX_STDERR_BYTES - stderrOutput.length);
+    }
   });
 
   // Don't let this process keep Node alive
@@ -420,6 +423,11 @@ export function createBrowser(options = {}) {
     while (targetLocks.has(targetId)) {
       await targetLocks.get(targetId);
     }
+    // Atomic check-and-set: verify lock is still free after await
+    if (targetLocks.has(targetId)) {
+      // Another acquirer won the race, recursively retry
+      return acquireLock(targetId);
+    }
     // Create a new lock
     let releaseFn;
     const lockPromise = new Promise(resolve => {
@@ -442,9 +450,15 @@ export function createBrowser(options = {}) {
     }
   }
 
-  async function doConnect() {
+  async function doConnect(abortSignal) {
     const version = await discovery.getVersion();
     connection = createConnection(version.webSocketDebuggerUrl);
+
+    // Check if aborted before connecting
+    if (abortSignal?.aborted) {
+      throw new Error('Connection aborted');
+    }
+
     await connection.connect();
 
     targetManager = createTargetManager(connection);
@@ -461,9 +475,11 @@ export function createBrowser(options = {}) {
   async function connect() {
     if (connected) return;
 
-    const connectPromise = doConnect();
+    const controller = new AbortController();
+    const connectPromise = doConnect(controller.signal);
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => {
+        controller.abort();
         reject(timeoutError(`Connection to Chrome timed out after ${connectTimeout}ms`));
       }, connectTimeout);
     });

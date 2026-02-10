@@ -6,30 +6,18 @@
  * - buildActionContext(action, params, context) → string - Describes what action was taken
  * - buildCommandContext(steps) → string - Summarizes multi-step commands
  * - captureFailureContext(deps) → Object - Gathers debug info on failure
- * - STEP_TYPES - Array of valid step type names
- * - VISUAL_ACTIONS - Actions that trigger auto-screenshot
+ * - STEP_TYPES - Array of valid step type names (from registry)
+ * - VISUAL_ACTIONS - Actions that trigger auto-screenshot (from registry)
  *
- * DEPENDENCIES: None (pure functions)
+ * DEPENDENCIES:
+ * - ./step-registry.js: getAllStepTypes, getVisualActions
  */
 
-export const STEP_TYPES = [
-  'goto', 'wait', 'click', 'fill', 'press', 'query', 'queryAll',
-  'inspect', 'scroll', 'console', 'pdf', 'snapshot', 'snapshotSearch',
-  'hover', 'viewport', 'cookies', 'back', 'forward', 'waitForNavigation', 'listTabs',
-  'closeTab', 'newTab', 'selectText', 'selectOption', 'submit',
-  'assert', 'frame', 'drag', 'get', 'elementsAt', 'getUrl', 'getTitle',
-  'reload', 'pageFunction', 'poll', 'writeSiteProfile', 'readSiteProfile',
-  'switchTab', 'sleep'
-];
+import { getAllStepTypes, getVisualActions } from './step-registry.js';
 
-// Visual actions that trigger auto-screenshot
-// Actions that should capture a screenshot - anything that interacts with or queries the visible page
-export const VISUAL_ACTIONS = [
-  'goto', 'reload', 'click', 'fill', 'hover', 'press', 'scroll', 'wait',  // interactions
-  'snapshot', 'snapshotSearch', 'query', 'queryAll', 'inspect', 'pageFunction', 'get',  // queries
-  'drag', 'selectText', 'selectOption', 'submit', 'assert',  // other page interactions
-  'newTab', 'switchTab'  // navigation actions - behave like goto for auto-snapshot
-];
+// Re-export from registry for backwards compatibility
+export const STEP_TYPES = getAllStepTypes();
+export const VISUAL_ACTIONS = getVisualActions();
 
 /**
  * Build action context string for diff summary

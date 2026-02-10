@@ -9,6 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 import { createDecisionEngine } from './DecisionEngine.js';
+import { STEP_TYPES } from '../../cdp-skill/src/runner/step-registry.js';
 
 // --- improvements.json Reader ---
 
@@ -90,7 +91,7 @@ const FAILURE_PATTERNS = [
     matchTrace: (trace) => {
       const steps = extractSteps(trace);
       return steps.some(s =>
-        s.action === 'fill' &&
+        s.action === STEP_TYPES.FILL &&
         (s.status === 'error' || stepsContainText([s], /timeout|not accepting|failed/i))
       );
     },
@@ -140,7 +141,7 @@ const FAILURE_PATTERNS = [
     matchTrace: (trace) => {
       const steps = extractSteps(trace);
       return steps.some(s =>
-        (s.action === 'eval' || s.action === 'pageFunction') &&
+        s.action === STEP_TYPES.PAGE_FUNCTION &&
         stepsContainText([s], /\.click\(\)|\.value\s*=|dispatchEvent/i)
       );
     },

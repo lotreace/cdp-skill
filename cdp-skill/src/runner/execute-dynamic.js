@@ -150,11 +150,11 @@ export async function executePoll(pageController, params) {
     const rawVal = result.result.value;
     const isTruthy = rawVal !== null && rawVal !== undefined &&
       rawVal !== false && rawVal !== 0 && rawVal !== '' &&
-      !(typeof rawVal === 'object' && rawVal.type === 'null') &&
-      !(typeof rawVal === 'object' && rawVal.type === 'undefined') &&
-      !(typeof rawVal === 'object' && rawVal.type === 'boolean' && rawVal.value === false) &&
-      !(typeof rawVal === 'object' && rawVal.type === 'number' && rawVal.value === 0) &&
-      !(typeof rawVal === 'object' && rawVal.type === 'string' && rawVal.value === '');
+      !(typeof rawVal === 'object' && rawVal !== null && rawVal.type === 'null') &&
+      !(typeof rawVal === 'object' && rawVal !== null && rawVal.type === 'undefined') &&
+      !(typeof rawVal === 'object' && rawVal !== null && rawVal.type === 'boolean' && rawVal.value === false) &&
+      !(typeof rawVal === 'object' && rawVal !== null && rawVal.type === 'number' && rawVal.value === 0) &&
+      !(typeof rawVal === 'object' && rawVal !== null && rawVal.type === 'string' && rawVal.value === '');
 
     if (isTruthy) {
       return { resolved: true, value: processed, elapsed: Date.now() - start };

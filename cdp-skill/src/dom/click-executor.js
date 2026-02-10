@@ -369,35 +369,54 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       }`
     });
 
-    await inputEmulator.click(x, y);
-    await sleep(50);
+    try {
+      await inputEmulator.click(x, y);
+      await sleep(50);
 
-    const verifyResult = await session.send('Runtime.callFunctionOn', {
-      objectId: targetObjectId,
-      functionDeclaration: `function() {
-        this.removeEventListener('pointerdown', this.__ptrHandler);
-        document.removeEventListener('pointerdown', this.__docHandler, { capture: true });
-        const received = this.__clickReceived;
-        delete this.__clickReceived;
-        delete this.__ptrHandler;
-        delete this.__docHandler;
-        return received;
-      }`,
-      returnByValue: true
-    });
+      const verifyResult = await session.send('Runtime.callFunctionOn', {
+        objectId: targetObjectId,
+        functionDeclaration: `function() {
+          this.removeEventListener('pointerdown', this.__ptrHandler);
+          document.removeEventListener('pointerdown', this.__docHandler, { capture: true });
+          const received = this.__clickReceived;
+          delete this.__clickReceived;
+          delete this.__ptrHandler;
+          delete this.__docHandler;
+          return received;
+        }`,
+        returnByValue: true
+      });
 
-    const targetReceived = verifyResult.result.value === true;
-    const result = { targetReceived };
+      const targetReceived = verifyResult.result.value === true;
+      const result = { targetReceived };
 
-    // If click didn't reach target, get interceptor info
-    if (!targetReceived) {
-      const interceptor = await getInterceptorInfo(x, y, targetObjectId);
-      if (interceptor) {
-        result.interceptedBy = interceptor;
+      // If click didn't reach target, get interceptor info
+      if (!targetReceived) {
+        const interceptor = await getInterceptorInfo(x, y, targetObjectId);
+        if (interceptor) {
+          result.interceptedBy = interceptor;
+        }
+      }
+
+      return result;
+    } finally {
+      // Always cleanup event listeners, even if click fails
+      try {
+        await session.send('Runtime.callFunctionOn', {
+          objectId: targetObjectId,
+          functionDeclaration: `function() {
+            this.removeEventListener('pointerdown', this.__ptrHandler);
+            document.removeEventListener('pointerdown', this.__docHandler, { capture: true });
+            delete this.__clickReceived;
+            delete this.__ptrHandler;
+            delete this.__docHandler;
+          }`,
+          returnByValue: true
+        });
+      } catch (cleanupError) {
+        // Ignore cleanup errors (element may be gone)
       }
     }
-
-    return result;
   }
 
   async function addNavigationAndDebugInfo(result, urlBeforeClick, debugData, opts) {
@@ -1024,12 +1043,6 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       const scrollResult = await actionabilityChecker.scrollUntilVisible(selector, scrollOptions);
       if (!scrollResult.found) {
         throw elementNotFoundError(selector, scrollOptions.timeout || 30000);
-      }
-      // Release the objectId from scroll search since clickBySelector will find it again
-      if (scrollResult.objectId) {
-        try {
-          await releaseObject(session, scrollResult.objectId);
-        } catch { /* ignore cleanup errors */ }
       }
       // Element found, now proceed with normal click
       // The scrollUntilVisible already scrolled it into view, so the actionability check should pass

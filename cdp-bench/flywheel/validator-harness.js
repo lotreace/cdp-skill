@@ -15,6 +15,7 @@ import http from 'http';
 import path from 'path';
 import os from 'os';
 import { evaluateSnapshotOffline } from './VerificationSnapshot.js';
+import { computeSHS as computeSHSScore } from './shs-calculator.js';
 
 // --- CDP Connection ---
 
@@ -30,17 +31,9 @@ function connectToTarget(host, port, targetId, urlHint) {
           if (targetId) {
             // Match by id (CDP uses lowercase 'id' in /json response)
             target = targets.find(t => t.id === targetId || t.id === targetId.toLowerCase());
-          }
-          if (!target && urlHint) {
-            // Fallback: match by URL from trace's finalState
-            target = targets.find(t => t.type === 'page' && t.url && t.url.includes(urlHint));
-          }
-          if (!target) {
-            // Last resort: first page — but ONLY if no targetId was specified
-            // (if a specific tab was requested but closed, don't fall back to random tab)
-            if (!targetId) {
-              target = targets.find(t => t.type === 'page');
-            }
+          } else {
+            // Only use first page fallback if no targetId was specified
+            target = targets.find(t => t.type === 'page');
           }
           if (!target) {
             reject(new Error(`No target found${targetId ? ` with id ${targetId}` : ''}${urlHint ? ` (url hint: ${urlHint})` : ''} — tab may have been closed`));
@@ -286,13 +279,7 @@ function computeSHS(testResults) {
   );
   const categoryCoverage = categories.size > 0 ? passedCategories.size / categories.size : 0;
 
-  const shs = Math.round(
-    40 * passRate +
-    25 * avgCompletion +
-    15 * perfectRate +
-    10 * avgEfficiency +
-    10 * categoryCoverage
-  );
+  const shs = computeSHSScore(passRate, avgCompletion, perfectRate, avgEfficiency, categoryCoverage);
 
   return {
     shs,

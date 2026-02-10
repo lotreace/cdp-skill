@@ -211,14 +211,14 @@ async function runRecordPhase(flags) {
   // 2. Record fix outcome
   if (fixIssue && fixOutcome) {
     try {
-      recorder.recordFixOutcome(fixIssue, fixOutcome, {
+      await recorder.recordFixOutcome(fixIssue, fixOutcome, {
         crank,
         version,
         shsDelta: validateResult.shsDelta
       });
 
       if (fixOutcome === 'fixed') {
-        recorder.moveToImplemented(fixIssue, `Crank ${crank}: fixed in v${version}`);
+        await recorder.moveToImplemented(fixIssue, `Crank ${crank}: fixed in v${version}`);
       }
     } catch (err) {
       console.error(`Fix record warning: ${err.message}`);
@@ -226,7 +226,7 @@ async function runRecordPhase(flags) {
   }
 
   // 3. Record crank summary
-  recorder.recordCrankSummary({
+  await recorder.recordCrankSummary({
     crank,
     shs: validateResult.shs,
     shsDelta: validateResult.shsDelta,

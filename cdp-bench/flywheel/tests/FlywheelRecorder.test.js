@@ -36,14 +36,14 @@ describe('FlywheelRecorder', () => {
   });
 
   describe('recordFixOutcome()', () => {
-    it('appends fix attempt to the correct issue', () => {
+    it('appends fix attempt to the correct issue', async () => {
       writeJson(improvementsPath, makeImprovements([
         { id: '2.2', title: 'switchToFrame', votes: 6, fixAttempts: [], status: 'open' },
         { id: '6.5', title: 'Stale refs', votes: 14, fixAttempts: [], status: 'open' }
       ]));
 
       const recorder = createFlywheelRecorder(improvementsPath, historyPath);
-      recorder.recordFixOutcome('2.2', 'fixed', {
+      await recorder.recordFixOutcome('2.2', 'fixed', {
         crank: 3,
         version: '1.0.9',
         details: 'Injected getFrameContext via DI',
@@ -65,7 +65,7 @@ describe('FlywheelRecorder', () => {
       assert.equal(other.fixAttempts.length, 0);
     });
 
-    it('appends to existing fixAttempts array', () => {
+    it('appends to existing fixAttempts array', async () => {
       writeJson(improvementsPath, makeImprovements([
         {
           id: '6.5', title: 'Stale refs', votes: 14,
@@ -75,7 +75,7 @@ describe('FlywheelRecorder', () => {
       ]));
 
       const recorder = createFlywheelRecorder(improvementsPath, historyPath);
-      recorder.recordFixOutcome('6.5', 'partial', { crank: 2, details: 'Second attempt' });
+      await recorder.recordFixOutcome('6.5', 'partial', { crank: 2, details: 'Second attempt' });
 
       const data = JSON.parse(fs.readFileSync(improvementsPath, 'utf8'));
       const issue = data.issues.find(i => i.id === '6.5');
@@ -83,23 +83,23 @@ describe('FlywheelRecorder', () => {
       assert.equal(issue.fixAttempts[1].outcome, 'partial');
     });
 
-    it('throws for unknown issue ID', () => {
+    it('throws for unknown issue ID', async () => {
       writeJson(improvementsPath, makeImprovements([]));
       const recorder = createFlywheelRecorder(improvementsPath, historyPath);
 
-      assert.throws(
+      await assert.rejects(
         () => recorder.recordFixOutcome('999.99', 'fixed'),
         /not found/
       );
     });
 
-    it('appends JSONL entry to flywheel-history', () => {
+    it('appends JSONL entry to flywheel-history', async () => {
       writeJson(improvementsPath, makeImprovements([
         { id: '2.2', title: 'test', votes: 1, fixAttempts: [], status: 'open' }
       ]));
 
       const recorder = createFlywheelRecorder(improvementsPath, historyPath);
-      recorder.recordFixOutcome('2.2', 'fixed', { crank: 3 });
+      await recorder.recordFixOutcome('2.2', 'fixed', { crank: 3 });
 
       const lines = fs.readFileSync(historyPath, 'utf8').trim().split('\n');
       assert.equal(lines.length, 1);
@@ -112,13 +112,13 @@ describe('FlywheelRecorder', () => {
       assert.ok(entry.ts);
     });
 
-    it('updates meta.lastUpdated timestamp', () => {
+    it('updates meta.lastUpdated timestamp', async () => {
       writeJson(improvementsPath, makeImprovements([
         { id: '1.1', title: 'test', votes: 1, fixAttempts: [], status: 'open' }
       ]));
 
       const recorder = createFlywheelRecorder(improvementsPath, historyPath);
-      recorder.recordFixOutcome('1.1', 'failed');
+      await recorder.recordFixOutcome('1.1', 'failed');
 
       const data = JSON.parse(fs.readFileSync(improvementsPath, 'utf8'));
       const updated = new Date(data.meta.lastUpdated);
@@ -128,14 +128,14 @@ describe('FlywheelRecorder', () => {
   });
 
   describe('moveToImplemented()', () => {
-    it('moves issue from issues array to implemented array', () => {
+    it('moves issue from issues array to implemented array', async () => {
       writeJson(improvementsPath, makeImprovements([
         { id: '2.2', title: 'switchToFrame action context', votes: 6, fixAttempts: [], status: 'open' },
         { id: '6.5', title: 'Stale refs', votes: 14, fixAttempts: [], status: 'open' }
       ]));
 
       const recorder = createFlywheelRecorder(improvementsPath, historyPath);
-      recorder.moveToImplemented('2.2', 'Injected getFrameContext via DI');
+      await recorder.moveToImplemented('2.2', 'Injected getFrameContext via DI');
 
       const data = JSON.parse(fs.readFileSync(improvementsPath, 'utf8'));
 
@@ -152,24 +152,24 @@ describe('FlywheelRecorder', () => {
       assert.ok(impl.fixedDate);
     });
 
-    it('throws for unknown issue ID', () => {
+    it('throws for unknown issue ID', async () => {
       writeJson(improvementsPath, makeImprovements([]));
       const recorder = createFlywheelRecorder(improvementsPath, historyPath);
 
-      assert.throws(
+      await assert.rejects(
         () => recorder.moveToImplemented('999.99', 'foo'),
         /not found/
       );
     });
 
-    it('preserves existing implemented items', () => {
+    it('preserves existing implemented items', async () => {
       writeJson(improvementsPath, makeImprovements(
         [{ id: '2.2', title: 'switchToFrame', votes: 6, fixAttempts: [], status: 'open' }],
         [{ id: '1.1', title: 'Drag timeout', votes: 11, implementedAs: 'JS simulation', fixedDate: '2026-01-15' }]
       ));
 
       const recorder = createFlywheelRecorder(improvementsPath, historyPath);
-      recorder.moveToImplemented('2.2', 'Frame context DI');
+      await recorder.moveToImplemented('2.2', 'Frame context DI');
 
       const data = JSON.parse(fs.readFileSync(improvementsPath, 'utf8'));
       assert.equal(data.implemented.length, 2);
@@ -179,11 +179,11 @@ describe('FlywheelRecorder', () => {
   });
 
   describe('recordCrankSummary()', () => {
-    it('appends crank summary as JSONL', () => {
+    it('appends crank summary as JSONL', async () => {
       writeJson(improvementsPath, makeImprovements([]));
 
       const recorder = createFlywheelRecorder(improvementsPath, historyPath);
-      recorder.recordCrankSummary({
+      await recorder.recordCrankSummary({
         crank: 3,
         shs: 99,
         shsDelta: -1,
@@ -204,13 +204,13 @@ describe('FlywheelRecorder', () => {
       assert.ok(entry.ts);
     });
 
-    it('appends multiple entries without overwriting', () => {
+    it('appends multiple entries without overwriting', async () => {
       writeJson(improvementsPath, makeImprovements([]));
 
       const recorder = createFlywheelRecorder(improvementsPath, historyPath);
-      recorder.recordCrankSummary({ crank: 1, shs: 90 });
-      recorder.recordCrankSummary({ crank: 2, shs: 95 });
-      recorder.recordCrankSummary({ crank: 3, shs: 99 });
+      await recorder.recordCrankSummary({ crank: 1, shs: 90 });
+      await recorder.recordCrankSummary({ crank: 2, shs: 95 });
+      await recorder.recordCrankSummary({ crank: 3, shs: 99 });
 
       const lines = fs.readFileSync(historyPath, 'utf8').trim().split('\n');
       assert.equal(lines.length, 3);
@@ -220,12 +220,12 @@ describe('FlywheelRecorder', () => {
       assert.equal(JSON.parse(lines[2]).crank, 3);
     });
 
-    it('creates baselines directory if it does not exist', () => {
+    it('creates baselines directory if it does not exist', async () => {
       writeJson(improvementsPath, makeImprovements([]));
       // historyPath is inside tmpDir/baselines/ which doesn't exist yet
 
       const recorder = createFlywheelRecorder(improvementsPath, historyPath);
-      recorder.recordCrankSummary({ crank: 1, shs: 100 });
+      await recorder.recordCrankSummary({ crank: 1, shs: 100 });
 
       assert.ok(fs.existsSync(historyPath));
     });

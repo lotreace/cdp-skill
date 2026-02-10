@@ -31,16 +31,31 @@ import {
  * @param {Object} elementLocator - Element locator instance
  * @param {Object} inputEmulator - Input emulator instance
  * @param {Object} [ariaSnapshot] - Optional ARIA snapshot instance
+ * @param {Object} [options] - Configuration options
+ * @param {Function} [options.getFrameContext] - Returns contextId when in a non-main frame
  * @returns {Object} Fill executor interface
  */
-export function createFillExecutor(session, elementLocator, inputEmulator, ariaSnapshot = null) {
+export function createFillExecutor(session, elementLocator, inputEmulator, ariaSnapshot = null, options = {}) {
   if (!session) throw new Error('CDP session is required');
   if (!elementLocator) throw new Error('Element locator is required');
   if (!inputEmulator) throw new Error('Input emulator is required');
 
+  const getFrameContext = options.getFrameContext || null;
   const actionabilityChecker = createActionabilityChecker(session);
   const elementValidator = createElementValidator(session);
   const reactInputFiller = createReactInputFiller(session);
+
+  /**
+   * Build Runtime.evaluate params, injecting contextId when in an iframe.
+   */
+  function evalParams(expression, returnByValue = false) {
+    const params = { expression, returnByValue };
+    if (getFrameContext) {
+      const contextId = getFrameContext();
+      if (contextId) params.contextId = contextId;
+    }
+    return params;
+  }
 
   async function fillByRef(ref, value, opts = {}) {
     const { clear = true, react = false } = opts;
@@ -62,13 +77,12 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
       throw new Error(`Element ref:${ref} exists but is not visible. It may be hidden or have zero dimensions.`);
     }
 
-    const elementResult = await session.send('Runtime.evaluate', {
-      expression: `(function() {
+    const elementResult = await session.send('Runtime.evaluate',
+      evalParams(`(function() {
         const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
         return el;
-      })()`,
-      returnByValue: false
-    });
+      })()`, false)
+    );
 
     if (!elementResult.result.objectId) {
       throw elementNotFoundError(`ref:${ref}`, 0);
@@ -277,10 +291,9 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
 
     let result;
     try {
-      result = await session.send('Runtime.evaluate', {
-        expression,
-        returnByValue: false
-      });
+      result = await session.send('Runtime.evaluate',
+        evalParams(expression, false)
+      );
     } catch (error) {
       throw connectionError(error.message, 'Runtime.evaluate (findInputByLabel)');
     }

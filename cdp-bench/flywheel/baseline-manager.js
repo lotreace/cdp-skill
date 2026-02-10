@@ -39,7 +39,7 @@ function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-function writeBaseline(runData, version, baselinesDir = BASELINES_DIR) {
+function writeBaseline(runData, version, baselinesDir = BASELINES_DIR, ratchetState = {}) {
   ensureDir(baselinesDir);
 
   const baseline = {
@@ -53,7 +53,9 @@ function writeBaseline(runData, version, baselinesDir = BASELINES_DIR) {
     baseline.tests[result.testId] = {
       score: result.completion,
       composite: result.composite,
-      category: result.category
+      category: result.category,
+      ratcheted: ratchetState[result.testId]?.ratcheted || false,
+      consecutivePasses: ratchetState[result.testId]?.consecutivePasses || 0
     };
   }
 
