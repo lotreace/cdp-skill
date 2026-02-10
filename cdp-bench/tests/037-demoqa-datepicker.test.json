@@ -1,0 +1,26 @@
+{
+  "id": "037-demoqa-datepicker",
+  "url": "https://demoqa.com/date-picker",
+  "category": "create",
+  "difficulty": "hard",
+  "stability": "stable",
+  "task": "Use both date pickers on this page:\n1. 'Select Date' picker: Click the input to open the calendar popup. Navigate to March 2024 using the month/year navigation arrows. Click day 15 to select March 15, 2024. The input should show '03/15/2024'.\n2. 'Date And Time' picker: Click the second input. Navigate to December 2025. Click day 25. Select 10:00 from the time list. The input should show a date/time including December 25, 2025.\nUse the calendar UI controls — do not just type dates into the inputs.",
+  "milestones": [
+    {
+      "id": "page_loaded",
+      "weight": 0.1,
+      "verify": { "dom_exists": "#datePickerMonthYearInput" }
+    },
+    {
+      "id": "date_selected",
+      "weight": 0.45,
+      "verify": { "eval_truthy": "document.getElementById('datePickerMonthYearInput')?.value === '03/15/2024'" }
+    },
+    {
+      "id": "datetime_selected",
+      "weight": 0.45,
+      "verify": { "eval_truthy": "const v = document.getElementById('dateAndTimePickerInput')?.value || ''; v.includes('December') && v.includes('25') && v.includes('2025')" }
+    }
+  ],
+  "budget": { "maxSteps": 30, "maxTimeMs": 120000 }
+}

@@ -378,7 +378,10 @@ function loadTabRegistry() {
 
 function resolveTabAlias(alias) {
   const registry = loadTabRegistry();
-  return registry.tabs[alias] || alias;
+  const entry = registry.tabs[alias];
+  if (!entry) return alias;
+  // Entry can be a string (legacy) or {targetId, host, port} object
+  return typeof entry === 'string' ? entry : entry.targetId;
 }
 
 // --- Batch Validation ---

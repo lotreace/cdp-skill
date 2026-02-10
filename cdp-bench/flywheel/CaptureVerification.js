@@ -32,7 +32,9 @@ function loadTabRegistry() {
 
 function resolveTabAlias(alias) {
   const registry = loadTabRegistry();
-  return registry.tabs[alias] || alias;
+  const entry = registry.tabs[alias];
+  if (!entry) return alias;
+  return typeof entry === 'string' ? entry : entry.targetId;
 }
 
 function findTarget(host, port, targetId) {

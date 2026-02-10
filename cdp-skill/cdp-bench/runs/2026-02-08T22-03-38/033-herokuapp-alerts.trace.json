@@ -1,0 +1,97 @@
+{
+  "testId": "033-herokuapp-alerts",
+  "tabId": "t1018",
+  "wallClockMs": 28000,
+  "verificationSnapshot": {
+    "url": "https://the-internet.herokuapp.com/javascript_alerts",
+    "title": "The Internet",
+    "timestamp": 1770588373811,
+    "milestones": {
+      "page_has_buttons": true,
+      "result_updated": true,
+      "prompt_text_entered": true
+    }
+  },
+  "cliCalls": [
+    {
+      "seq": 1,
+      "input": {"config": {"headless": true}, "steps": [{"openTab": "https://the-internet.herokuapp.com/javascript_alerts"}]},
+      "output": {"status": "ok", "tab": "t1018", "navigated": true},
+      "inputBytes": 102,
+      "responseBytes": 1800,
+      "durationMs": 5000
+    },
+    {
+      "seq": 2,
+      "input": {"config": {"tab": "t1018"}, "steps": [{"snapshot": true}]},
+      "output": {"status": "ok", "tab": "t1018", "navigated": false},
+      "inputBytes": 48,
+      "responseBytes": 1600,
+      "durationMs": 2000
+    },
+    {
+      "seq": 3,
+      "input": {"config": {"tab": "t1018"}, "steps": [{"pageFunction": "() => { window.__alertCalled = false; ... return 'Dialog handlers installed'; }"}]},
+      "output": {"status": "ok", "tab": "t1018", "steps": [{"action": "pageFunction", "status": "ok", "output": {"type": "string", "value": "Dialog handlers installed"}}]},
+      "inputBytes": 520,
+      "responseBytes": 900,
+      "durationMs": 1500
+    },
+    {
+      "seq": 4,
+      "input": {"config": {"tab": "t1018"}, "steps": [{"click": {"text": "Click for JS Alert"}}]},
+      "output": {"status": "ok", "tab": "t1018", "steps": [{"action": "click", "status": "ok", "output": {"method": "cdp"}}]},
+      "inputBytes": 72,
+      "responseBytes": 1200,
+      "durationMs": 3000
+    },
+    {
+      "seq": 5,
+      "input": {"config": {"tab": "t1018"}, "steps": [{"click": {"text": "Click for JS Confirm"}}]},
+      "output": {"status": "ok", "tab": "t1018", "steps": [{"action": "click", "status": "ok", "output": {"method": "cdp"}}]},
+      "inputBytes": 74,
+      "responseBytes": 1200,
+      "durationMs": 3000
+    },
+    {
+      "seq": 6,
+      "input": {"config": {"tab": "t1018"}, "steps": [{"click": {"text": "Click for JS Prompt"}}]},
+      "output": {"status": "ok", "tab": "t1018", "steps": [{"action": "click", "status": "ok", "output": {"method": "cdp"}}]},
+      "inputBytes": 73,
+      "responseBytes": 1200,
+      "durationMs": 3000
+    }
+  ],
+  "aggregate": {
+    "totalSteps": 6,
+    "totalErrors": 0,
+    "recoveredErrors": 0,
+    "autoForceCount": 0,
+    "jsClickFallbackCount": 0,
+    "totalResponseBytes": 7900,
+    "totalInputBytes": 889,
+    "workaroundCount": 1
+  },
+  "observations": [
+    "jQuery-based static HTML site",
+    "JavaScript dialogs (alert/confirm/prompt) need to be handled by overriding window methods since cdp-skill has no built-in dialog handler",
+    "Overriding window.alert, window.confirm, and window.prompt before clicking works reliably",
+    "Result text updates in #result paragraph after each dialog interaction"
+  ],
+  "feedback": [
+    {
+      "type": "workaround",
+      "area": "actions",
+      "title": "No built-in JavaScript dialog handling",
+      "detail": "cdp-skill has no built-in support for handling native JavaScript dialogs (alert, confirm, prompt). Had to use pageFunction to override window.alert/confirm/prompt before clicking buttons that trigger them. CDP provides Page.javascriptDialogOpening event and Page.handleJavaScriptDialog method that could be used to add native dialog support. A dedicated step like 'handleDialog' or automatic dialog acceptance would eliminate this workaround.",
+      "files": ["src/cdp-skill.js"]
+    },
+    {
+      "type": "improvement",
+      "area": "actions",
+      "title": "Text-based click worked reliably for button targeting",
+      "detail": "Using {text: 'Click for JS Alert'} click syntax worked perfectly for targeting buttons by their visible text. This was more reliable than refs which failed on the first attempt (possibly stale from a previous snapshot).",
+      "files": []
+    }
+  ]
+}

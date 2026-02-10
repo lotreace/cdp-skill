@@ -1,0 +1,31 @@
+{
+  "id": "036-herokuapp-challenging-dom",
+  "url": "https://the-internet.herokuapp.com/challenging_dom",
+  "category": "read",
+  "difficulty": "hard",
+  "stability": "stable",
+  "task": "This page has a challenging DOM with dynamic elements:\n1. Find and read the data table — extract all values from the 3rd row (row index 2). Report the values for each column (Lorem through Diceret).\n2. Find the canvas element and read the 'Answer' text rendered on it. The answer is drawn on a <canvas> element and cannot be read via normal DOM methods.\n3. Click the 'edit' link in the 5th row of the table.\nNote: The buttons at the top have dynamic IDs that change on each page load.",
+  "milestones": [
+    {
+      "id": "table_present",
+      "weight": 0.15,
+      "verify": { "eval_truthy": "document.querySelectorAll('table tbody tr').length >= 10" }
+    },
+    {
+      "id": "table_data_readable",
+      "weight": 0.35,
+      "verify": { "eval_truthy": "document.querySelectorAll('table tbody tr')[2]?.querySelectorAll('td')?.length >= 7" }
+    },
+    {
+      "id": "canvas_present",
+      "weight": 0.25,
+      "verify": { "eval_truthy": "document.getElementById('canvas') !== null && document.getElementById('canvas').getContext !== undefined" }
+    },
+    {
+      "id": "edit_link_accessible",
+      "weight": 0.25,
+      "verify": { "eval_truthy": "document.querySelectorAll('table tbody tr')[4]?.querySelector('a[href=\"#edit\"]') !== null" }
+    }
+  ],
+  "budget": { "maxSteps": 20, "maxTimeMs": 60000 }
+}

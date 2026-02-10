@@ -1,0 +1,26 @@
+{
+  "id": "033-herokuapp-alerts",
+  "url": "https://the-internet.herokuapp.com/javascript_alerts",
+  "category": "create",
+  "difficulty": "hard",
+  "stability": "stable",
+  "task": "Handle all three JavaScript dialog types on this page:\n1. Click 'Click for JS Alert' — accept the alert dialog\n2. Click 'Click for JS Confirm' — accept (OK) the confirmation dialog\n3. Click 'Click for JS Prompt' — type 'Hello CDP' into the prompt text field and accept it\nAfter each dialog interaction, verify the result message appears in the #result area at the bottom. The final result should show the text you typed in the prompt.",
+  "milestones": [
+    {
+      "id": "page_has_buttons",
+      "weight": 0.1,
+      "verify": { "eval_truthy": "document.querySelectorAll('button[onclick]').length >= 3" }
+    },
+    {
+      "id": "result_updated",
+      "weight": 0.3,
+      "verify": { "eval_truthy": "document.getElementById('result')?.textContent?.trim().length > 0" }
+    },
+    {
+      "id": "prompt_text_entered",
+      "weight": 0.6,
+      "verify": { "eval_truthy": "document.getElementById('result')?.textContent?.includes('Hello CDP')" }
+    }
+  ],
+  "budget": { "maxSteps": 20, "maxTimeMs": 60000 }
+}

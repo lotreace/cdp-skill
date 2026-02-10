@@ -1,0 +1,85 @@
+{
+  "testId": "032-herokuapp-shadow",
+  "tabId": "t1019",
+  "wallClockMs": 12500,
+  "verificationSnapshot": {
+    "url": "https://the-internet.herokuapp.com/shadowdom",
+    "title": "The Internet",
+    "timestamp": 1770588329792,
+    "milestones": {
+      "page_loaded": true,
+      "shadow_hosts_found": true,
+      "shadow_content_read": true
+    }
+  },
+  "cliCalls": [
+    {
+      "seq": 1,
+      "input": {"config": {"headless": true}, "steps": [{"openTab": "https://the-internet.herokuapp.com/shadowdom"}]},
+      "output": {"status": "ok", "tab": "t1019", "navigated": true, "context": {"url": "https://the-internet.herokuapp.com/shadowdom", "title": "The Internet"}},
+      "inputBytes": 97,
+      "responseBytes": 1450,
+      "durationMs": 5200
+    },
+    {
+      "seq": 2,
+      "input": {"config": {"tab": "t1019"}, "steps": [{"snapshot": {"detail": "full", "pierceShadow": true}}]},
+      "output": {"status": "ok", "tab": "t1019", "navigated": false, "steps": [{"action": "snapshot", "status": "ok"}]},
+      "inputBytes": 78,
+      "responseBytes": 820,
+      "durationMs": 1800
+    },
+    {
+      "seq": 3,
+      "input": {"config": {"tab": "t1019"}, "steps": [{"pageFunction": "() => { ... shadow DOM extraction ... }"}]},
+      "output": {"status": "ok", "tab": "t1019", "steps": [{"action": "pageFunction", "status": "ok", "output": {"totalElements": 9, "shadowHostCount": 2}}]},
+      "inputBytes": 680,
+      "responseBytes": 2400,
+      "durationMs": 2100
+    },
+    {
+      "seq": 4,
+      "input": {"config": {"tab": "t1019"}, "steps": [{"getDom": "#content"}]},
+      "output": {"status": "ok", "tab": "t1019", "steps": [{"action": "getDom", "status": "ok"}]},
+      "inputBytes": 45,
+      "responseBytes": 1800,
+      "durationMs": 1200
+    }
+  ],
+  "aggregate": {
+    "totalSteps": 4,
+    "totalErrors": 0,
+    "recoveredErrors": 0,
+    "autoForceCount": 0,
+    "jsClickFallbackCount": 0,
+    "totalResponseBytes": 6470,
+    "totalInputBytes": 900,
+    "workaroundCount": 1
+  },
+  "observations": [
+    "Page uses Web Components with custom element <my-paragraph>",
+    "2 shadow hosts found, both with open shadow roots using mode: 'open'",
+    "Shadow roots contain a <style> block and a named <slot> element ('my-text')",
+    "Shadow root fallback content is 'My default text' for both elements",
+    "First shadow host: light DOM has <span slot='my-text'>Let's have some different text!</span>",
+    "Second shadow host: light DOM has <ul slot='my-text'> with two <li> items",
+    "Slotted content replaces the fallback 'My default text' in each shadow root",
+    "pierceShadow snapshot correctly showed content through shadow boundaries"
+  ],
+  "feedback": [
+    {
+      "type": "improvement",
+      "area": "shadow-dom",
+      "title": "pierceShadow snapshot worked well for shadow DOM inspection",
+      "detail": "The pierceShadow option on snapshot correctly revealed content inside shadow roots. However, pageFunction was still needed to distinguish between shadow root content, light DOM content, and slotted content — the snapshot flattens everything together. A dedicated shadow DOM inspection step could be useful.",
+      "files": ["src/cdp-skill.js"]
+    },
+    {
+      "type": "workaround",
+      "area": "shadow-dom",
+      "title": "Used pageFunction to extract shadow root innerHTML and slot assignments",
+      "detail": "Standard snapshot and getDom don't expose shadowRoot.innerHTML or slot.assignedNodes(). Had to use pageFunction with element.shadowRoot traversal to get the detailed breakdown of shadow content vs light DOM vs slotted content.",
+      "files": ["src/cdp-skill.js"]
+    }
+  ]
+}
