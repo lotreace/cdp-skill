@@ -60,9 +60,9 @@ function generateDebugFilename(steps, status, tabId) {
   const actions = steps.slice(0, 3).map(step => {
     // Find the action key in the step
     const actionKeys = ['goto', 'click', 'fill', 'type', 'press', 'scroll', 'snapshot',
-      'query', 'hover', 'wait', 'eval', 'openTab', 'closeTab', 'chromeStatus',
+      'query', 'hover', 'wait', 'sleep', 'pageFunction', 'openTab', 'closeTab',
       'selectOption', 'select', 'viewport', 'cookies', 'back', 'forward', 'drag',
-      'fillForm', 'extract', 'formState', 'assert', 'validate', 'submit'];
+      'frame', 'elementsAt', 'extract', 'formState', 'assert', 'validate', 'submit'];
     for (const key of actionKeys) {
       if (step[key] !== undefined) return key;
     }
@@ -95,7 +95,7 @@ function writeDebugLog(request, response) {
   const status = response.status || 'unknown';
 
   // Extract tab ID from request or response
-  const tabId = request.tab || request.config?.tab || response.tab || response.closed || null;
+  const tabId = request.tab || response.tab || response.closed || null;
 
   const filename = generateDebugFilename(steps, status, tabId);
   const filepath = path.join(debugLogDir, filename);
@@ -114,8 +114,55 @@ function writeDebugLog(request, response) {
   }
 }
 
-// Tab registry - maps short aliases (t1, t2, ...) to targetIds
+// Tab registry - maps short aliases (t1, t2, ...) to {targetId, host, port} entries
 const TAB_REGISTRY_PATH = path.join(os.tmpdir(), 'cdp-skill-tabs.json');
+
+// Frame state registry - persists frame context across CLI invocations, keyed by targetId
+const FRAME_STATE_PATH = path.join(os.tmpdir(), 'cdp-skill-frames.json');
+
+function loadFrameStates() {
+  try {
+    if (fs.existsSync(FRAME_STATE_PATH)) {
+      return JSON.parse(fs.readFileSync(FRAME_STATE_PATH, 'utf8'));
+    }
+  } catch (e) {
+    // Ignore errors, start fresh
+  }
+  return {};
+}
+
+function saveFrameStates(states) {
+  try {
+    fs.writeFileSync(FRAME_STATE_PATH, JSON.stringify(states));
+  } catch (e) {
+    // Ignore errors
+  }
+}
+
+function saveFrameState(targetId, frameState) {
+  const states = loadFrameStates();
+  states[targetId] = { ...frameState, timestamp: Date.now() };
+  saveFrameStates(states);
+}
+
+function loadFrameState(targetId) {
+  const states = loadFrameStates();
+  const state = states[targetId];
+  if (!state) return null;
+  // Expire after 1 hour (frames may have reloaded)
+  if (Date.now() - state.timestamp > 3600000) {
+    delete states[targetId];
+    saveFrameStates(states);
+    return null;
+  }
+  return state;
+}
+
+function clearFrameState(targetId) {
+  const states = loadFrameStates();
+  delete states[targetId];
+  saveFrameStates(states);
+}
 
 function loadTabRegistry() {
   try {
@@ -136,20 +183,41 @@ function saveTabRegistry(registry) {
   }
 }
 
-function registerTab(targetId) {
+function registerTab(targetId, host = 'localhost', port = 9222) {
   const registry = loadTabRegistry();
 
   // Check if already registered
-  for (const [alias, tid] of Object.entries(registry.tabs)) {
-    if (tid === targetId) return alias;
+  for (const [alias, entry] of Object.entries(registry.tabs)) {
+    const existingTargetId = typeof entry === 'string' ? entry : entry.targetId;
+    if (existingTargetId === targetId) return alias;
   }
 
   // Assign new alias
   const alias = `t${registry.nextId}`;
-  registry.tabs[alias] = targetId;
+  registry.tabs[alias] = { targetId, host, port };
   registry.nextId++;
   saveTabRegistry(registry);
   return alias;
+}
+
+function resolveTabEntry(aliasOrTargetId) {
+  if (!aliasOrTargetId) return null;
+
+  // If it looks like a full targetId (32 hex chars), return with defaults
+  if (/^[A-F0-9]{32}$/i.test(aliasOrTargetId)) {
+    return { targetId: aliasOrTargetId, host: 'localhost', port: 9222 };
+  }
+
+  const registry = loadTabRegistry();
+  const entry = registry.tabs[aliasOrTargetId];
+  if (!entry) return null;
+
+  // Defensive: handle stale registry files with string entries
+  if (typeof entry === 'string') {
+    return { targetId: entry, host: 'localhost', port: 9222 };
+  }
+
+  return { targetId: entry.targetId, host: entry.host || 'localhost', port: entry.port || 9222 };
 }
 
 function resolveTabAlias(aliasOrTargetId) {
@@ -162,15 +230,21 @@ function resolveTabAlias(aliasOrTargetId) {
 
   // Try to resolve alias
   const registry = loadTabRegistry();
-  return registry.tabs[aliasOrTargetId] || aliasOrTargetId;
+  const entry = registry.tabs[aliasOrTargetId];
+  if (!entry) return aliasOrTargetId;
+
+  // Defensive: handle stale registry files with string entries
+  return typeof entry === 'string' ? entry : entry.targetId;
 }
 
 function unregisterTab(targetId) {
   const registry = loadTabRegistry();
-  for (const [alias, tid] of Object.entries(registry.tabs)) {
-    if (tid === targetId) {
+  for (const [alias, entry] of Object.entries(registry.tabs)) {
+    const existingTargetId = typeof entry === 'string' ? entry : entry.targetId;
+    if (existingTargetId === targetId) {
       delete registry.tabs[alias];
       saveTabRegistry(registry);
+      clearFrameState(targetId);
       return alias;
     }
   }
@@ -179,8 +253,9 @@ function unregisterTab(targetId) {
 
 function getTabAlias(targetId) {
   const registry = loadTabRegistry();
-  for (const [alias, tid] of Object.entries(registry.tabs)) {
-    if (tid === targetId) return alias;
+  for (const [alias, entry] of Object.entries(registry.tabs)) {
+    const existingTargetId = typeof entry === 'string' ? entry : entry.targetId;
+    if (existingTargetId === targetId) return alias;
   }
   return null;
 }
@@ -283,6 +358,13 @@ function parseInput(input) {
     throw { type: ErrorType.VALIDATION, message: 'Input must be a JSON object' };
   }
 
+  if (json.config) {
+    throw {
+      type: ErrorType.VALIDATION,
+      message: '"config" is no longer supported. Use top-level "tab"/"timeout". Connection params go in openTab: {"steps":[{"openTab":{"url":"...","port":9333}}]}'
+    };
+  }
+
   if (!json.steps) {
     throw { type: ErrorType.VALIDATION, message: 'Missing required "steps" array' };
   }
@@ -325,11 +407,12 @@ function isCloseTabOnly(steps) {
 /**
  * Handle chromeStatus step - lightweight, no session needed
  */
-async function handleChromeStatus(config, step) {
-  const host = config.host || 'localhost';
-  const port = config.port || 9222;
-  const autoLaunch = step.chromeStatus === true || step.chromeStatus?.autoLaunch !== false;
-  const headless = step.chromeStatus?.headless || false;
+async function handleChromeStatus(step) {
+  const params = typeof step.chromeStatus === 'object' ? step.chromeStatus : {};
+  const host = params.host || 'localhost';
+  const port = params.port || 9222;
+  const autoLaunch = step.chromeStatus === true || params.autoLaunch !== false;
+  const headless = params.headless || false;
 
   const status = await getChromeStatus({ host, port, autoLaunch, headless });
 
@@ -351,9 +434,7 @@ async function handleChromeStatus(config, step) {
 /**
  * Handle closeTab step - no session needed, just close the target via CDP
  */
-async function handleCloseTab(config, step) {
-  const host = config.host || 'localhost';
-  const port = config.port || 9222;
+async function handleCloseTab(step) {
   const tabRef = step.closeTab;
 
   if (!tabRef || typeof tabRef !== 'string') {
@@ -363,8 +444,11 @@ async function handleCloseTab(config, step) {
     };
   }
 
-  // Resolve alias to targetId
-  const targetId = resolveTabAlias(tabRef);
+  // Resolve alias to full entry (targetId + host + port)
+  const entry = resolveTabEntry(tabRef);
+  const targetId = entry ? entry.targetId : tabRef;
+  const host = entry ? entry.host : 'localhost';
+  const port = entry ? entry.port : 9222;
   const alias = getTabAlias(targetId);
 
   try {
@@ -420,17 +504,16 @@ async function main() {
     const json = parseInput(input);
     parsedRequest = json;  // Store for error handler
 
-    // Extract config with defaults - tab can be at top level or in config
-    const config = json.config || {};
-    const host = config.host || 'localhost';
-    const port = config.port || 9222;
-    const timeout = config.timeout || 30000;
-    const headless = config.headless || false;  // Run Chrome in headless mode (no focus stealing)
-    const tab = json.tab || config.tab;  // Top-level tab takes precedence
+    // Extract top-level fields
+    const tab = json.tab || null;
+    const timeout = json.timeout || 30000;
+    let host = 'localhost';
+    let port = 9222;
+    let headless = false;
 
     // Handle chromeStatus specially - no session needed
     if (isChromeStatusOnly(json.steps)) {
-      const result = await handleChromeStatus(config, json.steps[0]);
+      const result = await handleChromeStatus(json.steps[0]);
       writeDebugLog(json, result);
       console.log(JSON.stringify(result));
       process.exit(result.status === 'ok' ? 0 : 1);
@@ -438,11 +521,52 @@ async function main() {
 
     // Handle closeTab specially - no session needed, just close the target
     if (isCloseTabOnly(json.steps)) {
-      const result = await handleCloseTab(config, json.steps[0]);
+      const result = await handleCloseTab(json.steps[0]);
       writeDebugLog(json, result);
       console.log(JSON.stringify(result));
       process.exit(result.status === 'ok' ? 0 : 1);
     }
+
+    // Check if first step is openTab or connectTab
+    const firstStep = json.steps[0];
+    const hasOpenTab = firstStep && firstStep.openTab !== undefined;
+    const hasConnectTab = firstStep && firstStep.connectTab !== undefined;
+
+    // Extract URL from openTab if provided
+    let openTabUrl = null;
+    if (hasOpenTab) {
+      const openTabParam = firstStep.openTab;
+      if (typeof openTabParam === 'string') {
+        openTabUrl = openTabParam;
+      } else if (typeof openTabParam === 'object' && openTabParam !== null) {
+        openTabUrl = openTabParam.url || null;
+        // Extract connection overrides from openTab object form
+        if (openTabParam.host) host = openTabParam.host;
+        if (openTabParam.port) port = openTabParam.port;
+        if (openTabParam.headless) headless = openTabParam.headless;
+      }
+    }
+
+    // Extract connection overrides from connectTab object form
+    if (hasConnectTab) {
+      const connectParam = firstStep.connectTab;
+      if (typeof connectParam === 'object' && connectParam !== null) {
+        if (connectParam.host) host = connectParam.host;
+        if (connectParam.port) port = connectParam.port;
+      }
+    }
+
+    // If tab specified, resolve host/port from registry
+    if (tab) {
+      const tabEntry = resolveTabEntry(tab);
+      if (tabEntry) {
+        host = tabEntry.host;
+        port = tabEntry.port;
+      }
+    }
+
+    // Resolve tab alias to targetId
+    const resolvedTargetId = tab ? resolveTabAlias(tab) : null;
 
     // Connect to browser, auto-launch if needed
     browser = createBrowser({ host, port, connectTimeout: timeout });
@@ -471,25 +595,6 @@ async function main() {
 
     // Get page session - requires explicit targetId or openTab step
     let session;
-
-    // Check if first step is openTab or connectTab
-    const firstStep = json.steps[0];
-    const hasOpenTab = firstStep && firstStep.openTab !== undefined;
-    const hasConnectTab = firstStep && firstStep.connectTab !== undefined;
-
-    // Extract URL from openTab if provided
-    let openTabUrl = null;
-    if (hasOpenTab) {
-      const openTabParam = firstStep.openTab;
-      if (typeof openTabParam === 'string') {
-        openTabUrl = openTabParam;
-      } else if (typeof openTabParam === 'object' && openTabParam !== null && openTabParam.url) {
-        openTabUrl = openTabParam.url;
-      }
-    }
-
-    // Resolve tab alias to targetId
-    const resolvedTargetId = tab ? resolveTabAlias(tab) : null;
 
     if (resolvedTargetId) {
       try {
@@ -529,7 +634,7 @@ async function main() {
         }
 
         session = await browser.attachToPage(connectTargetId);
-        const tabAlias = getTabAlias(connectTargetId) || registerTab(connectTargetId);
+        const tabAlias = getTabAlias(connectTargetId) || registerTab(connectTargetId, host, port);
         json.steps[0]._connectTabHandled = true;
         json.steps[0]._connectTabAlias = tabAlias;
       } catch (err) {
@@ -543,7 +648,7 @@ async function main() {
       try {
         session = await browser.newPage();
         // Register the new tab and get its alias
-        const tabAlias = registerTab(session.targetId);
+        const tabAlias = registerTab(session.targetId, host, port);
         // Mark openTab as handled and store URL/alias if provided
         json.steps[0]._openTabHandled = true;
         json.steps[0]._openTabUrl = openTabUrl;
@@ -572,7 +677,10 @@ async function main() {
     }
 
     // Create dependencies
-    pageController = createPageController(session);
+    pageController = createPageController(session, {
+      onFrameChanged: (frameState) => saveFrameState(session.targetId, frameState),
+      getSavedFrameState: () => loadFrameState(session.targetId)
+    });
     const frameContextProvider = () => pageController.getFrameContext();
     const elementLocator = createElementLocator(session, { getFrameContext: frameContextProvider });
     const inputEmulator = createInputEmulator(session);
@@ -604,7 +712,7 @@ async function main() {
     };
 
     // Run steps (pass tab alias for auto-screenshots)
-    const tabAlias = getTabAlias(session.targetId) || registerTab(session.targetId);
+    const tabAlias = getTabAlias(session.targetId) || registerTab(session.targetId, host, port);
     const result = await runSteps(deps, json.steps, {
       stopOnError: true,
       stepTimeout: timeout,
@@ -650,7 +758,7 @@ async function main() {
     // Build streamlined output
     const output = {
       status: result.status,
-      tab: getTabAlias(session.targetId) || registerTab(session.targetId),
+      tab: getTabAlias(session.targetId) || registerTab(session.targetId, host, port),
       // Site profile — prominent, right after status/tab
       siteProfile,
       actionRequired,

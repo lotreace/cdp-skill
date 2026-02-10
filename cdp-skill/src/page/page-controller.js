@@ -39,9 +39,13 @@ export const WaitCondition = Object.freeze({
 /**
  * Create a page controller for navigation and lifecycle events
  * @param {import('../types.js').CDPSession} cdpClient - CDP client with send/on/off methods
+ * @param {Object} [options] - Options
+ * @param {function(Object): void} [options.onFrameChanged] - Called when frame context changes (for persistence)
+ * @param {function(): Object|null} [options.getSavedFrameState] - Returns saved frame state (for restoration)
  * @returns {Object} Page controller interface
  */
-export function createPageController(cdpClient) {
+export function createPageController(cdpClient, options = {}) {
+  const { onFrameChanged, getSavedFrameState } = options;
   let mainFrameId = null;
   let currentFrameId = null;
   let currentExecutionContextId = null;
@@ -436,6 +440,56 @@ export function createPageController(cdpClient) {
     addListener('Network.loadingFinished', onRequestFinished);
     addListener('Network.loadingFailed', onRequestFinished);
     addListener('Inspector.targetCrashed', onTargetCrashed);
+
+    // Restore persisted frame context from a previous CLI invocation
+    if (getSavedFrameState) {
+      const saved = getSavedFrameState();
+      if (saved && saved.frameId && saved.frameId !== mainFrameId) {
+        // Verify the saved frame still exists in the frame tree
+        function findAllFrames(node) {
+          const frames = [node];
+          if (node.childFrames) {
+            for (const child of node.childFrames) {
+              frames.push(...findAllFrames(child));
+            }
+          }
+          return frames;
+        }
+        const allFrames = findAllFrames(frameTree);
+        const savedFrame = allFrames.find(f => f.frame.id === saved.frameId);
+
+        if (savedFrame) {
+          currentFrameId = saved.frameId;
+          // Try to use the saved contextId if it's still in our context map
+          const knownContextId = frameExecutionContexts.get(saved.frameId);
+          if (knownContextId) {
+            currentExecutionContextId = knownContextId;
+          } else {
+            // Create a fresh isolated world for this frame
+            try {
+              const { executionContextId } = await cdpClient.send('Page.createIsolatedWorld', {
+                frameId: saved.frameId,
+                worldName: 'cdp-automation'
+              });
+              currentExecutionContextId = executionContextId;
+              frameExecutionContexts.set(saved.frameId, executionContextId);
+            } catch {
+              // Frame context restoration failed — fall back to main frame
+              currentFrameId = mainFrameId;
+              currentExecutionContextId = frameExecutionContexts.get(mainFrameId) || null;
+              if (onFrameChanged) {
+                onFrameChanged({ frameId: null, contextId: null });
+              }
+            }
+          }
+        } else {
+          // Frame no longer exists — clear stale state
+          if (onFrameChanged) {
+            onFrameChanged({ frameId: null, contextId: null });
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -934,6 +988,11 @@ export function createPageController(cdpClient) {
       result.warning = warning;
     }
 
+    // Persist frame state across CLI invocations
+    if (onFrameChanged) {
+      onFrameChanged({ frameId: currentFrameId, contextId: currentExecutionContextId });
+    }
+
     return result;
   }
 
@@ -944,6 +1003,11 @@ export function createPageController(cdpClient) {
   async function switchToMainFrame() {
     currentFrameId = mainFrameId;
     currentExecutionContextId = frameExecutionContexts.get(mainFrameId) || null;
+
+    // Clear persisted frame state (back to main)
+    if (onFrameChanged) {
+      onFrameChanged({ frameId: null, contextId: null });
+    }
 
     const { frameTree } = await cdpClient.send('Page.getFrameTree');
 
