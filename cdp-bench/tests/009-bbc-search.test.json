@@ -1,0 +1,23 @@
+{
+  "id": "009-bbc-search",
+  "url": "https://www.bbc.com",
+  "category": "read",
+  "difficulty": "medium",
+  "stability": "stable",
+  "task": "Use the search function to find articles about 'climate' and navigate to one of the result articles.",
+  "milestones": [
+    {
+      "id": "article_reached",
+      "weight": 1.0,
+      "description": "Navigated to an article from search results",
+      "verify": {
+        "all": [
+          { "url_contains": "bbc.com" },
+          { "eval_truthy": "document.querySelector('article, [data-component=\"text-block\"], main')?.textContent?.length > 200" }
+        ]
+      }
+    }
+  ],
+  "budget": { "maxSteps": 20, "maxTimeMs": 90000 },
+  "skipWhen": { "eval_truthy": "document.title.includes('blocked') || document.title.includes('CAPTCHA')" }
+}

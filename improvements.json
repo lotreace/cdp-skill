@@ -1,7 +1,7 @@
 {
   "meta": {
     "totalVotes": 87,
-    "lastUpdated": "2026-02-08T22:20:24.908Z"
+    "lastUpdated": "2026-02-10T18:33:32.862Z"
   },
   "issues": [
     {
@@ -264,7 +264,7 @@
       "id": "7.1",
       "section": "Other Issues",
       "title": "New tab detection/tracking when links open in new tabs",
-      "votes": 3,
+      "votes": 4,
       "status": "open",
       "symptoms": [
         "Click a link that opens in new tab, navigated: false returned",
@@ -736,7 +736,7 @@
       "id": "11.1",
       "section": "Navigation/Detection Issues",
       "title": "SPA client-side navigation not detected",
-      "votes": 2,
+      "votes": 3,
       "status": "open",
       "symptoms": [
         "Click on GitHub tab reports navigated: false",
@@ -932,7 +932,7 @@
       "id": "7.5",
       "section": "Other Issues",
       "title": "Clicking hidden radio/checkbox inputs via refs reports 'ok' status with a warnin",
-      "votes": 3,
+      "votes": 5,
       "status": "open",
       "symptoms": [
         "Clicking hidden radio/checkbox inputs via refs reports 'ok' status with a warning about visibility, but does NOT actually toggle the input state. The click appears to succeed from the response but has no effect. This is misleading - either the click should actually work (e.g., by automatically clicking the associated label), or it should report a clearer failure indicating the input was not toggled. On demoqa.com, radio buttons and checkboxes use hidden inputs with visible CSS-styled labels, which is an extremely common pattern across modern web frameworks."
@@ -950,7 +950,7 @@
       "id": "7.6",
       "section": "Other Issues",
       "title": "TinyMCE editor on the-internet.herokuapp.com is permanently in read-only mode du",
-      "votes": 2,
+      "votes": 4,
       "status": "open",
       "symptoms": [
         "TinyMCE editor on the-internet.herokuapp.com is permanently in read-only mode due to expired Tiny Cloud API key. The console shows 'All created TinyMCE editors are configured to be read-only' and 'you have no more editor loads available this month'. This means the test cannot be completed via normal user interaction (switchToFrame + fill/type). The only way to set content is via direct DOM manipulation through pageFunction, which bypasses the editor's read-only restriction. This test should either use a self-hosted TinyMCE instance without cloud licensing, or the test expectations should acknowledge that DOM manipulation is the expected approach."
@@ -988,7 +988,7 @@
       "id": "4.5",
       "section": "Input / Typing Issues",
       "title": "No native file upload support - had to use pageFunction with Dropzone API",
-      "votes": 1,
+      "votes": 2,
       "status": "open",
       "symptoms": [
         "cdp-skill fill step rejects file inputs as 'not editable'. Had to use pageFunction to call Dropzone.forElement().addFile() to programmatically upload. CDP protocol supports DOM.setFileInputFiles which could be exposed as a dedicated step (e.g., 'uploadFile' or 'setFileInput') for native file upload support without requiring pageFunction workarounds."
@@ -1063,6 +1063,134 @@
       "source": "runner-feedback",
       "sourceTests": [
         "038-demoqa-selectmenu"
+      ]
+    },
+    {
+      "id": "7.7",
+      "section": "Other Issues",
+      "title": "Using refs avoids selector escaping complexity",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "When dealing with complex selectors containing quotes or special characters, taking a snapshot first and using refs (e.g., s1e9) is more reliable and easier than managing shell/JSON escaping for data-test attributes."
+      ],
+      "expected": "",
+      "workaround": "When dealing with complex selectors containing quotes or special characters, taking a snapshot first and using refs (e.g., s1e9) is more reliable and easier than managing shell/JSON escaping for data-test attributes.",
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "001-saucedemo-checkout"
+      ]
+    },
+    {
+      "id": "7.8",
+      "section": "Other Issues",
+      "title": "Click step errors even when navigation succeeds",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "In call #5, the fill succeeded and triggered form submission/navigation to /secure, but the click step reported an error 'CDP error: Cannot find context with specified id'. The navigation was successful and the page landed on the secure area, but the click step status was marked as error."
+      ],
+      "expected": "",
+      "workaround": null,
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "002-heroku-forms"
+      ]
+    },
+    {
+      "id": "7.10",
+      "section": "Other Issues",
+      "title": "Direct section navigation more reliable than search",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "For topic-based searches on Al Jazeera, directly navigating to topical sections (e.g., /climate-crisis, /middle-east) is more reliable than using the site's search functionality. This avoids search result loading issues and reduces steps."
+      ],
+      "expected": "",
+      "workaround": "For topic-based searches on Al Jazeera, directly navigating to topical sections (e.g., /climate-crisis, /middle-east) is more reliable than using the site's search functionality. This avoids search result loading issues and reduces steps.",
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "009-aljazeera-search"
+      ]
+    },
+    {
+      "id": "7.11",
+      "section": "Other Issues",
+      "title": "Used pageFunction to extract full page text (innerText.substring(0, 5000)) as a ",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Used pageFunction to extract full page text (innerText.substring(0, 5000)) as a reliable way to get structured recipe data including serving size and ingredients. This was more efficient than multiple scroll + snapshotSearch combinations for content-heavy recipe pages."
+      ],
+      "expected": "",
+      "workaround": "Used pageFunction to extract full page text (innerText.substring(0, 5000)) as a reliable way to get structured recipe data including serving size and ingredients. This was more efficient than multiple scroll + snapshotSearch combinations for content-heavy recipe pages.",
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "010-allrecipes-search"
+      ]
+    },
+    {
+      "id": "10.12",
+      "section": "Snapshot Content/Accuracy Issues",
+      "title": "Snapshot doesn't show state change after failed drag",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "After the first drag attempt with mouse-events method (call 4), the viewportSnapshot still showed 'banner A' and 'banner B' even though visually the drag occurred. The snapshot didn't reflect that nothing actually changed in the DOM. This made it harder to diagnose that the drag didn't work."
+      ],
+      "expected": "",
+      "workaround": null,
+      "files": [
+        "src/aria.js"
+      ],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "011-heroku-dragdrop"
+      ]
+    },
+    {
+      "id": "7.12",
+      "section": "Other Issues",
+      "title": "getDom useful for understanding page mechanics",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Using getDom step to inspect the full page HTML revealed the JavaScript event handlers and HTML5 drag-and-drop implementation details. This helped identify that the page uses HTML5 DnD, not a custom drag library."
+      ],
+      "expected": "",
+      "workaround": "Using getDom step to inspect the full page HTML revealed the JavaScript event handlers and HTML5 drag-and-drop implementation details. This helped identify that the page uses HTML5 DnD, not a custom drag library.",
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "011-heroku-dragdrop"
+      ]
+    },
+    {
+      "id": "7.13",
+      "section": "Other Issues",
+      "title": "buildVerifyCapture wraps eval_truthy expressions containing statements in !!() causing syntax errors",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        ""
+      ],
+      "expected": "",
+      "workaround": null,
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "039-demoqa-progressbar"
       ]
     }
   ],
