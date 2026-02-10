@@ -329,7 +329,11 @@ export async function executeStep(deps, step, options = {}) {
       stepResult.action = 'newTab';
       if (step._newTabHandled) {
         if (step._newTabUrl) {
-          await pageController.navigate(step._newTabUrl);
+          const navOptions = {};
+          if (step._newTabTimeout) {
+            navOptions.timeout = step._newTabTimeout;
+          }
+          await pageController.navigate(step._newTabUrl, navOptions);
           await pageController.waitForNetworkSettle();
 
           // Site profile check (same as goto)

@@ -356,7 +356,7 @@ export function createRoleQueryExecutor(session, elementLocator, options = {}) {
       throw new Error(`Role query error: ${error.message}`);
     }
 
-    const { createElementHandle } = await import('./dom.js');
+    const { createElementHandle } = await import('./dom/element-handle.js');
     const elements = props.result
       .filter(p => /^\d+$/.test(p.name) && p.value && p.value.objectId)
       .map(p => createElementHandle(session, p.value.objectId, {

@@ -412,7 +412,7 @@ export function validateStepInternal(step) {
       // newTab can be:
       // - true: just open a blank tab
       // - string: open tab and navigate to URL
-      // - object with options: {url: "...", host: "...", port: N, headless: bool}
+      // - object with options: {url: "...", host: "...", port: N, headless: bool, timeout: N}
       if (params !== true && typeof params !== 'string' && (typeof params !== 'object' || params === null)) {
         errors.push('newTab must be true, a URL string, or an options object');
       }
@@ -428,6 +428,9 @@ export function validateStepInternal(step) {
         }
         if (params.headless !== undefined && typeof params.headless !== 'boolean') {
           errors.push('newTab headless must be a boolean');
+        }
+        if (params.timeout !== undefined && typeof params.timeout !== 'number') {
+          errors.push('newTab timeout must be a number');
         }
       }
       break;

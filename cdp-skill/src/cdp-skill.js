@@ -60,7 +60,7 @@ function generateDebugFilename(steps, status, tabId) {
   const actions = steps.slice(0, 3).map(step => {
     // Find the action key in the step
     const actionKeys = ['goto', 'click', 'fill', 'type', 'press', 'scroll', 'snapshot',
-      'query', 'hover', 'wait', 'sleep', 'pageFunction', 'openTab', 'closeTab',
+      'query', 'hover', 'wait', 'sleep', 'pageFunction', 'newTab', 'closeTab',
       'selectOption', 'select', 'viewport', 'cookies', 'back', 'forward', 'drag',
       'frame', 'elementsAt', 'extract', 'formState', 'assert', 'validate', 'submit'];
     for (const key of actionKeys) {
@@ -361,7 +361,7 @@ function parseInput(input) {
   if (json.config) {
     throw {
       type: ErrorType.VALIDATION,
-      message: '"config" is no longer supported. Use top-level "tab"/"timeout". Connection params go in openTab: {"steps":[{"openTab":{"url":"...","port":9333}}]}'
+      message: '"config" is no longer supported. Use top-level "tab"/"timeout". Connection params go in newTab: {"steps":[{"newTab":{"url":"...","port":9333}}]}'
     };
   }
 
@@ -527,32 +527,34 @@ async function main() {
       process.exit(result.status === 'ok' ? 0 : 1);
     }
 
-    // Check if first step is openTab or connectTab
+    // Check if first step is newTab or switchTab
     const firstStep = json.steps[0];
-    const hasOpenTab = firstStep && firstStep.openTab !== undefined;
-    const hasConnectTab = firstStep && firstStep.connectTab !== undefined;
+    const hasNewTab = firstStep && firstStep.newTab !== undefined;
+    const hasSwitchTab = firstStep && firstStep.switchTab !== undefined;
 
-    // Extract URL from openTab if provided
-    let openTabUrl = null;
-    if (hasOpenTab) {
-      const openTabParam = firstStep.openTab;
-      if (typeof openTabParam === 'string') {
-        openTabUrl = openTabParam;
-      } else if (typeof openTabParam === 'object' && openTabParam !== null) {
-        openTabUrl = openTabParam.url || null;
-        // Extract connection overrides from openTab object form
-        if (openTabParam.host) host = openTabParam.host;
-        if (openTabParam.port) port = openTabParam.port;
-        if (openTabParam.headless) headless = openTabParam.headless;
+    // Extract URL and options from newTab if provided
+    let newTabUrl = null;
+    let newTabTimeout = null;
+    if (hasNewTab) {
+      const newTabParam = firstStep.newTab;
+      if (typeof newTabParam === 'string') {
+        newTabUrl = newTabParam;
+      } else if (typeof newTabParam === 'object' && newTabParam !== null) {
+        newTabUrl = newTabParam.url || null;
+        newTabTimeout = newTabParam.timeout || null;
+        // Extract connection overrides from newTab object form
+        if (newTabParam.host) host = newTabParam.host;
+        if (newTabParam.port) port = newTabParam.port;
+        if (newTabParam.headless) headless = newTabParam.headless;
       }
     }
 
-    // Extract connection overrides from connectTab object form
-    if (hasConnectTab) {
-      const connectParam = firstStep.connectTab;
-      if (typeof connectParam === 'object' && connectParam !== null) {
-        if (connectParam.host) host = connectParam.host;
-        if (connectParam.port) port = connectParam.port;
+    // Extract connection overrides from switchTab object form
+    if (hasSwitchTab) {
+      const switchParam = firstStep.switchTab;
+      if (typeof switchParam === 'object' && switchParam !== null) {
+        if (switchParam.host) host = switchParam.host;
+        if (switchParam.port) port = switchParam.port;
       }
     }
 
@@ -593,7 +595,7 @@ async function main() {
       }
     }
 
-    // Get page session - requires explicit targetId or openTab step
+    // Get page session - requires explicit targetId or newTab step
     let session;
 
     if (resolvedTargetId) {
@@ -605,54 +607,56 @@ async function main() {
           message: `Could not attach to tab ${tab}${tab !== resolvedTargetId ? ` (${resolvedTargetId})` : ''}: ${err.message}`
         };
       }
-    } else if (hasConnectTab) {
+    } else if (hasSwitchTab) {
       // Connect to an existing tab by alias, targetId, or URL regex
       try {
-        const connectParam = firstStep.connectTab;
-        let connectTargetId = null;
+        const switchParam = firstStep.switchTab;
+        let switchTargetId = null;
 
-        if (typeof connectParam === 'string') {
+        if (typeof switchParam === 'string') {
           // Try alias first, then targetId
-          connectTargetId = resolveTabAlias(connectParam);
-        } else if (connectParam && typeof connectParam === 'object') {
-          if (connectParam.targetId) {
-            connectTargetId = connectParam.targetId;
-          } else if (connectParam.url) {
+          switchTargetId = resolveTabAlias(switchParam);
+        } else if (switchParam && typeof switchParam === 'object') {
+          if (switchParam.targetId) {
+            switchTargetId = switchParam.targetId;
+          } else if (switchParam.url) {
             // Find tab by URL regex
             const pages = await browser.getPages();
-            const urlRegex = new RegExp(connectParam.url);
+            const urlRegex = new RegExp(switchParam.url);
             const match = pages.find(p => urlRegex.test(p.url));
             if (!match) {
-              throw new Error(`No tab matches URL pattern: ${connectParam.url}`);
+              throw new Error(`No tab matches URL pattern: ${switchParam.url}`);
             }
-            connectTargetId = match.targetId;
+            switchTargetId = match.targetId;
           }
         }
 
-        if (!connectTargetId) {
-          throw new Error('Could not resolve connectTab target');
+        if (!switchTargetId) {
+          throw new Error('Could not resolve switchTab target');
         }
 
-        session = await browser.attachToPage(connectTargetId);
-        const tabAlias = getTabAlias(connectTargetId) || registerTab(connectTargetId, host, port);
-        json.steps[0]._connectTabHandled = true;
-        json.steps[0]._connectTabAlias = tabAlias;
+        session = await browser.attachToPage(switchTargetId);
+        const tabAlias = getTabAlias(switchTargetId) || registerTab(switchTargetId, host, port);
+        json.steps[0]._switchTabHandled = true;
+        json.steps[0]._switchTabAlias = tabAlias;
       } catch (err) {
         throw {
           type: ErrorType.CONNECTION,
-          message: `connectTab failed: ${err.message}`
+          message: `switchTab failed: ${err.message}`
         };
       }
-    } else if (hasOpenTab) {
-      // Create new tab via openTab step
+    } else if (hasNewTab) {
+      // Create new tab via newTab step
       try {
-        session = await browser.newPage();
+        // Create blank tab - URL navigation happens in step executor
+        session = await browser.newPage('about:blank');
         // Register the new tab and get its alias
         const tabAlias = registerTab(session.targetId, host, port);
-        // Mark openTab as handled and store URL/alias if provided
-        json.steps[0]._openTabHandled = true;
-        json.steps[0]._openTabUrl = openTabUrl;
-        json.steps[0]._openTabAlias = tabAlias;
+        // Mark newTab as handled and store URL/alias/timeout if provided
+        json.steps[0]._newTabHandled = true;
+        json.steps[0]._newTabUrl = newTabUrl;
+        json.steps[0]._newTabTimeout = newTabTimeout;
+        json.steps[0]._newTabAlias = tabAlias;
       } catch (err) {
         if (err.message.includes('no browser is open')) {
           throw {
@@ -666,12 +670,12 @@ async function main() {
         };
       }
     } else {
-      // No targetId and no openTab/connectTab step - fail with helpful message
+      // No targetId and no newTab/switchTab step - fail with helpful message
       throw {
         type: ErrorType.VALIDATION,
         message: `No tab specified. Either:\n` +
-          `  1. Use {"steps":[{"openTab":"url"},...]} to create a new tab\n` +
-          `  2. Use {"steps":[{"connectTab":"t1"},...]} to connect to an existing tab\n` +
+          `  1. Use {"steps":[{"newTab":"url"},...]} to create a new tab\n` +
+          `  2. Use {"steps":[{"switchTab":"t1"},...]} to connect to an existing tab\n` +
           `  3. Pass tab id: {"tab":"t1", "steps":[...]}`
       };
     }
@@ -736,7 +740,7 @@ async function main() {
       screenshotPath = null;
     }
 
-    // Bubble up site profile info from goto/openTab steps to top level
+    // Bubble up site profile info from goto/newTab steps to top level
     let siteProfile = undefined;
     let actionRequired = undefined;
     for (const step of result.steps) {

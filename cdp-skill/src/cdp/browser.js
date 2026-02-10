@@ -196,6 +196,8 @@ export async function launchChrome(options = {}) {
 
   if (headless) {
     args.push('--headless=new');
+    args.push('--disable-dev-shm-usage');
+    args.push('--disable-software-rasterizer');
   }
 
   // Chrome requires --user-data-dir for remote debugging (as of Chrome 129+)
