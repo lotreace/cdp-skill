@@ -159,7 +159,9 @@ export async function executeExtract(deps, params) {
           };
         }
 
-        return { error: 'Could not detect data type. Use type: "table" or "list" option.', detectedType };
+        // Fallback: extract text content when element is not a table or list
+        const text = (el.textContent || '').trim();
+        return { type: 'text', text, tagName };
       })()
     `;
   const extractArgs = { expression: extractExpr, returnByValue: true };
