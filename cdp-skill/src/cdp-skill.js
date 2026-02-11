@@ -713,7 +713,8 @@ async function main() {
       consoleCapture,
       pdfCapture,
       ariaSnapshot,
-      cookieManager
+      cookieManager,
+      registerNewTab: (targetId) => registerTab(targetId, host, port)
     };
 
     // Run steps (pass tab alias for auto-screenshots)

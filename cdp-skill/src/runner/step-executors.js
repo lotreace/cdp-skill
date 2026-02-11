@@ -207,6 +207,12 @@ export async function executeStep(deps, step, options = {}) {
             .filter(p => !tabsBefore.has(p.targetId))
             .map(p => ({ targetId: p.targetId, url: p.url, title: p.title }));
           if (newTabs.length > 0) {
+            // Register new tabs in the tab registry so agents can switch to them
+            if (deps.registerNewTab) {
+              for (const tab of newTabs) {
+                tab.alias = deps.registerNewTab(tab.targetId);
+              }
+            }
             stepResult.output = stepResult.output || {};
             stepResult.output.newTabs = newTabs;
           }
