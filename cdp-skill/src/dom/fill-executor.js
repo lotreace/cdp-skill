@@ -57,6 +57,33 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
     return params;
   }
 
+  /**
+   * Select all and fill with value, handling the empty-string case.
+   * When value is "" and clear is true, presses Delete after selectAll
+   * to actually remove the selected content (insertText("") is a no-op).
+   */
+  async function selectAndFill(value, clear) {
+    if (clear) {
+      await inputEmulator.selectAll();
+    }
+    if (value === '' && clear) {
+      // insertText("") is a no-op in CDP — press Delete to remove selected text
+      await inputEmulator.press('Delete');
+      // Dispatch input/change events so frameworks (React, Vue, etc.) react to the clear
+      await session.send('Runtime.evaluate', evalParams(`
+        (function() {
+          const el = document.activeElement;
+          if (el) {
+            el.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+          }
+        })()
+      `, true));
+    } else {
+      await inputEmulator.insertText(String(value));
+    }
+  }
+
   async function fillByRef(ref, value, opts = {}) {
     const { clear = true, react = false } = opts;
 
@@ -120,11 +147,7 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
         functionDeclaration: `function() { this.focus(); }`
       });
 
-      if (clear) {
-        await inputEmulator.selectAll();
-      }
-
-      await inputEmulator.insertText(String(value));
+      await selectAndFill(value, clear);
 
       return { filled: true, ref, method: 'insertText' };
     } finally {
@@ -167,11 +190,7 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
         functionDeclaration: `function() { this.focus(); }`
       });
 
-      if (clear) {
-        await inputEmulator.selectAll();
-      }
-
-      await inputEmulator.insertText(String(value));
+      await selectAndFill(value, clear);
 
       return { filled: true, selector, method: 'insertText' };
     } catch (e) {
@@ -396,11 +415,7 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
         functionDeclaration: `function() { this.focus(); }`
       });
 
-      if (clear) {
-        await inputEmulator.selectAll();
-      }
-
-      await inputEmulator.insertText(String(value));
+      await selectAndFill(value, clear);
 
       return { filled: true, label, method: 'insertText', foundBy: foundMethod };
     } catch (e) {

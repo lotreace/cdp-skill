@@ -9,7 +9,7 @@
       "section": "Frame / Context Issues",
       "title": "Frame context doesn't persist across CLI invocations",
       "votes": 4,
-      "status": "open",
+      "status": "implemented",
       "symptoms": [
         "Call switchToFrame, next CLI call reverts to main frame",
         "listFrames shows currentFrameId back to mainFrameId"
@@ -20,7 +20,13 @@
         "src/cdp-skill.js",
         "src/page.js"
       ],
-      "fixAttempts": []
+      "fixAttempts": [
+        {
+          "crank": 9,
+          "outcome": "already_fixed",
+          "notes": "Frame persistence was implemented in v1.0.9 as part of iframe_context fix. Tested: switchToFrame persists frameId to $TMPDIR/cdp-skill-frames.json and restores on next CLI invocation."
+        }
+      ]
     },
     {
       "id": "3.2",
