@@ -20,7 +20,8 @@ import {
   getCurrentUrl,
   getElementAtPoint,
   detectNavigation,
-  releaseObject
+  releaseObject,
+  isContextDestroyed
 } from '../utils.js';
 
 /**
@@ -373,19 +374,29 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       await inputEmulator.click(x, y);
       await sleep(50);
 
-      const verifyResult = await session.send('Runtime.callFunctionOn', {
-        objectId: targetObjectId,
-        functionDeclaration: `function() {
-          this.removeEventListener('pointerdown', this.__ptrHandler);
-          document.removeEventListener('pointerdown', this.__docHandler, { capture: true });
-          const received = this.__clickReceived;
-          delete this.__clickReceived;
-          delete this.__ptrHandler;
-          delete this.__docHandler;
-          return received;
-        }`,
-        returnByValue: true
-      });
+      let verifyResult;
+      try {
+        verifyResult = await session.send('Runtime.callFunctionOn', {
+          objectId: targetObjectId,
+          functionDeclaration: `function() {
+            this.removeEventListener('pointerdown', this.__ptrHandler);
+            document.removeEventListener('pointerdown', this.__docHandler, { capture: true });
+            const received = this.__clickReceived;
+            delete this.__clickReceived;
+            delete this.__ptrHandler;
+            delete this.__docHandler;
+            return received;
+          }`,
+          returnByValue: true
+        });
+      } catch (verifyError) {
+        // Context destroyed during verification means click likely triggered navigation
+        // Treat as successful click with navigation
+        if (isContextDestroyed(null, verifyError)) {
+          return { targetReceived: true, contextDestroyed: true };
+        }
+        throw verifyError;
+      }
 
       const targetReceived = verifyResult.result.value === true;
       const result = { targetReceived };
@@ -524,19 +535,29 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     await sleep(50);
 
     // Check if pointerdown was received
-    const verifyResult = await session.send('Runtime.evaluate', frameEvalParams(`
-        (function() {
-          const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
-          if (!el) return { targetReceived: false, reason: 'element not found' };
-          if (el.__ptrHandler) el.removeEventListener('pointerdown', el.__ptrHandler);
-          if (el.__docHandler) document.removeEventListener('pointerdown', el.__docHandler, { capture: true });
-          const received = el.__clickReceived;
-          delete el.__clickReceived;
-          delete el.__ptrHandler;
-          delete el.__docHandler;
-          return { targetReceived: received };
-        })()
-      `, true));
+    let verifyResult;
+    try {
+      verifyResult = await session.send('Runtime.evaluate', frameEvalParams(`
+          (function() {
+            const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
+            if (!el) return { targetReceived: false, reason: 'element not found' };
+            if (el.__ptrHandler) el.removeEventListener('pointerdown', el.__ptrHandler);
+            if (el.__docHandler) document.removeEventListener('pointerdown', el.__docHandler, { capture: true });
+            const received = el.__clickReceived;
+            delete el.__clickReceived;
+            delete el.__ptrHandler;
+            delete el.__docHandler;
+            return { targetReceived: received };
+          })()
+        `, true));
+    } catch (verifyError) {
+      // Context destroyed during verification means click likely triggered navigation
+      // Treat as successful click with navigation
+      if (isContextDestroyed(null, verifyError)) {
+        return { targetReceived: true, contextDestroyed: true };
+      }
+      throw verifyError;
+    }
 
     return verifyResult.result.value || { targetReceived: false };
   }

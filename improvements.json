@@ -33,7 +33,7 @@
       "section": "Shadow DOM Issues",
       "title": "Hover doesn't support coordinates",
       "votes": 1,
-      "status": "open",
+      "status": "implemented",
       "symptoms": [
         "{\"hover\": {\"x\": 100, \"y\": 200}} not supported",
         "Cannot trigger hover on shadow DOM elements without selector"
@@ -43,7 +43,15 @@
       "files": [
         "src/runner.js"
       ],
-      "fixAttempts": []
+      "fixAttempts": [
+        {
+          "crank": 11,
+          "timestamp": "2026-02-11T21:14:01.812Z",
+          "outcome": "already_implemented",
+          "notes": "Coordinate-based hover already supported: validation in step-registry.js:457-467, execution in execute-interaction.js:87-95, documented in SKILL.md:226"
+        }
+      ],
+      "implementedVersion": "1.0.13"
     },
     {
       "id": "4.1",
