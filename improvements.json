@@ -1,7 +1,7 @@
 {
   "meta": {
     "totalVotes": 87,
-    "lastUpdated": "2026-02-10T18:33:32.862Z"
+    "lastUpdated": "2026-02-10T21:07:52.034Z"
   },
   "issues": [
     {
@@ -111,7 +111,7 @@
       "id": "4.4",
       "section": "Input / Typing Issues",
       "title": "Keyboard shortcuts with modifiers don't trigger SPA event handlers",
-      "votes": 4,
+      "votes": 6,
       "status": "open",
       "symptoms": [
         "Meta+k dispatches keydown but doesn't trigger GitHub command palette",
@@ -264,7 +264,7 @@
       "id": "7.1",
       "section": "Other Issues",
       "title": "New tab detection/tracking when links open in new tabs",
-      "votes": 4,
+      "votes": 9,
       "status": "open",
       "symptoms": [
         "Click a link that opens in new tab, navigated: false returned",
@@ -353,7 +353,7 @@
       "id": "8.2",
       "section": "Stagehand-Inspired Improvements",
       "title": "Lazy selector resolution (eliminate stale refs)",
-      "votes": 3,
+      "votes": 5,
       "status": "open",
       "symptoms": [
         "Cached element handles can become stale creating stale element errors",
@@ -932,7 +932,7 @@
       "id": "7.5",
       "section": "Other Issues",
       "title": "Clicking hidden radio/checkbox inputs via refs reports 'ok' status with a warnin",
-      "votes": 5,
+      "votes": 8,
       "status": "open",
       "symptoms": [
         "Clicking hidden radio/checkbox inputs via refs reports 'ok' status with a warning about visibility, but does NOT actually toggle the input state. The click appears to succeed from the response but has no effect. This is misleading - either the click should actually work (e.g., by automatically clicking the associated label), or it should report a clearer failure indicating the input was not toggled. On demoqa.com, radio buttons and checkboxes use hidden inputs with visible CSS-styled labels, which is an extremely common pattern across modern web frameworks."
@@ -950,7 +950,7 @@
       "id": "7.6",
       "section": "Other Issues",
       "title": "TinyMCE editor on the-internet.herokuapp.com is permanently in read-only mode du",
-      "votes": 4,
+      "votes": 5,
       "status": "open",
       "symptoms": [
         "TinyMCE editor on the-internet.herokuapp.com is permanently in read-only mode due to expired Tiny Cloud API key. The console shows 'All created TinyMCE editors are configured to be read-only' and 'you have no more editor loads available this month'. This means the test cannot be completed via normal user interaction (switchToFrame + fill/type). The only way to set content is via direct DOM manipulation through pageFunction, which bypasses the editor's read-only restriction. This test should either use a self-hosted TinyMCE instance without cloud licensing, or the test expectations should acknowledge that DOM manipulation is the expected approach."
@@ -968,7 +968,7 @@
       "id": "10.11",
       "section": "Snapshot Content/Accuracy Issues",
       "title": "Snapshot returns empty YAML inside frameset frames",
-      "votes": 1,
+      "votes": 2,
       "status": "open",
       "symptoms": [
         "After switching to frame-left (a frame inside a frameset), snapshot returned {yaml: '', refs: {}}. The accessibility tree may not properly traverse frameset-based frames. Had to use pageFunction as fallback to read text content."
@@ -1029,7 +1029,7 @@
       "id": "1.4",
       "section": "Timeout / Actionability Issues",
       "title": "Time list items outside viewport require force click",
-      "votes": 1,
+      "votes": 5,
       "status": "open",
       "symptoms": [
         "The react-datepicker time list is a scrollable container where most items are outside the browser viewport. Using ref click failed with 'Coordinates must be non-negative' and jsClick also failed with 'outside viewport'. Had to use force:true which fell back to jsClick-fallback. The scrollUntilVisible option could help but it scrolls the page, not the internal container."
@@ -1087,7 +1087,7 @@
       "id": "7.8",
       "section": "Other Issues",
       "title": "Click step errors even when navigation succeeds",
-      "votes": 1,
+      "votes": 2,
       "status": "open",
       "symptoms": [
         "In call #5, the fill succeeded and triggered form submission/navigation to /secure, but the click step reported an error 'CDP error: Cannot find context with specified id'. The navigation was successful and the page landed on the secure area, but the click step status was marked as error."
@@ -1179,7 +1179,7 @@
       "id": "7.13",
       "section": "Other Issues",
       "title": "buildVerifyCapture wraps eval_truthy expressions containing statements in !!() causing syntax errors",
-      "votes": 1,
+      "votes": 2,
       "status": "open",
       "symptoms": [
         ""
@@ -1191,6 +1191,24 @@
       "source": "runner-feedback",
       "sourceTests": [
         "039-demoqa-progressbar"
+      ]
+    },
+    {
+      "id": "7.14",
+      "section": "Other Issues",
+      "title": "get step fails with 'Could not detect data type' for simple text extraction",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Both `{\"get\":\"#finish h4\"}` and `{\"get\":{\"selector\":\"#finish h4\",\"mode\":\"text\"}}` fail with 'Could not detect data type. Use type: \"table\" or \"list\" option.' The error message suggests it's trying to auto-detect a data format when mode:'text' should simply extract textContent. The mode parameter appears to be completely ignored. This forces users to fall back to pageFunction for basic text extraction, which defeats the purpose of having a get step."
+      ],
+      "expected": "",
+      "workaround": null,
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "035-herokuapp-dynamic"
       ]
     }
   ],
