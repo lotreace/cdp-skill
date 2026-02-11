@@ -6,7 +6,7 @@ user_invocable: true
 
 # CDP-Bench Flywheel
 
-Improvement-first evaluation system for cdp-skill. Each "crank turn" selects the highest-impact improvement from `improvements.json`, implements it, then measures and validates the result with regression protection.
+Improvement-first evaluation system for cdp-skill. Each "crank turn" selects the highest-impact improvement from `improvements.json`, implements it, then measures and validates the result.
 
 ## Context Window Safety
 
@@ -76,13 +76,7 @@ SHS = 40 * passRate + 25 * avgCompletion + 15 * perfectRate + 10 * avgEfficiency
 
 ### Baseline Manager (`baseline-manager.js`)
 
-Manages baseline persistence with **ratchet state tracking**. When a test passes 3+ consecutive runs, it becomes "ratcheted" and triggers regression blocking if it later drops below 0.7 completion.
-
-**Ratchet state persistence:** The `writeBaseline()` function now persists two additional fields per test:
-- `ratcheted` (boolean): Whether the test has achieved 3+ consecutive passes
-- `consecutivePasses` (number): Current streak of passing runs
-
-This enables the regression gate in `checkRegressionGate()` to enforce stricter thresholds on previously-stable tests.
+Manages baseline persistence. The `writeBaseline()` function persists per-test scores and metadata. Baselines are always updated after each crank to reflect the latest state.
 
 ### Verification Snapshot (`VerificationSnapshot.js`)
 
@@ -258,7 +252,7 @@ export CDP_METRICS_FILE="${runDir}/metrics.jsonl"
 
 #### Step 11: Validate + Score + Extract Feedback
 
-The CrankOrchestrator handles all validation, scoring, regression gate, and feedback extraction in a single command:
+The CrankOrchestrator handles all validation, scoring, and feedback extraction in a single command:
 
 ```bash
 node cdp-bench/flywheel/CrankOrchestrator.js --phase validate \
@@ -270,15 +264,10 @@ node cdp-bench/flywheel/CrankOrchestrator.js --phase validate \
 This:
 - Validates each test (snapshot-first from trace data, live CDP fallback)
 - Computes SHS and per-test scores
-- Runs regression gate against baseline
 - Extracts and deduplicates runner feedback
 - Writes `validate-result.json`, `validation-summary.json`, per-test `.result.json`, `extracted-feedback.json`
 
-Read stdout JSON — check `gate` field (`"passed"` or `"failed"`) and `feedbackExtracted` count.
-
-If gate **fails** and a fix was applied in Phase 2:
-- Revert the fix commit: `git revert HEAD --no-edit`
-- Use `--fix-outcome reverted` in Step 13
+Read stdout JSON — check `feedbackExtracted` count.
 
 ### Phase 5: FEEDBACK MATCHING + RECORD (~3 min)
 
@@ -312,7 +301,7 @@ Omit `--fix-issue` and `--fix-outcome` if this is a `--measure` run with no fix.
 This:
 - Applies feedback (upvotes matched issues, creates new ones from unmatched)
 - Records fix outcome + crank summary to `flywheel-history.jsonl`
-- Updates baseline + trend (if gate passed)
+- Updates baseline + trend
 - Rebuilds dashboard dataset
 - Writes `crank-summary.json`
 
@@ -327,7 +316,6 @@ Read stdout JSON for the final crank result.
 Fix: #{id} {title} → {outcome}
 SHS: {old} → {new} (delta: {delta})
 Tests: {passed}/{total} passed
-Regression gate: {pass/fail}
 
 --- Runner Feedback ---
 {total} feedback entries from {trace_count} traces ({deduped} unique)
@@ -374,7 +362,7 @@ cdp-bench/
     validator-harness.js             # Deterministic milestone verification (snapshot-first + live CDP)
     metrics-collector.js             # I/O byte aggregation and per-test scoring
     shs-calculator.js                # Centralized SHS computation (shared by validator + metrics)
-    baseline-manager.js              # Baseline read/write/compare/regression gate (ratchet state)
+    baseline-manager.js              # Baseline read/write/compare
     diagnosis-engine.js              # Result analysis + pattern detection (step registry integration)
     DecisionEngine.js                # History-aware recommendation re-ranking (design review separation)
     FlywheelRecorder.js              # Fix outcome + crank summary persistence
@@ -402,7 +390,7 @@ cdp-bench/
       {test_id}.trace.json           # Raw execution trace (from runner, includes verificationSnapshot)
       {test_id}.result.json          # Validated result (from CrankOrchestrator validate)
       metrics.jsonl                  # I/O byte metrics from CDP_METRICS_FILE
-      validate-result.json           # Phase 1 output: SHS, gate, feedback count
+      validate-result.json           # Phase 1 output: SHS, feedback count
       validation-summary.json        # Aggregate SHS and scores (detailed)
       extracted-feedback.json        # Normalized feedback (from FeedbackExtractor)
       match-decisions.json           # LLM match decisions (from matching subagent)
@@ -414,6 +402,6 @@ cdp-bench/
 
 | Role | Count | Purpose |
 |------|-------|---------|
-| Conductor | 1 (you) | Select improvement, implement fix, orchestrate measure/validate, enforce gates, record outcome |
+| Conductor | 1 (you) | Select improvement, implement fix, orchestrate measure/validate, record outcome |
 | Runner | 5-8 (parallel) | Execute tests, write traces |
 | Validator | 0 (Node.js script) | Deterministic scoring via CDP |

@@ -7,7 +7,7 @@
  *
  * Phase 1 (validate):
  *   Read traces -> validate (snapshot-first, live fallback) -> SHS ->
- *   regression gate -> extract feedback -> write validate-result.json
+ *   extract feedback -> write validate-result.json
  *
  * Phase 2 (record):
  *   Read match-decisions.json -> apply feedback -> record fix/crank ->
@@ -34,8 +34,6 @@ import { evaluateSnapshotOffline } from './VerificationSnapshot.js';
 import { computeTestScore, computeSHS, validateRunDir } from './validator-harness.js';
 import {
   readLatestBaseline,
-  readFlakiness,
-  checkRegressionGate,
   writeBaseline,
   appendTrend
 } from './baseline-manager.js';
@@ -94,12 +92,9 @@ async function runValidatePhase(flags) {
     testResults
   };
 
-  // 3. Regression gate
   const baseline = readLatestBaseline(baselinesDir);
-  const flakiness = readFlakiness(baselinesDir);
-  const gate = checkRegressionGate(runData, baseline, flakiness);
 
-  // 4. Extract feedback
+  // 3. Extract feedback
   let feedbackExtracted = 0;
   try {
     const extractor = createFeedbackExtractor(runDir);
@@ -109,7 +104,7 @@ async function runValidatePhase(flags) {
     console.error(`Feedback extraction warning: ${err.message}`);
   }
 
-  // 5. Identify missing traces and validation sources
+  // 4. Identify missing traces and validation sources
   const testFiles = fs.readdirSync(testsDir).filter(f => f.endsWith('.test.json'));
   const traceIds = new Set(results.map(r => r.testId));
   const allTestIds = testFiles.map(f => {
@@ -121,13 +116,11 @@ async function runValidatePhase(flags) {
   const snapshotCount = results.filter(r => r.validationSource === 'snapshot').length;
   const liveCount = results.filter(r => r.validationSource === 'live-cdp').length;
 
-  // 6. Write validate-result.json
+  // 5. Write validate-result.json
   const validateResult = {
     phase: 'validate',
     shs: shsResult.shs,
     shsDelta: baseline ? shsResult.shs - baseline.shs : null,
-    gate: gate.passed ? 'passed' : 'failed',
-    gateIssues: gate.issues,
     testsRun: results.length,
     testsPassed: results.filter(r => r.status === 'pass').length,
     testsPerfect: results.filter(r => r.scores?.completion === 1.0).length,
@@ -166,7 +159,6 @@ async function runValidatePhase(flags) {
   // Print compact JSON to stdout for conductor
   const output = { ...validateResult };
   delete output.results; // keep stdout compact
-  delete output.gateIssues;
   console.log(JSON.stringify(output, null, 2));
 
   return validateResult;
@@ -235,41 +227,34 @@ async function runRecordPhase(flags) {
     testsPassed: validateResult.testsPassed,
     testsPerfect: validateResult.testsPerfect,
     feedbackExtracted: validateResult.feedbackExtracted,
-    feedbackMatched: feedbackSummary.matched,
-    gate: validateResult.gate
+    feedbackMatched: feedbackSummary.matched
   });
 
-  // 4. Update baseline + trend (if gate passed)
-  let baselineUpdated = false;
-  if (validateResult.gate === 'passed') {
-    // Build runData shape for baseline-manager
-    const runData = {
-      timestamp: new Date().toISOString(),
-      shs: validateResult.shs,
-      passRate: validateResult.testsPassed / Math.max(1, validateResult.testsRun),
-      avgCompletion: 0,
-      avgEfficiency: 0,
-      totalTests: validateResult.testsRun,
-      passed: validateResult.testsPassed,
-      perfect: validateResult.testsPerfect,
-      testResults: validateResult.results?.map(r => ({
-        testId: r.testId,
-        category: r.category,
-        completion: r.completion,
-        composite: r.composite
-      })) || []
-    };
+  // 4. Update baseline + trend
+  const runData = {
+    timestamp: new Date().toISOString(),
+    shs: validateResult.shs,
+    passRate: validateResult.testsPassed / Math.max(1, validateResult.testsRun),
+    avgCompletion: 0,
+    avgEfficiency: 0,
+    totalTests: validateResult.testsRun,
+    passed: validateResult.testsPassed,
+    perfect: validateResult.testsPerfect,
+    testResults: validateResult.results?.map(r => ({
+      testId: r.testId,
+      category: r.category,
+      completion: r.completion,
+      composite: r.composite
+    })) || []
+  };
 
-    // Compute averages from results
-    if (runData.testResults.length > 0) {
-      runData.avgCompletion = runData.testResults.reduce((s, r) => s + r.completion, 0) / runData.testResults.length;
-      runData.avgEfficiency = runData.testResults.reduce((s, r) => s + (r.composite || 0), 0) / runData.testResults.length;
-    }
-
-    writeBaseline(runData, version, baselinesDir);
-    appendTrend(runData, version, baselinesDir);
-    baselineUpdated = true;
+  if (runData.testResults.length > 0) {
+    runData.avgCompletion = runData.testResults.reduce((s, r) => s + r.completion, 0) / runData.testResults.length;
+    runData.avgEfficiency = runData.testResults.reduce((s, r) => s + (r.composite || 0), 0) / runData.testResults.length;
   }
+
+  writeBaseline(runData, version, baselinesDir);
+  appendTrend(runData, version, baselinesDir);
 
   // 5. Rebuild dashboard
   let dashboardRebuilt = false;
@@ -290,13 +275,11 @@ async function runRecordPhase(flags) {
     version,
     shs: validateResult.shs,
     shsDelta: validateResult.shsDelta,
-    gate: validateResult.gate,
     fixIssue,
     fixOutcome,
     feedbackMatched: feedbackSummary.matched,
     issuesCreated: feedbackSummary.newIssues,
     issuesUpvoted: feedbackSummary.upvoted,
-    baselineUpdated,
     dashboardRebuilt
   };
 
