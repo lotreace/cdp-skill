@@ -627,6 +627,27 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       };
     }
 
+    // If element is outside viewport (e.g., inside an unscrolled container), scroll it into view first
+    const box = refInfo.box;
+    if (box && (box.x < 0 || box.y < 0 || box.x + box.width > 1920 || box.y + box.height > 1080)) {
+      try {
+        await session.send('Runtime.evaluate', frameEvalParams(`
+          (function() {
+            const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
+            if (el) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+          })()
+        `, true));
+        await sleep(100);
+        // Re-fetch element info after scroll
+        const updatedInfo = await ariaSnapshot.getElementByRef(ref);
+        if (updatedInfo && updatedInfo.box) {
+          refInfo.box = updatedInfo.box;
+        }
+      } catch {
+        // Scroll failed — proceed with original coordinates
+      }
+    }
+
     const urlBeforeClick = await getCurrentUrl(session);
 
     const point = calculateVisibleCenter(refInfo.box);
