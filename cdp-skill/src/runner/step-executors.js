@@ -92,7 +92,7 @@ function isFunctionExpression(str) {
  */
 export async function executeStep(deps, step, options = {}) {
   const { pageController, elementLocator, inputEmulator } = deps;
-  const stepTimeout = options.stepTimeout || 30000;
+  let stepTimeout = options.stepTimeout || 30000;
   const isOptional = step.optional === true;
 
   const stepResult = {
@@ -509,6 +509,11 @@ export async function executeStep(deps, step, options = {}) {
 
   const definedAction = STEP_TYPES.find(type => step[type] !== undefined);
   const stepParams = definedAction ? step[definedAction] : null;
+
+  // Step-level timeout overrides the default step timeout
+  if (stepParams && typeof stepParams === 'object' && typeof stepParams.timeout === 'number' && stepParams.timeout > 0) {
+    stepTimeout = stepParams.timeout;
+  }
 
   let timeoutId;
   try {
