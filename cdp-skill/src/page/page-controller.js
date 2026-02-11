@@ -21,6 +21,7 @@ import {
 } from '../utils.js';
 
 import { TIMEOUTS } from '../constants.js';
+import { createDialogHandler } from './dialog-handler.js';
 
 const MAX_TIMEOUT = TIMEOUTS.MAX;
 
@@ -58,6 +59,7 @@ export function createPageController(cdpClient, options = {}) {
   const networkIdleDelay = 500;
   let navigationInProgress = false;
   let currentNavigationAbort = null;
+  const dialogHandler = createDialogHandler(cdpClient);
   let currentNavigationUrl = null;
   let pageCrashed = false;
   const crashWaiters = new Set();
@@ -411,6 +413,9 @@ export function createPageController(cdpClient, options = {}) {
       cdpClient.send('Runtime.enable'),
       cdpClient.send('Inspector.enable')
     ]);
+
+    // Enable dialog handling for JavaScript alerts, confirms, and prompts
+    await dialogHandler.enable();
 
     const { frameTree } = await cdpClient.send('Page.getFrameTree');
     mainFrameId = frameTree.frame.id;
