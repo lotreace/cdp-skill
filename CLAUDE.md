@@ -116,3 +116,13 @@ try {
   await releaseObject(session, objectId);
 }
 ```
+
+## Runner Agent Restrictions
+
+**Runner agents (cdp-bench test executors) are READ-ONLY.** They must NEVER:
+- Edit, create, or delete source code files
+- Run `git commit`, `git add`, or any git write operations
+- Modify `package.json`, config files, or any project files
+- Attempt to "fix" bugs they encounter during test execution
+
+Runners may ONLY: execute cdp-skill CLI commands, read files for context, and write their single trace file to the run directory. Any bugs or issues discovered during test execution must be reported in the trace's `feedback` array — the flywheel's feedback pipeline handles the rest.

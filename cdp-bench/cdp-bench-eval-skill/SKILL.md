@@ -243,6 +243,8 @@ If any tests are missing, spawn retry agents for those tests only.
 
 **IMPORTANT: Do NOT read runner agent outputs via TaskOutput.** Runner conversations contain verbose CLI output that will overflow the conductor's context window.
 
+**CRITICAL: Runners must be READ-ONLY.** The runner prompt in `runner.md` contains strict restrictions against modifying code or running git commands. Do NOT override or weaken these restrictions when spawning runners. If a runner needs to work around a bug, it must report it in the trace `feedback` array — never patch code.
+
 **Runner environment:**
 ```bash
 export CDP_METRICS_FILE="${runDir}/metrics.jsonl"
