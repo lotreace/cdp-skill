@@ -21,3 +21,4 @@
 {"type":"fix_outcome","ts":"2026-02-11T21:26:14.598Z","issueId":"7.8","outcome":"success","crank":11,"version":"1.0.14","shsDelta":-3}
 {"type":"crank","ts":"2026-02-11T21:26:14.598Z","crank":11,"shs":93,"shsDelta":-3,"fixAttempt":{"issueId":"7.8","outcome":"success","version":"1.0.14"},"testsRun":30,"testsPassed":28,"testsPerfect":26,"feedbackExtracted":72,"feedbackMatched":10}
 {"type":"crank","ts":"2026-02-12T19:19:03.849Z","crank":12,"shs":99,"shsDelta":6,"fixAttempt":null,"testsRun":30,"testsPassed":30,"testsPerfect":29,"feedbackExtracted":16,"feedbackMatched":0}
+{"type":"crank","ts":"2026-02-12T20:38:40.809Z","crank":12,"shs":91,"shsDelta":-8,"fixAttempt":null,"testsRun":30,"testsPassed":27,"testsPerfect":25,"feedbackExtracted":13,"feedbackMatched":1}

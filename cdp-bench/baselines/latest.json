@@ -1,7 +1,7 @@
 {
-  "version": "1.0.14",
-  "timestamp": "2026-02-12T19:19:03.850Z",
-  "shs": 99,
+  "version": "1.0.15",
+  "timestamp": "2026-02-12T20:38:40.811Z",
+  "shs": 91,
   "tests": {
     "001-saucedemo-checkout": {
       "score": 1,
@@ -13,11 +13,11 @@
     },
     "009-bbc-search": {
       "score": 1,
-      "composite": 1
+      "composite": 0.95
     },
     "010-allrecipes-search": {
       "score": 1,
-      "composite": 1
+      "composite": 0.978
     },
     "011-heroku-dragdrop": {
       "score": 1,
@@ -57,7 +57,7 @@
     },
     "024-demoqa-forms": {
       "score": 1,
-      "composite": 1
+      "composite": 0.95
     },
     "025-tinymce-editor": {
       "score": 1,
@@ -84,20 +84,20 @@
       "composite": 1
     },
     "031-herokuapp-nested-frames": {
-      "score": 1,
-      "composite": 1
+      "score": 0.6000000000000001,
+      "composite": 0.76
     },
     "032-herokuapp-shadow": {
       "score": 1,
       "composite": 1
     },
     "033-herokuapp-alerts": {
-      "score": 1,
-      "composite": 1
+      "score": 0,
+      "composite": 0.4
     },
     "034-herokuapp-upload": {
-      "score": 0.8500000000000001,
-      "composite": 0.91
+      "score": 0,
+      "composite": 0.4
     },
     "035-herokuapp-dynamic": {
       "score": 1,
@@ -108,16 +108,16 @@
       "composite": 1
     },
     "037-demoqa-datepicker": {
-      "score": 1,
-      "composite": 1
+      "score": 0.55,
+      "composite": 0.73
     },
     "038-demoqa-selectmenu": {
       "score": 1,
       "composite": 1
     },
     "039-demoqa-progressbar": {
-      "score": 1,
-      "composite": 1
+      "score": 0.4,
+      "composite": 0.64
     },
     "040-saucedemo-cart-validation": {
       "score": 1,
