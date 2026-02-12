@@ -1,19 +1,19 @@
 {
   "id": "025-tinymce-editor",
-  "url": "https://the-internet.herokuapp.com/tinymce",
+  "url": "https://fiddle.tiny.cloud/",
   "category": "create",
   "difficulty": "hard",
-  "stability": "stable",
-  "task": "Interact with the TinyMCE WYSIWYG editor inside the iframe: clear the existing content and type 'Hello World'. Verify the text appears in the editor.",
+  "stability": "moderate",
+  "task": "Interact with the TinyMCE editor on the Tiny Fiddle page. The editor should be in the right panel. Click into the editor and type 'Hello World'. Verify the text appears in the editor.",
   "milestones": [
     {
       "id": "text_entered",
       "weight": 1.0,
-      "description": "Text has been entered into the TinyMCE editor iframe. The editor body contains the typed text.",
+      "description": "Text has been entered into the TinyMCE editor. The editor body contains the typed text.",
       "verify": {
         "all": [
-          { "url_contains": "/tinymce" },
-          { "eval_truthy": "document.querySelector('#mce_0_ifr')?.contentDocument?.body?.textContent?.includes('Hello') || document.querySelector('iframe')?.contentDocument?.body?.textContent?.includes('Hello') || document.body.innerText.includes('Hello')" }
+          { "url_contains": "tiny.cloud" },
+          { "eval_truthy": "document.querySelector('iframe[id*=\"tiny\"]')?.contentDocument?.body?.textContent?.includes('Hello') || document.querySelector('[contenteditable=\"true\"]')?.textContent?.includes('Hello') || Array.from(document.querySelectorAll('iframe')).some(f => f.contentDocument?.body?.textContent?.includes('Hello'))" }
         ]
       }
     }
