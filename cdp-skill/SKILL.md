@@ -111,8 +111,12 @@ The skill now passes 1261/1263 unit tests (99.8%) and maintains SHS 99/100 on th
 
 ## Element References
 
-Snapshots return versioned refs like `[ref=s1e4]` — format: `s{snapshotId}e{elementNumber}`.
-Use refs with `click`, `fill`, `hover`. Each snapshot increments the ID. Refs from earlier snapshots remain valid while the element is in DOM.
+Snapshots return versioned refs like `[ref=f0s1e4]` — format: `f{frameId}s{snapshotId}e{elementNumber}`.
+- `f0` = main frame (default)
+- `f1`, `f2`, ... = iframe by index
+- `f[name]` = iframe by name (e.g., `f[frame-top]`)
+
+Each frame maintains its own snapshot counter. Use refs with `click`, `fill`, `hover`. Refs remain valid while the element is in DOM.
 
 **Auto re-resolution**: when a ref's element leaves the DOM (React re-render, lazy-load), the system tries to re-find it by stored selector + role + name. Response includes `reResolved: true` on success.
 
@@ -175,8 +179,8 @@ Returns: `{scrollX, scrollY}`
 ### snapshot
 `true` | `{root, detail, mode, maxDepth, maxElements, includeText, includeFrames, pierceShadow, viewportOnly, inlineLimit, since}`
 Detail: summary | interactive | full(default)
-Since: `"s1"` — returns `{unchanged: true}` if page hasn't changed
-Returns: YAML with role, "name", states, `[ref=s{N}e{M}]`, snapshotId
+Since: `"f0s1"` — returns `{unchanged: true}` if page hasn't changed
+Returns: YAML with role, "name", states, `[ref=f{F}s{N}e{M}]`, snapshotId (`f0s1`, `f1s1`, etc.)
 Notes: snapshots over 9KB saved to file (configurable via inlineLimit)
 
 ### snapshotSearch

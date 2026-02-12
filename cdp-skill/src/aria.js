@@ -475,7 +475,7 @@ export function createRoleQueryExecutor(session, elementLocator, options = {}) {
 // The snapshot script runs entirely in the browser context
 const SNAPSHOT_SCRIPT = `
 (function generateAriaSnapshot(rootSelector, options) {
-  const { mode = 'ai', maxDepth = 50, maxElements = 0, includeText = false, includeFrames = false, viewportOnly = false, pierceShadow = false, preserveRefs = false, since = null, internal = false } = options || {};
+  const { mode = 'ai', maxDepth = 50, maxElements = 0, includeText = false, includeFrames = false, viewportOnly = false, pierceShadow = false, preserveRefs = false, since = null, internal = false, frameIdentifier = 'f0' } = options || {};
 
   // Viewport dimensions for viewport-only mode
   const viewportWidth = window.innerWidth;
@@ -490,6 +490,9 @@ const SNAPSHOT_SCRIPT = `
   if (window.__ariaSnapshotId === undefined) {
     window.__ariaSnapshotId = 0;
   }
+
+  // Store frame identifier for ref generation (used by all ref-generating operations)
+  window.__ariaFrameIdentifier = frameIdentifier;
 
   // Compute page hash for change detection
   // Hash combines: URL + scroll position + DOM size + interactive element count
@@ -514,7 +517,7 @@ const SNAPSHOT_SCRIPT = `
     if (currentHash === window.__ariaSnapshotHash) {
       return {
         unchanged: true,
-        snapshotId: 's' + window.__ariaSnapshotId,
+        snapshotId: frameIdentifier + 's' + window.__ariaSnapshotId,
         hash: currentHash
       };
     }
@@ -951,9 +954,9 @@ const SNAPSHOT_SCRIPT = `
       }
     }
 
-    // New element - assign new ref with versioned format: s{snapshotId}e{refCounter}
+    // New element - assign new ref with versioned format: f{frameId}s{snapshotId}e{refCounter}
     refCounter++;
-    const ref = 's' + currentSnapshotId + 'e' + refCounter;
+    const ref = frameIdentifier + 's' + currentSnapshotId + 'e' + refCounter;
     elementRefs.set(el, ref);
     refElements.set(ref, el);
     // Store metadata for re-resolution fallback
@@ -1389,7 +1392,7 @@ const SNAPSHOT_SCRIPT = `
     yaml,
     refs,
     truncated: limitReached,
-    snapshotId: 's' + currentSnapshotId
+    snapshotId: frameIdentifier + 's' + currentSnapshotId
   };
   if (autoScoped) snapshotResult.autoScoped = true;
   return snapshotResult;
@@ -1403,6 +1406,7 @@ const SNAPSHOT_SCRIPT = `
  */
 export function createAriaSnapshot(session, options = {}) {
   const getFrameContext = options.getFrameContext || null;
+  const getFrameIdentifier = options.getFrameIdentifier || null;
   /**
    * Generate accessibility snapshot of the page
    * @param {Object} options - Snapshot options
@@ -1416,14 +1420,17 @@ export function createAriaSnapshot(session, options = {}) {
    * @param {boolean} options.viewportOnly - Only include elements visible in viewport (default: false)
    * @param {boolean} options.pierceShadow - Traverse into open shadow DOM trees (default: false)
    * @param {boolean} options.preserveRefs - Merge new refs into existing instead of overwriting (default: false)
-   * @param {string} options.since - Snapshot ID to check against (e.g., "s1") - returns {unchanged: true} if page hasn't changed
+   * @param {string} options.since - Snapshot ID to check against (e.g., "f0s1") - returns {unchanged: true} if page hasn't changed
    * @returns {Promise<Object>} Snapshot result with tree, yaml, refs, and snapshotId
    */
   async function generate(options = {}) {
     const { root = null, mode = 'ai', detail = 'full', maxDepth = 50, maxElements = 0, includeText = false, includeFrames = false, viewportOnly = false, pierceShadow = false, preserveRefs = false, since = null, internal = false } = options;
 
+    // Get frame identifier for ref generation (f0 for main frame, f1, f2, etc. for iframes)
+    const frameIdentifier = getFrameIdentifier ? await getFrameIdentifier() : 'f0';
+
     const evalArgs = {
-      expression: `(${SNAPSHOT_SCRIPT})(${JSON.stringify(root)}, ${JSON.stringify({ mode, detail, maxDepth, maxElements, includeText, includeFrames, viewportOnly, pierceShadow, preserveRefs, since, internal })})`,
+      expression: `(${SNAPSHOT_SCRIPT})(${JSON.stringify(root)}, ${JSON.stringify({ mode, detail, maxDepth, maxElements, includeText, includeFrames, viewportOnly, pierceShadow, preserveRefs, since, internal, frameIdentifier })})`,
       returnByValue: true,
       awaitPromise: false
     };

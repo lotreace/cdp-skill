@@ -328,9 +328,10 @@ export async function executeRefAt(session, params) {
         }
       }
 
-      // Create new versioned ref: s{snapshotId}e{counter}
+      // Create new versioned ref: f{frameId}s{snapshotId}e{counter}
       window.__ariaRefCounter++;
-      const ref = 's' + window.__ariaSnapshotId + 'e' + window.__ariaRefCounter;
+      const frameId = window.__ariaFrameIdentifier || 'f0';
+      const ref = frameId + 's' + window.__ariaSnapshotId + 'e' + window.__ariaRefCounter;
       window.__ariaRefs.set(ref, el);
 
       const rect = el.getBoundingClientRect();
@@ -396,9 +397,10 @@ export async function executeElementsAt(session, coords) {
           }
         }
 
-        // Create new versioned ref: s{snapshotId}e{counter}
+        // Create new versioned ref: f{frameId}s{snapshotId}e{counter}
         window.__ariaRefCounter++;
-        const ref = 's' + window.__ariaSnapshotId + 'e' + window.__ariaRefCounter;
+        const frameId = window.__ariaFrameIdentifier || 'f0';
+        const ref = frameId + 's' + window.__ariaSnapshotId + 'e' + window.__ariaRefCounter;
         window.__ariaRefs.set(ref, el);
         return { ref, existing: false };
       }
@@ -540,9 +542,10 @@ export async function executeElementsNear(session, params) {
           }
         }
 
-        // Create new versioned ref: s{snapshotId}e{counter}
+        // Create new versioned ref: f{frameId}s{snapshotId}e{counter}
         window.__ariaRefCounter++;
-        const ref = 's' + window.__ariaSnapshotId + 'e' + window.__ariaRefCounter;
+        const frameId = window.__ariaFrameIdentifier || 'f0';
+        const ref = frameId + 's' + window.__ariaSnapshotId + 'e' + window.__ariaRefCounter;
         window.__ariaRefs.set(ref, el);
         return { ref, existing: false };
       }

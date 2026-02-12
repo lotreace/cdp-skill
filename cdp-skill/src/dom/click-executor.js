@@ -1158,12 +1158,12 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     const scrollUntilVisible = typeof params === 'object' && params.scrollUntilVisible === true;
     const scrollOptions = typeof params === 'object' ? params.scrollOptions : {};
 
-    // Detect if string selector looks like a versioned ref (s{N}e{M})
-    // This allows {"click": "s1e1"} to work the same as {"click": {"ref": "s1e1"}}
+    // Detect if string selector looks like a versioned ref (f{frameId}s{N}e{M})
+    // This allows {"click": "f0s1e1"} to work the same as {"click": {"ref": "f0s1e1"}}
     if (!ref && selector) {
-      if (/^s\d+e\d+$/.test(selector)) {
+      if (/^f(\d+|\[[^\]]+\])s\d+e\d+$/.test(selector)) {
         ref = selector;
-      } else if (/^ref=s\d+e\d+$/i.test(selector)) {
+      } else if (/^ref=f(\d+|\[[^\]]+\])s\d+e\d+$/i.test(selector)) {
         ref = selector.slice(4); // Remove "ref=" prefix
       }
     }

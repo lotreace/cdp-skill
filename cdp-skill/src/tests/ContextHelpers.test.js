@@ -133,8 +133,8 @@ describe('ContextHelpers', () => {
       });
 
       it('should describe click with ref', () => {
-        const result = buildActionContext('click', { ref: 's1e1' }, {});
-        assert.strictEqual(result, 'Clicked [ref=s1e1]');
+        const result = buildActionContext('click', { ref: 'f0s1e1' }, {});
+        assert.strictEqual(result, 'Clicked [ref=f0s1e1]');
       });
 
       it('should describe click with text', () => {

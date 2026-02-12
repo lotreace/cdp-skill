@@ -103,7 +103,7 @@ describe('LazyResolver', () => {
         return { result: { value: null } };
       });
 
-      const result = await resolver.resolveRef('s1e5');
+      const result = await resolver.resolveRef('f0s1e5');
       assert.strictEqual(result, null);
     });
 
@@ -135,10 +135,10 @@ describe('LazyResolver', () => {
         }
       });
 
-      const result = await resolver.resolveRef('s1e5');
+      const result = await resolver.resolveRef('f0s1e5');
       assert.ok(result);
       assert.strictEqual(result.objectId, 'resolved-obj-456');
-      assert.strictEqual(result.ref, 's1e5');
+      assert.strictEqual(result.ref, 'f0s1e5');
       assert.strictEqual(result.resolvedBy, 'selector');
     });
 
@@ -173,7 +173,7 @@ describe('LazyResolver', () => {
         }
       });
 
-      const result = await resolver.resolveRef('s1e5');
+      const result = await resolver.resolveRef('f0s1e5');
       assert.ok(result);
       assert.strictEqual(result.objectId, 'fallback-obj-789');
       assert.strictEqual(result.resolvedBy, 'role+name');
@@ -375,7 +375,7 @@ describe('LazyResolver', () => {
         }
       });
 
-      const result = await resolver.resolveRef('s2e3');
+      const result = await resolver.resolveRef('f0s2e3');
       assert.ok(result);
       assert.strictEqual(result.objectId, 'shadow-resolved-obj');
     });

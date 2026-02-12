@@ -75,9 +75,9 @@ export async function executeHover(elementLocator, inputEmulator, ariaSnapshot, 
   const text = typeof params === 'object' ? params.text : null;
   const duration = typeof params === 'object' ? (params.duration || 0) : 0;
 
-  // Detect if string selector looks like a ref (e.g., "s1e1", "s2e12")
-  // This allows {"hover": "s1e1"} to work the same as {"hover": {"ref": "s1e1"}}
-  if (!ref && selector && /^s\d+e\d+$/.test(selector)) {
+  // Detect if string selector looks like a ref (e.g., "f0s1e1", "f[frame-top]s2e12")
+  // This allows {"hover": "f0s1e1"} to work the same as {"hover": {"ref": "f0s1e1"}}
+  if (!ref && selector && /^f(\d+|\[[^\]]+\])s\d+e\d+$/.test(selector)) {
     ref = selector;
   }
   const force = typeof params === 'object' && params.force === true;
@@ -383,8 +383,8 @@ export async function executeDrag(elementLocator, inputEmulator, pageController,
     // String - could be selector or ref
     const selectorOrRef = spec;
 
-    // Check if it looks like a ref (e.g., "s1e1", "s2e12")
-    if (/^s\d+e\d+$/.test(selectorOrRef)) {
+    // Check if it looks like a ref (e.g., "f0s1e1", "f[frame-top]s2e12")
+    if (/^f(\d+|\[[^\]]+\])s\d+e\d+$/.test(selectorOrRef)) {
       const box = await getRefBox(selectorOrRef);
       return { ...box, offsetX: 0, offsetY: 0 };
     }
@@ -400,7 +400,7 @@ export async function executeDrag(elementLocator, inputEmulator, pageController,
   // Helper to resolve selector string for JS execution
   function getSelectorExpression(spec) {
     if (typeof spec === 'string') {
-      if (/^s\d+e\d+$/.test(spec)) {
+      if (/^f(\d+|\[[^\]]+\])s\d+e\d+$/.test(spec)) {
         return `window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(spec)})`;
       }
       return `document.querySelector(${JSON.stringify(spec)})`;

@@ -170,7 +170,7 @@ describe('StepValidator', () => {
       });
 
       it('should accept object with ref', () => {
-        const errors = validateStepInternal({ click: { ref: 's1e1' } });
+        const errors = validateStepInternal({ click: { ref: 'f0s1e1' } });
         assert.strictEqual(errors.length, 0);
       });
 
@@ -224,7 +224,7 @@ describe('StepValidator', () => {
       });
 
       it('should accept object with ref and value', () => {
-        const errors = validateStepInternal({ fill: { ref: 's1e1', value: 'test' } });
+        const errors = validateStepInternal({ fill: { ref: 'f0s1e1', value: 'test' } });
         assert.strictEqual(errors.length, 0);
       });
 

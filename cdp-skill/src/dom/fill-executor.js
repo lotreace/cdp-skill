@@ -438,9 +438,9 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
       throw new Error('Fill requires value');
     }
 
-    // Detect if selector looks like a versioned ref (s{N}e{M})
-    // This allows {"fill": {"selector": "s1e1", "value": "..."}} to work like {"fill": {"ref": "s1e1", "value": "..."}}
-    if (!ref && selector && /^s\d+e\d+$/.test(selector)) {
+    // Detect if selector looks like a versioned ref (f{frameId}s{N}e{M})
+    // This allows {"fill": {"selector": "f0s1e1", "value": "..."}} to work like {"fill": {"ref": "f0s1e1", "value": "..."}}
+    if (!ref && selector && /^f(\d+|\[[^\]]+\])s\d+e\d+$/.test(selector)) {
       ref = selector;
     }
 
@@ -491,8 +491,8 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
 
     for (const [selector, value] of entries) {
       try {
-        // Match versioned ref format s{N}e{M}
-        const isRef = /^s\d+e\d+$/.test(selector);
+        // Match versioned ref format f{frameId}s{N}e{M}
+        const isRef = /^f(\d+|\[[^\]]+\])s\d+e\d+$/.test(selector);
 
         if (isRef) {
           await fillByRef(selector, value, { clear: true, react: useReact });

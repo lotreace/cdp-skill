@@ -792,16 +792,16 @@ export const STEP_CONFIG = {
     validate: (params) => {
       const errors = [];
       if (typeof params === 'string') {
-        if (!/^s\d+e\d+$/.test(params)) {
-          errors.push('getBox ref must be in format "s{N}e{M}" (e.g., "s1e1", "s2e34")');
+        if (!/^f(\d+|\[[^\]]+\])s\d+e\d+$/.test(params)) {
+          errors.push('getBox ref must be in format "f{frameId}s{N}e{M}" (e.g., "f0s1e1", "f[frame-top]s2e34")');
         }
       } else if (Array.isArray(params)) {
         if (params.length === 0) {
           errors.push('getBox refs array cannot be empty');
         }
         for (const ref of params) {
-          if (typeof ref !== 'string' || !/^s\d+e\d+$/.test(ref)) {
-            errors.push('getBox refs must be strings in format "s{N}e{M}"');
+          if (typeof ref !== 'string' || !/^f(\d+|\[[^\]]+\])s\d+e\d+$/.test(ref)) {
+            errors.push('getBox refs must be strings in format "f{frameId}s{N}e{M}"');
             break;
           }
         }

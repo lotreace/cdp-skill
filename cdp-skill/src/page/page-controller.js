@@ -1036,6 +1036,51 @@ export function createPageController(cdpClient, options = {}) {
   }
 
   /**
+   * Get the current frame identifier for ref generation.
+   * Returns 'f0' for main frame, 'f1', 'f2', etc. for iframes by index.
+   * Uses frame name if available for better stability.
+   * @returns {Promise<string>} Frame identifier (e.g., 'f0', 'f1', 'f[frame-name]')
+   */
+  async function getFrameIdentifier() {
+    // Main frame is always f0
+    if (currentFrameId === mainFrameId || !currentFrameId) {
+      return 'f0';
+    }
+
+    // Get frame tree to find index or name
+    const { frameTree } = await cdpClient.send('Page.getFrameTree');
+
+    function findAllChildFrames(node) {
+      const frames = [];
+      if (node.childFrames) {
+        for (const child of node.childFrames) {
+          frames.push(child);
+          frames.push(...findAllChildFrames(child));
+        }
+      }
+      return frames;
+    }
+
+    const childFrames = findAllChildFrames(frameTree);
+
+    // Find current frame
+    for (let i = 0; i < childFrames.length; i++) {
+      if (childFrames[i].frame.id === currentFrameId) {
+        // Prefer name if available (more stable than index)
+        const frameName = childFrames[i].frame.name;
+        if (frameName) {
+          return `f[${frameName}]`;
+        }
+        // Fall back to index (1-based for iframes)
+        return `f${i + 1}`;
+      }
+    }
+
+    // Fallback: unknown frame, use hash of frameId
+    return `f[${currentFrameId.substring(0, 8)}]`;
+  }
+
+  /**
    * Execute code in the current frame context
    * @param {string} expression - JavaScript expression
    * @param {Object} [options] - Evaluation options
@@ -1295,6 +1340,7 @@ export function createPageController(cdpClient, options = {}) {
     getNetworkStatus,
     searchAllFrames,
     getFrameContext,
+    getFrameIdentifier,
     dispose,
     get mainFrameId() { return mainFrameId; },
     get currentFrameId() { return currentFrameId; },

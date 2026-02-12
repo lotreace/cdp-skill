@@ -33,7 +33,7 @@ function createMockAriaSnapshot(opts = {}) {
         };
       }
       const yaml = opts.yaml || '- button "Submit"';
-      const refs = opts.refs || { 's1e1': 'ref-data' };
+      const refs = opts.refs || { 'f0s1e1': 'ref-data' };
 
       // For snapshotSearch, return tree structure
       if (opts.searchTree) {
@@ -41,8 +41,8 @@ function createMockAriaSnapshot(opts = {}) {
           tree: {
             role: 'document',
             children: [
-              { role: 'button', name: 'Submit', ref: 's1e1', box: { x: 10, y: 10, width: 80, height: 40 } },
-              { role: 'button', name: 'Cancel', ref: 's1e2', box: { x: 100, y: 10, width: 80, height: 40 } }
+              { role: 'button', name: 'Submit', ref: 'f0s1e1', box: { x: 10, y: 10, width: 80, height: 40 } },
+              { role: 'button', name: 'Cancel', ref: 'f0s1e2', box: { x: 100, y: 10, width: 80, height: 40 } }
             ]
           },
           yaml,
@@ -60,13 +60,13 @@ function createMockAriaSnapshot(opts = {}) {
       };
     }),
     getElementByRef: mock.fn(async (ref) => {
-      if (opts.refNotFound || ref === 's1e999') {
+      if (opts.refNotFound || ref === 'f0s1e999') {
         return null;
       }
-      if (opts.refStale || ref === 's1e998') {
+      if (opts.refStale || ref === 'f0s1e998') {
         return { stale: true };
       }
-      if (opts.refHidden || ref === 's1e997') {
+      if (opts.refHidden || ref === 'f0s1e997') {
         return {
           isVisible: false,
           box: { x: 0, y: 0, width: 0, height: 0 }
@@ -122,7 +122,7 @@ function createMockPageController(opts = {}) {
             return {
               result: {
                 value: {
-                  ref: 's1e1',
+                  ref: 'f0s1e1',
                   existing: false,
                   tag: 'BUTTON',
                   selector: 'button.submit',
@@ -146,8 +146,8 @@ function createMockPageController(opts = {}) {
               result: {
                 value: {
                   results: [
-                    { x: 100, y: 100, ref: 's1e1', tag: 'BUTTON' },
-                    { x: 200, y: 200, ref: 's1e2', tag: 'A' }
+                    { x: 100, y: 100, ref: 'f0s1e1', tag: 'BUTTON' },
+                    { x: 200, y: 200, ref: 'f0s1e2', tag: 'A' }
                   ]
                 }
               }
@@ -158,8 +158,8 @@ function createMockPageController(opts = {}) {
               result: {
                 value: {
                   elements: [
-                    { ref: 's1e1', tag: 'BUTTON', distance: 10 },
-                    { ref: 's1e2', tag: 'A', distance: 25 }
+                    { ref: 'f0s1e1', tag: 'BUTTON', distance: 10 },
+                    { ref: 'f0s1e2', tag: 'A', distance: 25 }
                   ],
                   searchCenter: { x: 100, y: 100 },
                   searchRadius: 50
@@ -249,7 +249,7 @@ describe('executeSnapshot', () => {
     const result = await executeSnapshot(ariaSnapshot, true);
 
     assert.strictEqual(result.yaml, '- button "Submit"');
-    assert.deepStrictEqual(result.refs, { 's1e1': 'ref-data' });
+    assert.deepStrictEqual(result.refs, { 'f0s1e1': 'ref-data' });
     assert.strictEqual(result.snapshotId, 1);
     assert.ok(result.stats);
   });
@@ -403,14 +403,14 @@ describe('executeGetDom', () => {
 describe('executeGetBox', () => {
   it('should throw if ariaSnapshot is null', async () => {
     await assert.rejects(
-      async () => executeGetBox(null, 's1e1'),
+      async () => executeGetBox(null, 'f0s1e1'),
       /ariaSnapshot is required/
     );
   });
 
   it('should get box for single ref string', async () => {
     const ariaSnapshot = createMockAriaSnapshot();
-    const result = await executeGetBox(ariaSnapshot, 's1e1');
+    const result = await executeGetBox(ariaSnapshot, 'f0s1e1');
 
     assert.strictEqual(result.x, 100);
     assert.strictEqual(result.y, 200);
@@ -422,40 +422,40 @@ describe('executeGetBox', () => {
 
   it('should get boxes for array of refs', async () => {
     const ariaSnapshot = createMockAriaSnapshot();
-    const result = await executeGetBox(ariaSnapshot, ['s1e1', 's1e2']);
+    const result = await executeGetBox(ariaSnapshot, ['f0s1e1', 'f0s1e2']);
 
-    assert.ok(result.s1e1);
-    assert.ok(result.s1e2);
-    assert.strictEqual(result.s1e1.x, 100);
-    assert.strictEqual(result.s1e2.x, 100);
+    assert.ok(result.f0s1e1);
+    assert.ok(result.f0s1e2);
+    assert.strictEqual(result.f0s1e1.x, 100);
+    assert.strictEqual(result.f0s1e2.x, 100);
   });
 
   it('should handle ref object with refs array', async () => {
     const ariaSnapshot = createMockAriaSnapshot();
-    const result = await executeGetBox(ariaSnapshot, { refs: ['s1e1', 's1e2'] });
+    const result = await executeGetBox(ariaSnapshot, { refs: ['f0s1e1', 'f0s1e2'] });
 
     // When multiple refs, returns object with ref keys
-    assert.ok(result.s1e1);
-    assert.strictEqual(result.s1e1.x, 100);
+    assert.ok(result.f0s1e1);
+    assert.strictEqual(result.f0s1e1.x, 100);
   });
 
   it('should handle ref object with single ref', async () => {
     const ariaSnapshot = createMockAriaSnapshot();
-    const result = await executeGetBox(ariaSnapshot, { ref: 's1e1' });
+    const result = await executeGetBox(ariaSnapshot, { ref: 'f0s1e1' });
 
     assert.strictEqual(result.x, 100);
   });
 
   it('should return error for not found ref', async () => {
     const ariaSnapshot = createMockAriaSnapshot({ refNotFound: true });
-    const result = await executeGetBox(ariaSnapshot, 's1e999');
+    const result = await executeGetBox(ariaSnapshot, 'f0s1e999');
 
     assert.strictEqual(result.error, 'not found');
   });
 
   it('should return stale error for stale ref', async () => {
     const ariaSnapshot = createMockAriaSnapshot({ refStale: true });
-    const result = await executeGetBox(ariaSnapshot, 's1e998');
+    const result = await executeGetBox(ariaSnapshot, 'f0s1e998');
 
     assert.strictEqual(result.error, 'stale');
     assert.ok(result.message.includes('no longer in DOM'));
@@ -463,7 +463,7 @@ describe('executeGetBox', () => {
 
   it('should return hidden error for hidden element', async () => {
     const ariaSnapshot = createMockAriaSnapshot({ refHidden: true });
-    const result = await executeGetBox(ariaSnapshot, 's1e997');
+    const result = await executeGetBox(ariaSnapshot, 'f0s1e997');
 
     assert.strictEqual(result.error, 'hidden');
     assert.ok(result.box);
@@ -487,11 +487,11 @@ describe('executeGetBox', () => {
 
   it('should handle mixed results for multiple refs', async () => {
     const ariaSnapshot = createMockAriaSnapshot();
-    const result = await executeGetBox(ariaSnapshot, ['s1e1', 's1e999', 's1e998']);
+    const result = await executeGetBox(ariaSnapshot, ['f0s1e1', 'f0s1e999', 'f0s1e998']);
 
-    assert.ok(result.s1e1.x);
-    assert.strictEqual(result.s1e999.error, 'not found');
-    assert.strictEqual(result.s1e998.error, 'stale');
+    assert.ok(result.f0s1e1.x);
+    assert.strictEqual(result.f0s1e999.error, 'not found');
+    assert.strictEqual(result.f0s1e998.error, 'stale');
   });
 });
 
@@ -504,7 +504,7 @@ describe('executeRefAt', () => {
     const session = createMockPageController({ refAt: true }).session;
     const result = await executeRefAt(session, { x: 100, y: 200 });
 
-    assert.strictEqual(result.ref, 's1e1');
+    assert.strictEqual(result.ref, 'f0s1e1');
     assert.strictEqual(result.tag, 'BUTTON');
     assert.strictEqual(result.clickable, true);
     assert.strictEqual(result.existing, false);
@@ -553,8 +553,8 @@ describe('executeElementsAt', () => {
 
     assert.ok(result.results);
     assert.strictEqual(result.results.length, 2);
-    assert.strictEqual(result.results[0].ref, 's1e1');
-    assert.strictEqual(result.results[1].ref, 's1e2');
+    assert.strictEqual(result.results[0].ref, 'f0s1e1');
+    assert.strictEqual(result.results[1].ref, 'f0s1e2');
   });
 
   it('should handle empty coordinates array', async () => {

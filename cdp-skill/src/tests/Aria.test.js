@@ -820,7 +820,7 @@ describe('ARIA Module', () => {
           return {};
         });
 
-        const refInfo = await snapshot.getElementByRef('s1e1');
+        const refInfo = await snapshot.getElementByRef('f0s1e1');
 
         // Should return ref info with box, isConnected, etc
         assert.ok(refInfo);
@@ -848,7 +848,7 @@ describe('ARIA Module', () => {
           }
         }));
 
-        const refInfo = await snapshot.getElementByRef('s1e1');
+        const refInfo = await snapshot.getElementByRef('f0s1e1');
 
         // Stale refs return object with stale flag
         if (refInfo) {
@@ -988,12 +988,12 @@ describe('ARIA Module', () => {
                 tree: {
                   role: 'document',
                   children: [
-                    { role: 'button', name: 'Click me', ref: 's1e1' }
+                    { role: 'button', name: 'Click me', ref: 'f0s1e1' }
                   ]
                 },
                 yaml: 'document:\n  button: Click me [s1e1]\n',
                 refs: new Map([
-                  ['s1e1', { ref: 's1e1', role: 'button', name: 'Click me' }]
+                  ['f0s1e1', { ref: 'f0s1e1', role: 'button', name: 'Click me' }]
                 ]),
                 snapshotId: 's1'
               }
@@ -1018,7 +1018,7 @@ describe('ARIA Module', () => {
       assert.ok(result.snapshotId);
 
       // Refs should be accessible via getElementByRef
-      const refInfo = await snapshot.getElementByRef('s1e1');
+      const refInfo = await snapshot.getElementByRef('f0s1e1');
       assert.ok(refInfo === null || typeof refInfo === 'object');
     });
   });

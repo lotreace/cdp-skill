@@ -603,7 +603,7 @@ describe('TestRunner', () => {
     });
 
     it('should accept fill with ref instead of selector', () => {
-      const steps = [{ fill: { ref: 's1e3', value: 'test' } }];
+      const steps = [{ fill: { ref: 'f0s1e3', value: 'test' } }];
 
       const result = testRunner.validateSteps(steps);
       assert.strictEqual(result.valid, true);
@@ -716,7 +716,7 @@ describe('TestRunner', () => {
     });
 
     it('should accept valid hover with ref', () => {
-      const result = validateSteps([{ hover: { ref: 's1e4' } }]);
+      const result = validateSteps([{ hover: { ref: 'f0s1e4' } }]);
       assert.strictEqual(result.valid, true);
     });
 

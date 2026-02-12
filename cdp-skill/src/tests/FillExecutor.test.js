@@ -158,9 +158,9 @@ describe('FillExecutor', () => {
         return {};
       });
 
-      const result = await executor.execute({ ref: 's1e1', value: 'ref value' });
+      const result = await executor.execute({ ref: 'f0s1e1', value: 'ref value' });
       assert.strictEqual(result.filled, true);
-      assert.strictEqual(result.ref, 's1e1');
+      assert.strictEqual(result.ref, 'f0s1e1');
       assert.strictEqual(result.method, 'insertText');
     });
 
@@ -195,9 +195,9 @@ describe('FillExecutor', () => {
         return {};
       });
 
-      const result = await executor.execute({ selector: 's1e5', value: 'test' });
+      const result = await executor.execute({ selector: 'f0s1e5', value: 'test' });
       assert.strictEqual(result.filled, true);
-      assert.strictEqual(result.ref, 's1e5');
+      assert.strictEqual(result.ref, 'f0s1e5');
     });
 
     it('should fill by label', async () => {
@@ -499,8 +499,8 @@ describe('FillExecutor', () => {
       });
 
       const result = await executor.executeBatch({
-        's1e1': 'value1',
-        's1e2': 'value2'
+        'f0s1e1': 'value1',
+        'f0s1e2': 'value2'
       });
 
       assert.strictEqual(result.total, 2);
@@ -522,7 +522,7 @@ describe('FillExecutor', () => {
       });
 
       await assert.rejects(
-        () => executor.execute({ ref: 's1e1', value: 'test' }),
+        () => executor.execute({ ref: 'f0s1e1', value: 'test' }),
         (err) => {
           return err.message.includes('not found');
         }
@@ -556,7 +556,7 @@ describe('FillExecutor', () => {
       });
 
       await assert.rejects(
-        () => executor.execute({ ref: 's1e1', value: 'test' }),
+        () => executor.execute({ ref: 'f0s1e1', value: 'test' }),
         (err) => {
           assert.ok(err.message.includes('not visible'));
           return true;
@@ -568,7 +568,7 @@ describe('FillExecutor', () => {
       mockAriaSnapshot.getElementByRef = mock.fn(async () => null);
 
       await assert.rejects(
-        () => executor.execute({ ref: 's1e99', value: 'test' }),
+        () => executor.execute({ ref: 'f0s1e99', value: 'test' }),
         (err) => {
           assert.ok(err.message.includes('not found'));
           return true;

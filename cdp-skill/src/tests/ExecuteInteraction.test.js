@@ -184,7 +184,7 @@ describe('executeHover', () => {
     const snapshot = createMockAriaSnapshot();
 
     const result = await executeHover(locator, emulator, snapshot, {
-      ref: 's1e1'
+      ref: 'f0s1e1'
     });
 
     assert.strictEqual(result.hovered, true);
@@ -295,7 +295,7 @@ describe('executeDrag', () => {
 
     await assert.rejects(
       executeDrag(locator, emulator, pc, snapshot, {
-        source: 's1e1',
+        source: 'f0s1e1',
         target: { x: 200, y: 200 }
       }),
       { message: /no longer attached/i }

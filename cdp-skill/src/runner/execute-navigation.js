@@ -121,8 +121,8 @@ export async function executeScroll(elementLocator, inputEmulator, pageControlle
         await pageController.evaluateInFrame('window.scrollBy(0, 300)');
         break;
       default:
-        // Check if it looks like a ref (e.g., "s1e1", "s2e12")
-        if (/^s\d+e\d+$/.test(params)) {
+        // Check if it looks like a ref (e.g., "f0s1e1", "f[frame-top]s2e12")
+        if (/^f(\d+|\[[^\]]+\])s\d+e\d+$/.test(params)) {
           await scrollToRef(params);
         } else {
           // Treat as selector - scroll element into view
@@ -136,7 +136,7 @@ export async function executeScroll(elementLocator, inputEmulator, pageControlle
     }
   } else if (params && typeof params === 'object') {
     // Check for ref first
-    const ref = params.ref || (params.selector && /^s\d+e\d+$/.test(params.selector) ? params.selector : null);
+    const ref = params.ref || (params.selector && /^f(\d+|\[[^\]]+\])s\d+e\d+$/.test(params.selector) ? params.selector : null);
     if (ref) {
       await scrollToRef(ref);
     } else if (params.selector) {

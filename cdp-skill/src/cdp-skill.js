@@ -687,12 +687,13 @@ async function main() {
       getSavedFrameState: () => loadFrameState(session.targetId)
     });
     const frameContextProvider = () => pageController.getFrameContext();
+    const frameIdentifierProvider = () => pageController.getFrameIdentifier();
     const elementLocator = createElementLocator(session, { getFrameContext: frameContextProvider });
     const inputEmulator = createInputEmulator(session);
     const screenshotCapture = createScreenshotCapture(session);
     const consoleCapture = createConsoleCapture(session);
     const pdfCapture = createPdfCapture(session);
-    const ariaSnapshot = createAriaSnapshot(session, { getFrameContext: frameContextProvider });
+    const ariaSnapshot = createAriaSnapshot(session, { getFrameContext: frameContextProvider, getFrameIdentifier: frameIdentifierProvider });
     const cookieManager = createCookieManager(session);
 
     // Initialize page controller (enables required CDP domains)
