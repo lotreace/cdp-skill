@@ -63,9 +63,9 @@ Work through the task step by step. Use the most appropriate cdp-skill steps for
 
 **Leave the tab open.** The validator harness may need to connect to the tab for live fallback validation. The conductor handles tab cleanup after validation.
 
-### 5b. Capture Verification Snapshot
+### 5b. Capture Verification Snapshot (CRITICAL)
 
-After completing all test steps, capture the browser state for offline validation. This allows the validator to score your test even if the tab is later closed:
+**IMPORTANT:** You MUST run this command and use its EXACT output as the `verificationSnapshot` value. Do NOT create a custom snapshot object.
 
 ```bash
 SNAP=$(node cdp-bench/flywheel/CaptureVerification.js \
@@ -74,7 +74,9 @@ SNAP=$(node cdp-bench/flywheel/CaptureVerification.js \
 
 Replace `<tN>` with the tab alias you used (e.g., `t825`).
 
-Include the result as `"verificationSnapshot"` in your trace JSON (Step 6). If the capture command outputs `null`, set `"verificationSnapshot": null` — the validator will fall back to live-tab verification.
+**Use the command output EXACTLY** — the validator requires the specific format produced by `CaptureVerification.js`. If you create a custom snapshot (e.g., `{firstValue: "...", secondValue: "..."}`), the validator will reject it and fall back to live CDP, which may fail if the tab is closed.
+
+If the capture command outputs `null`, set `"verificationSnapshot": null` — the validator will fall back to live-tab verification.
 
 ### 6. Record Your Trace
 
