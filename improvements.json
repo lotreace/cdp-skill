@@ -1068,7 +1068,7 @@
       "section": "Other Issues",
       "title": "Click step errors even when navigation succeeds",
       "votes": 6,
-      "status": "open",
+      "status": "implemented",
       "symptoms": [
         "In call #5, the fill succeeded and triggered form submission/navigation to /secure, but the click step reported an error 'CDP error: Cannot find context with specified id'. The navigation was successful and the page landed on the secure area, but the click step status was marked as error."
       ],
@@ -1087,7 +1087,9 @@
       "source": "runner-feedback",
       "sourceTests": [
         "002-heroku-forms"
-      ]
+      ],
+      "implementedIn": "v1.0.14",
+      "implementedNote": "Crank 11: Handle context destruction during click verification"
     },
     {
       "id": "7.10",
