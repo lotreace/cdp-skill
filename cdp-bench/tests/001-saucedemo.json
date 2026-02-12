@@ -1,6 +1,0 @@
-{
-  "id": 1,
-  "url": "https://www.saucedemo.com",
-  "category": "create",
-  "task": "Complete a full checkout flow: login with credentials (username: standard_user, password: secret_sauce), add an item to cart, fill shipping form with test data, and confirm the order until you see the 'Thank you for your order' message."
-}

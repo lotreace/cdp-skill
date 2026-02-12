@@ -1,6 +1,0 @@
-{
-  "id": 20,
-  "url": "https://archive.org",
-  "category": "read",
-  "task": "Navigate to the Wayback Machine on archive.org and search for the archived homepage of cnn.com from June 20, 2000; output the capture date and URL."
-}

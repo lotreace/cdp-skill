@@ -1,6 +1,0 @@
-{
-  "id": 11,
-  "url": "https://the-internet.herokuapp.com/drag_and_drop",
-  "category": "update",
-  "task": "Complete the drag and drop challenge by dragging element A to element B's position. Verify the elements have swapped positions (A should now be where B was, and vice versa)."
-}

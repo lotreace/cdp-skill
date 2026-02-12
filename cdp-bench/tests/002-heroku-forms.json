@@ -1,6 +1,0 @@
-{
-  "id": 2,
-  "url": "https://the-internet.herokuapp.com/login",
-  "category": "create",
-  "task": "Test form authentication: first submit invalid credentials and verify the error message, then login with valid credentials (username: tomsmith, password: SuperSecretPassword!) and verify you reach the secure area, then logout and verify return to login page."
-}

@@ -1,6 +1,0 @@
-{
-  "id": 28,
-  "url": "https://microsoft.github.io/monaco-editor/playground.html",
-  "category": "create",
-  "task": "Use the Monaco code editor playground: click into the editor area, clear any existing code, then type a simple JavaScript function 'function greet(name) { return \"Hello, \" + name; }'. Trigger autocomplete by typing 'console.' and select 'log' from the suggestions. Verify syntax highlighting is applied to the code."
-}
