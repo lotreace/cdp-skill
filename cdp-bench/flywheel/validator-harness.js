@@ -306,16 +306,23 @@ async function validateTest(testPath, host, port, targetId, urlHint, options = {
   // Snapshot-first path: evaluate offline from captured snapshot
   if (options.preferSnapshot && trace?.verificationSnapshot) {
     const validation = evaluateSnapshotOffline(trace.verificationSnapshot, testDef.milestones || []);
-    const scores = computeTestScore(validation.completionScore, trace, testDef.budget);
-    return {
-      testId: testDef.id,
-      category: testDef.category,
-      status: validation.completionScore >= 0.5 ? 'pass' : 'fail',
-      milestones: validation.milestones,
-      scores,
-      wallClockMs: scores.wallClockMs,
-      validationSource: 'snapshot'
-    };
+
+    // If snapshot is valid (has proper milestones object), use offline evaluation
+    // Otherwise fall through to live CDP validation
+    if (validation.snapshotValid) {
+      const scores = computeTestScore(validation.completionScore, trace, testDef.budget);
+      return {
+        testId: testDef.id,
+        category: testDef.category,
+        status: validation.completionScore >= 0.5 ? 'pass' : 'fail',
+        milestones: validation.milestones,
+        scores,
+        wallClockMs: scores.wallClockMs,
+        validationSource: 'snapshot'
+      };
+    }
+    // Snapshot was malformed (e.g., runner created custom snapshot instead of using CaptureVerification.js)
+    // Fall through to live CDP validation
   }
 
   // Live CDP path: connect to browser tab

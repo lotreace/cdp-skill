@@ -53,7 +53,23 @@ export function evaluateSnapshotOffline(snapshot, milestones) {
         passed: false,
         detail: snapshot?.error || 'snapshot missing'
       })),
-      completionScore: 0
+      completionScore: 0,
+      snapshotValid: false
+    };
+  }
+
+  // Check if snapshot has the required milestones object from buildCaptureExpression()
+  // If not, the runner likely created a custom snapshot that we can't evaluate
+  if (!snapshot.milestones || typeof snapshot.milestones !== 'object') {
+    return {
+      milestones: milestones.map(m => ({
+        id: m.id,
+        weight: m.weight,
+        passed: false,
+        detail: 'snapshot malformed: missing milestones object'
+      })),
+      completionScore: 0,
+      snapshotValid: false
     };
   }
 
@@ -77,7 +93,7 @@ export function evaluateSnapshotOffline(snapshot, milestones) {
     }
   }
 
-  return { milestones: results, completionScore: Math.min(1.0, completionScore) };
+  return { milestones: results, completionScore: Math.min(1.0, completionScore), snapshotValid: true };
 }
 
 // --- Internal helpers ---
