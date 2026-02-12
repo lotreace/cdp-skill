@@ -1,40 +1,29 @@
 # Runner Agent Prompt
 
-Execute ONE browser automation test and write a trace with self-reported scores.
+Execute ONE browser automation test and write a trace file.
 
 ## RESTRICTIONS
 
-You are READ-ONLY. You may ONLY create: `{{run_dir}}/{{test_id}}.trace.json`
-
-Do NOT modify source code, run git commands, or "fix" bugs you encounter.
+- You are READ-ONLY. Do NOT modify source code, run git commands, or "fix" bugs.
+- You may ONLY create ONE file: `{{run_dir}}/{{test_id}}.trace.json`
+- Do NOT create any other files.
 
 ## Your Test
 
 - **Test File:** {{test_file_path}}
 - **Run Directory:** {{run_dir}}
 
-## Instructions
+## Steps
 
 ### 1. Read Test Definition
 
-Read `{{test_file_path}}`. Key fields:
-- `url`: Starting URL
-- `task`: What to accomplish
-- `hints`: Credentials/config
-- `milestones`: Checkpoints YOU will verify (see step 5)
-- `budget`: Step/time limits
+Read `{{test_file_path}}`. Note the `url`, `task`, `milestones`, and `budget`.
 
 ### 2. Read cdp-skill Docs
 
 Read `cdp-skill/SKILL.md` for CLI reference.
 
-### 3. Set Metrics Tracking
-
-```bash
-export CDP_METRICS_FILE="{{run_dir}}/{{test_id}}.metrics.json"
-```
-
-### 4. Execute Test
+### 3. Execute Test
 
 **Always use headless mode:**
 
@@ -42,55 +31,49 @@ export CDP_METRICS_FILE="{{run_dir}}/{{test_id}}.metrics.json"
 node cdp-skill/src/cdp-skill.js '{"steps": [{"newTab": {"url": "...", "headless": true}}]}'
 ```
 
-Work through the task. Stay within budget.
+Work through the task. Stay within the step budget.
 
-### 5. Verify Milestones (CRITICAL)
+### 4. Verify Milestones
 
-After completing the task, YOU must verify each milestone. For each milestone's `verify` block:
+After completing the task, verify each milestone from the test definition. For each milestone's `verify` block:
 
-- `url_contains: "text"` → Check if current URL contains "text"
-- `dom_exists: "selector"` → Check if element exists
-- `eval_truthy: "expr"` → Evaluate JS expression, check if truthy
+- `url_contains` → Check current URL
+- `dom_exists` → Check element exists
+- `eval_truthy` → Evaluate JS expression
 
-Use cdp-skill to verify. Example for `eval_truthy`:
+Use cdp-skill to verify:
 ```bash
-node cdp-skill/src/cdp-skill.js '{"steps": [{"pageFunction": "() => document.title.includes(\"Success\")"}]}' --tab tN
+node cdp-skill/src/cdp-skill.js '{"steps": [{"pageFunction": "() => document.title.includes(\"text\")"}]}' --tab tN
 ```
 
-Record results in `milestoneResults` (see trace format below).
+### 5. Write Trace
 
-### 6. Write Trace
-
-Write `{{run_dir}}/{{test_id}}.trace.json`:
+Write `{{run_dir}}/{{test_id}}.trace.json` with **exactly** this structure:
 
 ```json
 {
   "testId": "{{test_id}}",
-  "tabId": "tN",
   "wallClockMs": 12345,
   "milestoneResults": {
     "milestone_id_1": true,
-    "milestone_id_2": false,
-    "milestone_id_3": true
+    "milestone_id_2": false
   },
-  "cliCalls": [
-    {"seq": 1, "input": {...}, "output": {...}, "durationMs": 100}
-  ],
-  "feedback": [
-    {"type": "bug|improvement|workaround", "area": "actions|snapshot|...", "title": "...", "detail": "..."}
-  ]
+  "feedback": []
 }
 ```
 
-**`milestoneResults`**: Map of milestone ID → boolean (passed/failed). This is how you report your score.
+**THE TRACE FILE MUST HAVE EXACTLY THESE 4 FIELDS. NO OTHER FIELDS.**
 
-### 7. Return Summary
+- **testId**: String. The test ID exactly as shown above.
+- **wallClockMs**: Number. Total execution time in milliseconds.
+- **milestoneResults**: Object. A map of milestone ID → boolean. Every milestone from the test definition MUST have an entry. Use `true` if it passed verification, `false` if it failed. **This is the ONLY way your score is recorded. If this field is missing or malformed, your test scores zero.**
+- **feedback**: Array. At least one entry: `{"type": "bug|improvement|workaround", "area": "...", "title": "...", "detail": "..."}`
 
-ONE line only:
+**DO NOT** add extra fields like `tab`, `tabId`, `cliCalls`, `steps`, `milestones`, `score`, `status`, `startTime`, `endTime`, etc. The trace must contain ONLY the 4 fields above.
+
+### 6. Return Summary
+
+ONE line:
 ```
-TRACE: {{test_id}} | wallClock={{ms}}ms | steps={{N}} | errors={{N}} | tab={{tN}}
+TRACE: {{test_id}} | milestones=X/Y | wallClock=Zms
 ```
-
-## Feedback
-
-Include at least one `feedback` entry about your experience (bugs, workarounds, or what worked well).

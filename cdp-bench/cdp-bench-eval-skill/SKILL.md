@@ -78,10 +78,6 @@ SHS = 40 * passRate + 25 * avgCompletion + 15 * perfectRate + 10 * avgEfficiency
 
 Manages baseline persistence. The `writeBaseline()` function persists per-test scores and metadata. Baselines are always updated after each crank to reflect the latest state.
 
-### Verification Snapshot (`VerificationSnapshot.js`)
-
-Captures browser state for offline milestone validation. **Async expression handling:** The `buildCaptureExpression()` function now correctly detects async functions using `/^async[\s(]/` regex to distinguish actual async keywords from identifiers like `asyncStorage`. Async expressions are wrapped in `async function()` blocks to prevent evaluation errors.
-
 ### Decision Engine (`DecisionEngine.js`)
 
 History-aware recommendation ranking with fix attempt tracking. **Design review separation:** The `rank()` function now returns `{ recommendations, needsDesignReview }` where:
@@ -260,11 +256,11 @@ The CrankOrchestrator handles all validation, scoring, and feedback extraction i
 node cdp-bench/flywheel/CrankOrchestrator.js --phase validate \
   --run-dir ${runDir} --tests-dir cdp-bench/tests \
   --improvements improvements.json --baselines-dir cdp-bench/baselines \
-  --port 9222 --version ${version} --crank ${crankNumber}
+  --version ${version} --crank ${crankNumber}
 ```
 
 This:
-- Validates each test (snapshot-first from trace data, live CDP fallback)
+- Validates each test using runner self-reported milestoneResults from traces
 - Computes SHS and per-test scores
 - Extracts and deduplicates runner feedback
 - Writes `validate-result.json`, `validation-summary.json`, per-test `.result.json`, `extracted-feedback.json`
@@ -359,9 +355,7 @@ cdp-bench/
     SKILL.md                         # This file
   flywheel/
     CrankOrchestrator.js             # Two-phase orchestrator (validate + record)
-    VerificationSnapshot.js          # Offline snapshot capture + evaluation (async expression support)
-    CaptureVerification.js           # CLI: runner captures snapshot before trace
-    validator-harness.js             # Deterministic milestone verification (snapshot-first + live CDP)
+    validator-harness.js             # Reads runner self-reports from traces, computes scores + SHS
     metrics-collector.js             # I/O byte aggregation and per-test scoring
     shs-calculator.js                # Centralized SHS computation (shared by validator + metrics)
     baseline-manager.js              # Baseline read/write/compare

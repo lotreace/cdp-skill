@@ -1,85 +1,25 @@
 {
   "version": "1.0.15",
-  "timestamp": "2026-02-12T20:38:40.811Z",
-  "shs": 91,
+  "timestamp": "2026-02-12T21:39:23.534Z",
+  "shs": 59,
   "tests": {
-    "001-saucedemo-checkout": {
-      "score": 1,
-      "composite": 1
-    },
-    "002-heroku-forms": {
-      "score": 1,
-      "composite": 1
-    },
     "009-bbc-search": {
       "score": 1,
-      "composite": 0.95
-    },
-    "010-allrecipes-search": {
-      "score": 1,
-      "composite": 0.978
+      "composite": 1
     },
     "011-heroku-dragdrop": {
       "score": 1,
       "composite": 1
     },
-    "012-amazon-search": {
-      "score": 1,
-      "composite": 1
-    },
-    "015-heroku-slider": {
-      "score": 1,
-      "composite": 1
-    },
-    "016-heroku-hover": {
-      "score": 1,
-      "composite": 1
-    },
-    "017-wikipedia-search": {
-      "score": 1,
-      "composite": 1
-    },
-    "018-apnews-browse": {
-      "score": 1,
-      "composite": 1
-    },
-    "020-archive-wayback": {
-      "score": 1,
-      "composite": 1
-    },
-    "021-hackernews-browse": {
-      "score": 1,
-      "composite": 1
-    },
-    "023-bandcamp-browse": {
-      "score": 1,
-      "composite": 1
-    },
     "024-demoqa-forms": {
       "score": 1,
-      "composite": 0.95
+      "composite": 1
     },
     "025-tinymce-editor": {
-      "score": 1,
-      "composite": 1
-    },
-    "026-quill-editor": {
-      "score": 1,
-      "composite": 1
-    },
-    "027-prosemirror-editor": {
-      "score": 1,
-      "composite": 1
+      "score": 0,
+      "composite": 0.4
     },
     "028-monaco-editor": {
-      "score": 1,
-      "composite": 1
-    },
-    "029-todomvc-react": {
-      "score": 1,
-      "composite": 1
-    },
-    "030-herokuapp-tables": {
       "score": 1,
       "composite": 1
     },
@@ -99,25 +39,21 @@
       "score": 0,
       "composite": 0.4
     },
-    "035-herokuapp-dynamic": {
-      "score": 1,
-      "composite": 1
-    },
     "036-herokuapp-challenging-dom": {
-      "score": 1,
-      "composite": 1
+      "score": 0.25,
+      "composite": 0.55
     },
     "037-demoqa-datepicker": {
-      "score": 0.55,
-      "composite": 0.73
+      "score": 0,
+      "composite": 0.4
     },
     "038-demoqa-selectmenu": {
-      "score": 1,
-      "composite": 1
+      "score": 0,
+      "composite": 0.4
     },
     "039-demoqa-progressbar": {
-      "score": 0.4,
-      "composite": 0.64
+      "score": 0,
+      "composite": 0.4
     },
     "040-saucedemo-cart-validation": {
       "score": 1,

@@ -1,7 +1,7 @@
 {
   "meta": {
     "totalVotes": 87,
-    "lastUpdated": "2026-02-12T20:38:40.808Z"
+    "lastUpdated": "2026-02-12T21:39:23.532Z"
   },
   "issues": [
     {
@@ -970,7 +970,7 @@
       "id": "4.5",
       "section": "Input / Typing Issues",
       "title": "No native file upload support - had to use pageFunction with Dropzone API",
-      "votes": 6,
+      "votes": 7,
       "status": "open",
       "symptoms": [
         "cdp-skill fill step rejects file inputs as 'not editable'. Had to use pageFunction to call Dropzone.forElement().addFile() to programmatically upload. CDP protocol supports DOM.setFileInputFiles which could be exposed as a dedicated step (e.g., 'uploadFile' or 'setFileInput') for native file upload support without requiring pageFunction workarounds."
@@ -1233,7 +1233,7 @@
       "id": "7.16",
       "section": "Other Issues",
       "title": "drag with method:'auto' defaults to mouse-events which fails on HTML5 DnD sites",
-      "votes": 4,
+      "votes": 5,
       "status": "open",
       "symptoms": [
         "The 'auto' method (default) for drag chose 'mouse-events' on the-internet.herokuapp.com/drag_and_drop, which uses the HTML5 Drag and Drop API. The drag step reported success (dragged: true) but the elements did NOT actually swap. Only when explicitly using method:'html5' did the drag work correctly. The 'auto' method should detect HTML5 DnD attributes (draggable='true', ondragstart handlers) and automatically select the html5 method. Additionally, the step should not report dragged:true when the drag had no visible effect - this is a misleading success response."
@@ -1302,6 +1302,27 @@
       "source": "runner-feedback",
       "sourceTests": [
         "021-hackernews-browse"
+      ]
+    },
+    {
+      "id": "1.7",
+      "section": "Timeout / Actionability Issues",
+      "title": "Cross-origin consent iframe blocks interaction on BBC",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "BBC shows a consent modal in a cross-origin iframe (#sp_message_iframe_1355822) that cannot be interacted with via cdp-skill frame switching. Workaround was to navigate directly to the search URL, bypassing the consent modal. A built-in mechanism to handle or dismiss cross-origin consent modals would improve reliability for sites using third-party consent management platforms."
+      ],
+      "expected": "",
+      "workaround": "BBC shows a consent modal in a cross-origin iframe (#sp_message_iframe_1355822) that cannot be interacted with via cdp-skill frame switching. Workaround was to navigate directly to the search URL, bypassing the consent modal. A built-in mechanism to handle or dismiss cross-origin consent modals would improve reliability for sites using third-party consent management platforms.",
+      "files": [
+        "src/runner/execute-interaction.js",
+        "src/dom/click-executor.js"
+      ],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "009-bbc-search"
       ]
     }
   ],
