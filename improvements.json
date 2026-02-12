@@ -1,7 +1,7 @@
 {
   "meta": {
     "totalVotes": 87,
-    "lastUpdated": "2026-02-12T21:39:23.532Z"
+    "lastUpdated": "2026-02-12T21:54:07.878Z"
   },
   "issues": [
     {
@@ -1233,7 +1233,7 @@
       "id": "7.16",
       "section": "Other Issues",
       "title": "drag with method:'auto' defaults to mouse-events which fails on HTML5 DnD sites",
-      "votes": 5,
+      "votes": 6,
       "status": "open",
       "symptoms": [
         "The 'auto' method (default) for drag chose 'mouse-events' on the-internet.herokuapp.com/drag_and_drop, which uses the HTML5 Drag and Drop API. The drag step reported success (dragged: true) but the elements did NOT actually swap. Only when explicitly using method:'html5' did the drag work correctly. The 'auto' method should detect HTML5 DnD attributes (draggable='true', ondragstart handlers) and automatically select the html5 method. Additionally, the step should not report dragged:true when the drag had no visible effect - this is a misleading success response."
@@ -1308,7 +1308,7 @@
       "id": "1.7",
       "section": "Timeout / Actionability Issues",
       "title": "Cross-origin consent iframe blocks interaction on BBC",
-      "votes": 1,
+      "votes": 2,
       "status": "open",
       "symptoms": [
         "BBC shows a consent modal in a cross-origin iframe (#sp_message_iframe_1355822) that cannot be interacted with via cdp-skill frame switching. Workaround was to navigate directly to the search URL, bypassing the consent modal. A built-in mechanism to handle or dismiss cross-origin consent modals would improve reliability for sites using third-party consent management platforms."
@@ -1323,6 +1323,24 @@
       "source": "runner-feedback",
       "sourceTests": [
         "009-bbc-search"
+      ]
+    },
+    {
+      "id": "7.19",
+      "section": "Other Issues",
+      "title": "Radio button click requires text targeting instead of ref",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Clicking a radio button ref (f0s1e8) reported 'element not visible' and did not check the radio. Using text-based click with force:true on the label text 'Male' worked. The radio input elements on demoqa have zero dimensions and are styled via CSS custom radio, so ref-based clicks fail silently."
+      ],
+      "expected": "",
+      "workaround": "Clicking a radio button ref (f0s1e8) reported 'element not visible' and did not check the radio. Using text-based click with force:true on the label text 'Male' worked. The radio input elements on demoqa have zero dimensions and are styled via CSS custom radio, so ref-based clicks fail silently.",
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "024-demoqa-forms"
       ]
     }
   ],
