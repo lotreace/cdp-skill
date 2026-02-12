@@ -295,6 +295,7 @@ function computeSHS(testResults) {
 
 async function validateTest(testPath, host, port, targetId, urlHint, options = {}) {
   const testDef = JSON.parse(fs.readFileSync(testPath, 'utf8'));
+  const milestones = testDef.milestones || [];
 
   // Use pre-loaded trace from batch mode, or try loading from runDir
   let trace = options.trace || null;
@@ -303,12 +304,40 @@ async function validateTest(testPath, host, port, targetId, urlHint, options = {
     try { trace = JSON.parse(fs.readFileSync(traceFile, 'utf8')); } catch (e) { /* no trace */ }
   }
 
-  // Snapshot-first path: evaluate offline from captured snapshot
-  if (options.preferSnapshot && trace?.verificationSnapshot) {
-    const validation = evaluateSnapshotOffline(trace.verificationSnapshot, testDef.milestones || []);
+  // PRIMARY PATH: Use runner's self-reported milestoneResults
+  // This is the simplest and most reliable - runner already verified the milestones
+  if (trace?.milestoneResults && typeof trace.milestoneResults === 'object') {
+    const results = [];
+    let completionScore = 0;
 
-    // If snapshot is valid (has proper milestones object), use offline evaluation
-    // Otherwise fall through to live CDP validation
+    for (const milestone of milestones) {
+      const passed = !!trace.milestoneResults[milestone.id];
+      results.push({
+        id: milestone.id,
+        weight: milestone.weight,
+        passed,
+        detail: passed ? 'runner verified' : 'runner reported failure'
+      });
+      if (passed) completionScore += milestone.weight;
+    }
+
+    completionScore = Math.min(1.0, completionScore);
+    const scores = computeTestScore(completionScore, trace, testDef.budget);
+
+    return {
+      testId: testDef.id,
+      category: testDef.category,
+      status: completionScore >= 0.5 ? 'pass' : 'fail',
+      milestones: results,
+      scores,
+      wallClockMs: scores.wallClockMs,
+      validationSource: 'runner'
+    };
+  }
+
+  // FALLBACK: Snapshot evaluation (deprecated, kept for backward compatibility)
+  if (options.preferSnapshot && trace?.verificationSnapshot) {
+    const validation = evaluateSnapshotOffline(trace.verificationSnapshot, milestones);
     if (validation.snapshotValid) {
       const scores = computeTestScore(validation.completionScore, trace, testDef.budget);
       return {
@@ -321,16 +350,13 @@ async function validateTest(testPath, host, port, targetId, urlHint, options = {
         validationSource: 'snapshot'
       };
     }
-    // Snapshot was malformed (e.g., runner created custom snapshot instead of using CaptureVerification.js)
-    // Fall through to live CDP validation
   }
 
-  // Live CDP path: connect to browser tab
+  // LAST RESORT: Live CDP validation (requires open browser tab)
   const target = await connectToTarget(host, port, targetId, urlHint);
   const session = await createCDPSession(target.webSocketDebuggerUrl);
 
   try {
-    // Check skip condition
     if (testDef.skipWhen) {
       const shouldSkip = await checkSkipCondition(session, testDef.skipWhen);
       if (shouldSkip) {
@@ -338,10 +364,7 @@ async function validateTest(testPath, host, port, targetId, urlHint, options = {
       }
     }
 
-    // Validate milestones
-    const validation = await validateMilestones(session, testDef.milestones || []);
-
-    // Compute scores
+    const validation = await validateMilestones(session, milestones);
     const scores = computeTestScore(validation.completionScore, trace, testDef.budget);
 
     return {

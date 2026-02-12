@@ -1,7 +1,7 @@
 {
   "meta": {
     "totalVotes": 87,
-    "lastUpdated": "2026-02-11T18:06:43.713Z"
+    "lastUpdated": "2026-02-11T21:26:14.597Z"
   },
   "issues": [
     {
@@ -333,7 +333,7 @@
       "id": "8.2",
       "section": "Stagehand-Inspired Improvements",
       "title": "Lazy selector resolution (eliminate stale refs)",
-      "votes": 5,
+      "votes": 10,
       "status": "open",
       "symptoms": [
         "Cached element handles can become stale creating stale element errors",
@@ -786,7 +786,7 @@
       "id": "11.5",
       "section": "Navigation/Detection Issues",
       "title": "Text-based click silently matches wrong element",
-      "votes": 1,
+      "votes": 2,
       "status": "open",
       "symptoms": [
         "click with text 'History' matched navigation link instead of article heading",
@@ -930,7 +930,7 @@
       "id": "7.6",
       "section": "Other Issues",
       "title": "TinyMCE editor on the-internet.herokuapp.com is permanently in read-only mode du",
-      "votes": 8,
+      "votes": 9,
       "status": "open",
       "symptoms": [
         "TinyMCE editor on the-internet.herokuapp.com is permanently in read-only mode due to expired Tiny Cloud API key. The console shows 'All created TinyMCE editors are configured to be read-only' and 'you have no more editor loads available this month'. This means the test cannot be completed via normal user interaction (switchToFrame + fill/type). The only way to set content is via direct DOM manipulation through pageFunction, which bypasses the editor's read-only restriction. This test should either use a self-hosted TinyMCE instance without cloud licensing, or the test expectations should acknowledge that DOM manipulation is the expected approach."
@@ -948,7 +948,7 @@
       "id": "10.11",
       "section": "Snapshot Content/Accuracy Issues",
       "title": "Snapshot returns empty YAML inside frameset frames",
-      "votes": 2,
+      "votes": 3,
       "status": "open",
       "symptoms": [
         "After switching to frame-left (a frame inside a frameset), snapshot returned {yaml: '', refs: {}}. The accessibility tree may not properly traverse frameset-based frames. Had to use pageFunction as fallback to read text content."
@@ -968,7 +968,7 @@
       "id": "4.5",
       "section": "Input / Typing Issues",
       "title": "No native file upload support - had to use pageFunction with Dropzone API",
-      "votes": 5,
+      "votes": 6,
       "status": "open",
       "symptoms": [
         "cdp-skill fill step rejects file inputs as 'not editable'. Had to use pageFunction to call Dropzone.forElement().addFile() to programmatically upload. CDP protocol supports DOM.setFileInputFiles which could be exposed as a dedicated step (e.g., 'uploadFile' or 'setFileInput') for native file upload support without requiring pageFunction workarounds."
@@ -1075,7 +1075,15 @@
       "expected": "",
       "workaround": null,
       "files": [],
-      "fixAttempts": [],
+      "fixAttempts": [
+        {
+          "date": "2026-02-11",
+          "outcome": "success",
+          "crank": 11,
+          "version": "1.0.14",
+          "shsDelta": -3
+        }
+      ],
       "source": "runner-feedback",
       "sourceTests": [
         "002-heroku-forms"
@@ -1221,7 +1229,7 @@
       "id": "7.16",
       "section": "Other Issues",
       "title": "drag with method:'auto' defaults to mouse-events which fails on HTML5 DnD sites",
-      "votes": 2,
+      "votes": 3,
       "status": "open",
       "symptoms": [
         "The 'auto' method (default) for drag chose 'mouse-events' on the-internet.herokuapp.com/drag_and_drop, which uses the HTML5 Drag and Drop API. The drag step reported success (dragged: true) but the elements did NOT actually swap. Only when explicitly using method:'html5' did the drag work correctly. The 'auto' method should detect HTML5 DnD attributes (draggable='true', ondragstart handlers) and automatically select the html5 method. Additionally, the step should not report dragged:true when the drag had no visible effect - this is a misleading success response."
@@ -1269,6 +1277,27 @@
       "source": "runner-feedback",
       "sourceTests": [
         "011-heroku-dragdrop"
+      ]
+    },
+    {
+      "id": "1.6",
+      "section": "Timeout / Actionability Issues",
+      "title": "Click on ref s1e17 triggered unexpected newTabs creation (t204 to challenging_do",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Click on ref s1e17 triggered unexpected newTabs creation (t204 to challenging_dom). This appears to be spurious tab opening during comment link navigation."
+      ],
+      "expected": "",
+      "workaround": null,
+      "files": [
+        "src/runner/execute-interaction.js",
+        "src/dom/click-executor.js"
+      ],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "021-hackernews-browse"
       ]
     }
   ],

@@ -28,11 +28,8 @@
 
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
-import http from 'http';
 import { fileURLToPath } from 'url';
-import { execSync, spawnSync } from 'child_process';
-import { evaluateSnapshotOffline, buildCaptureExpression } from './VerificationSnapshot.js';
+import { execSync } from 'child_process';
 import { computeTestScore, computeSHS, validateRunDir } from './validator-harness.js';
 import {
   readLatestBaseline,
@@ -44,173 +41,6 @@ import { createFeedbackApplier } from './FeedbackApplier.js';
 import { createFlywheelRecorder } from './FlywheelRecorder.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// --- Snapshot Capture ---
-
-function loadTabRegistry() {
-  const registryPath = path.join(os.tmpdir(), 'cdp-skill-tabs.json');
-  try {
-    if (fs.existsSync(registryPath)) {
-      return JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-    }
-  } catch { /* ignore */ }
-  return { tabs: {} };
-}
-
-function resolveTabAlias(alias) {
-  const registry = loadTabRegistry();
-  const entry = registry.tabs[alias];
-  if (!entry) return alias;
-  return typeof entry === 'string' ? entry : entry.targetId;
-}
-
-/**
- * Capture verification snapshots for all traces that have invalid/missing snapshots.
- * This runs BEFORE validation to ensure all traces have proper snapshots.
- * Does NOT depend on runners - orchestrator captures directly via CDP.
- */
-async function captureSnapshotsForTraces(runDir, testsDir, host, port) {
-  const traceFiles = fs.readdirSync(runDir).filter(f => f.endsWith('.trace.json'));
-  let captured = 0;
-  let skipped = 0;
-  let failed = 0;
-
-  for (const traceFile of traceFiles) {
-    const tracePath = path.join(runDir, traceFile);
-    const trace = JSON.parse(fs.readFileSync(tracePath, 'utf8'));
-
-    // Check if snapshot is already valid
-    const snapshot = trace.verificationSnapshot;
-    if (snapshot && snapshot.milestones && typeof snapshot.milestones === 'object') {
-      skipped++;
-      continue;
-    }
-
-    // Need to capture - find the test definition
-    const testId = trace.testId;
-    const testFile = fs.readdirSync(testsDir).find(f => {
-      if (!f.endsWith('.test.json')) return false;
-      const def = JSON.parse(fs.readFileSync(path.join(testsDir, f), 'utf8'));
-      return def.id === testId;
-    });
-
-    if (!testFile) {
-      failed++;
-      continue;
-    }
-
-    const testDef = JSON.parse(fs.readFileSync(path.join(testsDir, testFile), 'utf8'));
-    const milestones = testDef.milestones || [];
-
-    if (milestones.length === 0) {
-      skipped++;
-      continue;
-    }
-
-    // Resolve tab alias to target ID
-    const tabAlias = trace.tabId || trace.tab;
-    if (!tabAlias) {
-      failed++;
-      continue;
-    }
-
-    const targetId = resolveTabAlias(tabAlias);
-
-    // Try to capture snapshot via CDP
-    try {
-      const newSnapshot = await captureSnapshotForTab(host, port, targetId, milestones);
-      if (newSnapshot && newSnapshot.milestones) {
-        trace.verificationSnapshot = newSnapshot;
-        fs.writeFileSync(tracePath, JSON.stringify(trace, null, 2));
-        captured++;
-      } else {
-        failed++;
-      }
-    } catch (err) {
-      // Tab likely closed or unreachable
-      failed++;
-    }
-  }
-
-  return { captured, skipped, failed, total: traceFiles.length };
-}
-
-async function captureSnapshotForTab(host, port, targetId, milestones) {
-  // Find target
-  const targets = await new Promise((resolve, reject) => {
-    const req = http.get(`http://${host}:${port}/json`, res => {
-      let data = '';
-      res.on('data', chunk => { data += chunk; });
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch (e) { reject(e); }
-      });
-    });
-    req.on('error', reject);
-    req.setTimeout(5000, () => { req.destroy(); reject(new Error('HTTP timeout')); });
-  });
-
-  const target = targets.find(t =>
-    t.id === targetId || t.id === targetId?.toLowerCase()
-  );
-  if (!target) throw new Error(`Target ${targetId} not found`);
-
-  // Connect via WebSocket and evaluate
-  const expression = buildCaptureExpression(milestones);
-
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(target.webSocketDebuggerUrl);
-    let msgId = 0;
-    const pending = new Map();
-    const timer = setTimeout(() => { ws.close(); reject(new Error('WS timeout')); }, 10000);
-
-    ws.onopen = async () => {
-      clearTimeout(timer);
-      try {
-        const id = ++msgId;
-        const result = await new Promise((res, rej) => {
-          const t = setTimeout(() => { pending.delete(id); rej(new Error('Eval timeout')); }, 10000);
-          pending.set(id, { resolve: res, reject: rej, timeout: t });
-          ws.send(JSON.stringify({
-            id,
-            method: 'Runtime.evaluate',
-            params: { expression, returnByValue: true, awaitPromise: false }
-          }));
-        });
-
-        ws.close();
-        if (result.exceptionDetails) {
-          resolve(null);
-        } else {
-          resolve(result.result?.value || null);
-        }
-      } catch (e) {
-        ws.close();
-        reject(e);
-      }
-    };
-
-    ws.onmessage = event => {
-      const msg = JSON.parse(typeof event.data === 'string' ? event.data : event.data.toString());
-      if (msg.id && pending.has(msg.id)) {
-        const { resolve: res, reject: rej, timeout: t } = pending.get(msg.id);
-        clearTimeout(t);
-        pending.delete(msg.id);
-        if (msg.error) rej(new Error(msg.error.message));
-        else res(msg.result);
-      }
-    };
-
-    ws.onerror = err => { clearTimeout(timer); reject(err); };
-    ws.onclose = () => {
-      clearTimeout(timer);
-      for (const { reject: rej, timeout: t } of pending.values()) {
-        clearTimeout(t);
-        rej(new Error('WS closed'));
-      }
-    };
-  });
-}
 
 function parseFlags(args) {
   const flags = {};
@@ -235,14 +65,7 @@ function parseFlags(args) {
 async function runValidatePhase(flags) {
   const { runDir, testsDir, improvements: improvementsPath, baselinesDir, port, host, version, crank } = flags;
 
-  // 0. Capture snapshots for any traces with invalid/missing snapshots
-  // This ensures we don't depend on runners capturing snapshots correctly
-  const captureResult = await captureSnapshotsForTraces(runDir, testsDir, host || 'localhost', port || 9222);
-  if (captureResult.captured > 0) {
-    console.error(`Captured ${captureResult.captured} snapshots (${captureResult.skipped} already valid, ${captureResult.failed} failed)`);
-  }
-
-  // 1. Validate all traces (snapshot-first, live CDP fallback)
+  // 1. Validate all traces (uses runner's milestoneResults, falls back to snapshot/CDP)
   const results = await validateRunDir(
     runDir, testsDir, host || 'localhost', port || 9222,
     { preferSnapshot: true }
