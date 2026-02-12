@@ -120,10 +120,41 @@ describe('ClickExecutor', () => {
           if (params?.expression?.includes('location.href')) {
             return { result: { value: 'https://example.com' } };
           }
-          if (params?.expression?.includes('__ariaRefs')) {
+          // LazyResolver: first queries __ariaRefMeta for metadata
+          if (params?.expression?.includes('__ariaRefMeta') && params?.expression?.includes('get') && !params?.expression?.includes('lazyResolveRef')) {
+            return { result: { value: { selector: '#btn', role: 'button', name: 'Submit' } } };
+          }
+          // LazyResolver: then resolves element by selector
+          if (params?.expression?.includes('found') && params?.expression?.includes('box')) {
+            return { result: { value: { found: true, box: { x: 50, y: 50, width: 100, height: 40 } } } };
+          }
+          // LazyResolver: gets objectId
+          if (params?.expression?.includes('querySelector') && !params?.expression?.includes('lazyResolveRef')) {
+            return { result: { objectId: 'obj-123' } };
+          }
+          // Browser-side lazy resolution for click verification/execution - return success
+          if (params?.expression?.includes('lazyResolveRef') && params?.expression?.includes('click')) {
+            return { result: { value: { success: true } } };
+          }
+          // Browser-side lazy resolution for event setup
+          if (params?.expression?.includes('lazyResolveRef')) {
+            return { result: { value: null } };
+          }
+          // Verification check
+          if (params?.expression?.includes('__clickVerifyEl') || params?.expression?.includes('targetReceived')) {
             return { result: { value: { targetReceived: true } } };
           }
           return { result: { objectId: 'obj-123' } };
+        }
+        if (method === 'Runtime.callFunctionOn') {
+          // Visibility check after lazy resolution
+          if (params?.functionDeclaration?.includes('getComputedStyle') && params?.functionDeclaration?.includes('isVisible')) {
+            return { result: { value: { isVisible: true, box: { x: 50, y: 50, width: 100, height: 40 } } } };
+          }
+          if (params?.functionDeclaration?.includes('__clickReceived')) {
+            return { result: { value: true } };
+          }
+          return { result: { value: { success: true, targetReceived: true } } };
         }
         return {};
       });
@@ -139,10 +170,37 @@ describe('ClickExecutor', () => {
           if (params?.expression?.includes('location.href')) {
             return { result: { value: 'https://example.com' } };
           }
-          if (params?.expression?.includes('__ariaRefs')) {
+          // LazyResolver: queries __ariaRefMeta for metadata
+          if (params?.expression?.includes('__ariaRefMeta') && params?.expression?.includes('get') && !params?.expression?.includes('lazyResolveRef')) {
+            return { result: { value: { selector: '#btn', role: 'button', name: 'Submit' } } };
+          }
+          // LazyResolver: resolves element
+          if (params?.expression?.includes('found') && params?.expression?.includes('box')) {
+            return { result: { value: { found: true, box: { x: 50, y: 50, width: 100, height: 40 } } } };
+          }
+          if (params?.expression?.includes('querySelector') && !params?.expression?.includes('lazyResolveRef')) {
+            return { result: { objectId: 'obj-123' } };
+          }
+          // Browser-side lazy resolution for click - return success
+          if (params?.expression?.includes('lazyResolveRef') && params?.expression?.includes('click')) {
+            return { result: { value: { success: true } } };
+          }
+          if (params?.expression?.includes('lazyResolveRef')) {
+            return { result: { value: null } };
+          }
+          if (params?.expression?.includes('__clickVerifyEl') || params?.expression?.includes('targetReceived')) {
             return { result: { value: { targetReceived: true } } };
           }
           return { result: { objectId: 'obj-123' } };
+        }
+        if (method === 'Runtime.callFunctionOn') {
+          if (params?.functionDeclaration?.includes('getComputedStyle') && params?.functionDeclaration?.includes('isVisible')) {
+            return { result: { value: { isVisible: true, box: { x: 50, y: 50, width: 100, height: 40 } } } };
+          }
+          if (params?.functionDeclaration?.includes('__clickReceived')) {
+            return { result: { value: true } };
+          }
+          return { result: { value: { success: true, targetReceived: true } } };
         }
         return {};
       });
@@ -412,36 +470,56 @@ describe('ClickExecutor', () => {
       );
     });
 
-    it('should return stale warning when ref element is stale', async () => {
-      mockAriaSnapshot.getElementByRef = mock.fn(async () => ({
-        box: { x: 50, y: 50, width: 100, height: 40 },
-        isVisible: true,
-        stale: true
-      }));
-
+    it('should throw when ref element cannot be resolved (lazy resolution)', async () => {
+      // LazyResolver returns null when metadata not found or element can't be resolved
       mockSession.send = mock.fn(async (method, params) => {
-        if (method === 'Runtime.evaluate' && params?.expression?.includes('location.href')) {
-          return { result: { value: 'https://example.com' } };
+        if (method === 'Runtime.evaluate') {
+          if (params?.expression?.includes('location.href')) {
+            return { result: { value: 'https://example.com' } };
+          }
+          // LazyResolver: no metadata found
+          if (params?.expression?.includes('__ariaRefMeta')) {
+            return { result: { value: null } };
+          }
+          return { result: { value: null } };
         }
         return {};
       });
 
-      const result = await executor.execute({ ref: 's1e1' });
-      assert.strictEqual(result.clicked, false);
-      assert.strictEqual(result.stale, true);
-      assert.ok(result.warning.includes('no longer attached'));
+      await assert.rejects(
+        async () => await executor.execute({ ref: 's1e1' }),
+        (err) => err.message.includes('not found')
+      );
     });
 
     it('should return warning when ref element is not visible', async () => {
-      mockAriaSnapshot.getElementByRef = mock.fn(async () => ({
-        box: { x: 50, y: 50, width: 100, height: 40 },
-        isVisible: false,
-        stale: false
-      }));
-
       mockSession.send = mock.fn(async (method, params) => {
-        if (method === 'Runtime.evaluate' && params?.expression?.includes('location.href')) {
-          return { result: { value: 'https://example.com' } };
+        if (method === 'Runtime.evaluate') {
+          if (params?.expression?.includes('location.href')) {
+            return { result: { value: 'https://example.com' } };
+          }
+          // LazyResolver: metadata found
+          if (params?.expression?.includes('__ariaRefMeta') && params?.expression?.includes('get')) {
+            return { result: { value: { selector: '#btn', role: 'button', name: 'Submit' } } };
+          }
+          // LazyResolver: element found
+          if (params?.expression?.includes('found') && params?.expression?.includes('box')) {
+            return { result: { value: { found: true, box: { x: 50, y: 50, width: 100, height: 40 } } } };
+          }
+          if (params?.expression?.includes('querySelector')) {
+            return { result: { objectId: 'obj-123' } };
+          }
+          if (params?.expression?.includes('lazyResolveRef')) {
+            return { result: { value: null } };
+          }
+          return { result: { objectId: 'obj-123' } };
+        }
+        if (method === 'Runtime.callFunctionOn') {
+          // Visibility check returns not visible
+          if (params?.functionDeclaration?.includes('getComputedStyle') && params?.functionDeclaration?.includes('isVisible')) {
+            return { result: { value: { isVisible: false, box: { x: 50, y: 50, width: 100, height: 40 } } } };
+          }
+          return { result: { value: { found: false } } };
         }
         return {};
       });
@@ -451,23 +529,43 @@ describe('ClickExecutor', () => {
       assert.ok(result.warning.includes('not visible'));
     });
 
-    it('should succeed when ref element is re-resolved via metadata', async () => {
-      mockAriaSnapshot.getElementByRef = mock.fn(async () => ({
-        box: { x: 50, y: 50, width: 100, height: 40 },
-        isVisible: true,
-        stale: false,
-        reResolved: true
-      }));
-
+    it('should succeed when ref element is resolved via lazy resolution', async () => {
       mockSession.send = mock.fn(async (method, params) => {
         if (method === 'Runtime.evaluate') {
           if (params?.expression?.includes('location.href')) {
             return { result: { value: 'https://example.com' } };
           }
-          if (params?.expression?.includes('__ariaRefs')) {
+          // LazyResolver: metadata found
+          if (params?.expression?.includes('__ariaRefMeta') && params?.expression?.includes('get') && !params?.expression?.includes('lazyResolveRef')) {
+            return { result: { value: { selector: '#btn', role: 'button', name: 'Submit' } } };
+          }
+          // LazyResolver: element found
+          if (params?.expression?.includes('found') && params?.expression?.includes('box')) {
+            return { result: { value: { found: true, box: { x: 50, y: 50, width: 100, height: 40 } } } };
+          }
+          if (params?.expression?.includes('querySelector') && !params?.expression?.includes('lazyResolveRef')) {
+            return { result: { objectId: 'obj-123' } };
+          }
+          // Browser-side lazy resolution for click - return success
+          if (params?.expression?.includes('lazyResolveRef') && params?.expression?.includes('click')) {
+            return { result: { value: { success: true } } };
+          }
+          if (params?.expression?.includes('lazyResolveRef')) {
+            return { result: { value: null } };
+          }
+          if (params?.expression?.includes('__clickVerifyEl') || params?.expression?.includes('targetReceived')) {
             return { result: { value: { targetReceived: true } } };
           }
           return { result: { objectId: 'obj-123' } };
+        }
+        if (method === 'Runtime.callFunctionOn') {
+          if (params?.functionDeclaration?.includes('getComputedStyle') && params?.functionDeclaration?.includes('isVisible')) {
+            return { result: { value: { isVisible: true, box: { x: 50, y: 50, width: 100, height: 40 } } } };
+          }
+          if (params?.functionDeclaration?.includes('__clickReceived')) {
+            return { result: { value: true } };
+          }
+          return { result: { value: { success: true, targetReceived: true } } };
         }
         return {};
       });
@@ -478,21 +576,43 @@ describe('ClickExecutor', () => {
     });
 
     it('should click non-visible element with force option', async () => {
-      mockAriaSnapshot.getElementByRef = mock.fn(async () => ({
-        box: { x: 50, y: 50, width: 100, height: 40 },
-        isVisible: false,
-        stale: false
-      }));
-
       mockSession.send = mock.fn(async (method, params) => {
         if (method === 'Runtime.evaluate') {
           if (params?.expression?.includes('location.href')) {
             return { result: { value: 'https://example.com' } };
           }
-          if (params?.expression?.includes('__ariaRefs')) {
+          // LazyResolver: metadata found
+          if (params?.expression?.includes('__ariaRefMeta') && params?.expression?.includes('get') && !params?.expression?.includes('lazyResolveRef')) {
+            return { result: { value: { selector: '#btn', role: 'button', name: 'Submit' } } };
+          }
+          // LazyResolver: element found
+          if (params?.expression?.includes('found') && params?.expression?.includes('box')) {
+            return { result: { value: { found: true, box: { x: 50, y: 50, width: 100, height: 40 } } } };
+          }
+          if (params?.expression?.includes('querySelector') && !params?.expression?.includes('lazyResolveRef')) {
+            return { result: { objectId: 'obj-123' } };
+          }
+          // Browser-side lazy resolution for click - return success
+          if (params?.expression?.includes('lazyResolveRef') && params?.expression?.includes('click')) {
+            return { result: { value: { success: true } } };
+          }
+          if (params?.expression?.includes('lazyResolveRef')) {
+            return { result: { value: null } };
+          }
+          if (params?.expression?.includes('__clickVerifyEl') || params?.expression?.includes('targetReceived')) {
             return { result: { value: { targetReceived: true } } };
           }
           return { result: { objectId: 'obj-123' } };
+        }
+        if (method === 'Runtime.callFunctionOn') {
+          // Visibility check returns not visible, but force=true will proceed
+          if (params?.functionDeclaration?.includes('getComputedStyle') && params?.functionDeclaration?.includes('isVisible')) {
+            return { result: { value: { isVisible: false, box: { x: 50, y: 50, width: 100, height: 40 } } } };
+          }
+          if (params?.functionDeclaration?.includes('__clickReceived')) {
+            return { result: { value: true } };
+          }
+          return { result: { value: { success: true, targetReceived: true } } };
         }
         return {};
       });

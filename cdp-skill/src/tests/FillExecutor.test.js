@@ -126,9 +126,24 @@ describe('FillExecutor', () => {
     it('should fill by ref', async () => {
       mockSession.send = mock.fn(async (method, params) => {
         if (method === 'Runtime.evaluate') {
+          // LazyResolver: queries __ariaRefMeta for metadata
+          if (params?.expression?.includes('__ariaRefMeta') && params?.expression?.includes('get')) {
+            return { result: { value: { selector: '#input', role: 'textbox', name: 'Username' } } };
+          }
+          // LazyResolver: element found
+          if (params?.expression?.includes('found') && params?.expression?.includes('box')) {
+            return { result: { value: { found: true, box: { x: 50, y: 50, width: 200, height: 30 } } } };
+          }
+          if (params?.expression?.includes('querySelector')) {
+            return { result: { objectId: 'obj-123' } };
+          }
           return { result: { objectId: 'obj-123' } };
         }
         if (method === 'Runtime.callFunctionOn') {
+          // Visibility and box check after lazy resolution
+          if (params?.functionDeclaration?.includes('getComputedStyle') && params?.functionDeclaration?.includes('isVisible')) {
+            return { result: { value: { isVisible: true, box: { x: 50, y: 50, width: 200, height: 30 } } } };
+          }
           if (params?.functionDeclaration?.includes('scrollIntoView')) {
             return { result: {} };
           }
@@ -152,9 +167,23 @@ describe('FillExecutor', () => {
     it('should detect ref from selector pattern', async () => {
       mockSession.send = mock.fn(async (method, params) => {
         if (method === 'Runtime.evaluate') {
+          // LazyResolver: queries __ariaRefMeta for metadata
+          if (params?.expression?.includes('__ariaRefMeta') && params?.expression?.includes('get')) {
+            return { result: { value: { selector: '#input', role: 'textbox', name: 'Username' } } };
+          }
+          // LazyResolver: element found
+          if (params?.expression?.includes('found') && params?.expression?.includes('box')) {
+            return { result: { value: { found: true, box: { x: 50, y: 50, width: 200, height: 30 } } } };
+          }
+          if (params?.expression?.includes('querySelector')) {
+            return { result: { objectId: 'obj-123' } };
+          }
           return { result: { objectId: 'obj-123' } };
         }
         if (method === 'Runtime.callFunctionOn') {
+          if (params?.functionDeclaration?.includes('getComputedStyle') && params?.functionDeclaration?.includes('isVisible')) {
+            return { result: { value: { isVisible: true, box: { x: 50, y: 50, width: 200, height: 30 } } } };
+          }
           if (params?.functionDeclaration?.includes('scrollIntoView')) {
             return { result: {} };
           }
@@ -441,9 +470,23 @@ describe('FillExecutor', () => {
     it('should handle refs in batch', async () => {
       mockSession.send = mock.fn(async (method, params) => {
         if (method === 'Runtime.evaluate') {
+          // LazyResolver: queries __ariaRefMeta for metadata
+          if (params?.expression?.includes('__ariaRefMeta') && params?.expression?.includes('get')) {
+            return { result: { value: { selector: '#input', role: 'textbox', name: 'Input' } } };
+          }
+          // LazyResolver: element found
+          if (params?.expression?.includes('found') && params?.expression?.includes('box')) {
+            return { result: { value: { found: true, box: { x: 50, y: 50, width: 200, height: 30 } } } };
+          }
+          if (params?.expression?.includes('querySelector')) {
+            return { result: { objectId: 'obj-123' } };
+          }
           return { result: { objectId: 'obj-123' } };
         }
         if (method === 'Runtime.callFunctionOn') {
+          if (params?.functionDeclaration?.includes('getComputedStyle') && params?.functionDeclaration?.includes('isVisible')) {
+            return { result: { value: { isVisible: true, box: { x: 50, y: 50, width: 200, height: 30 } } } };
+          }
           if (params?.functionDeclaration?.includes('scrollIntoView')) {
             return { result: {} };
           }
@@ -466,42 +509,51 @@ describe('FillExecutor', () => {
   });
 
   describe('ref-based fill edge cases', () => {
-    it('should require ariaSnapshot for ref-based fills', async () => {
-      const noAriaExecutor = createFillExecutor(mockSession, mockElementLocator, mockInputEmulator);
-
-      // Without ariaSnapshot, the fill by ref won't work because ref requires ariaSnapshot
-      // The executor treats ref: 's1e1' as needing ariaSnapshot
-      await assert.rejects(
-        () => noAriaExecutor.execute({ ref: 's1e1', value: 'test' }),
-        (err) => {
-          // May fail with "requires selector, ref, or label" because ref is only valid with ariaSnapshot
-          return err.message.includes('requires') || err.message.includes('ariaSnapshot');
+    it('should throw when ref element cannot be resolved (lazy resolution)', async () => {
+      // LazyResolver returns null when metadata not found
+      mockSession.send = mock.fn(async (method, params) => {
+        if (method === 'Runtime.evaluate') {
+          if (params?.expression?.includes('__ariaRefMeta')) {
+            return { result: { value: null } };
+          }
+          return { result: { value: null } };
         }
-      );
-    });
-
-    it('should throw when ref element is stale', async () => {
-      mockAriaSnapshot.getElementByRef = mock.fn(async () => ({
-        box: { x: 50, y: 50, width: 200, height: 30 },
-        isVisible: true,
-        stale: true
-      }));
+        return {};
+      });
 
       await assert.rejects(
         () => executor.execute({ ref: 's1e1', value: 'test' }),
         (err) => {
-          assert.ok(err.message.includes('no longer attached'));
-          return true;
+          return err.message.includes('not found');
         }
       );
     });
 
     it('should throw when ref element is not visible', async () => {
-      mockAriaSnapshot.getElementByRef = mock.fn(async () => ({
-        box: { x: 50, y: 50, width: 200, height: 30 },
-        isVisible: false,
-        stale: false
-      }));
+      mockSession.send = mock.fn(async (method, params) => {
+        if (method === 'Runtime.evaluate') {
+          // LazyResolver: metadata found
+          if (params?.expression?.includes('__ariaRefMeta') && params?.expression?.includes('get')) {
+            return { result: { value: { selector: '#input', role: 'textbox', name: 'Input' } } };
+          }
+          // LazyResolver: element found
+          if (params?.expression?.includes('found') && params?.expression?.includes('box')) {
+            return { result: { value: { found: true, box: { x: 50, y: 50, width: 200, height: 30 } } } };
+          }
+          if (params?.expression?.includes('querySelector')) {
+            return { result: { objectId: 'obj-123' } };
+          }
+          return { result: { objectId: 'obj-123' } };
+        }
+        if (method === 'Runtime.callFunctionOn') {
+          // Visibility check returns not visible
+          if (params?.functionDeclaration?.includes('getComputedStyle') && params?.functionDeclaration?.includes('isVisible')) {
+            return { result: { value: { isVisible: false, box: { x: 50, y: 50, width: 200, height: 30 } } } };
+          }
+          return { result: { value: { editable: true } } };
+        }
+        return {};
+      });
 
       await assert.rejects(
         () => executor.execute({ ref: 's1e1', value: 'test' }),

@@ -14,6 +14,7 @@
 
 import { createActionabilityChecker } from './actionability.js';
 import { createElementValidator } from './element-validator.js';
+import { createLazyResolver } from './LazyResolver.js';
 import {
   sleep,
   elementNotFoundError,
@@ -40,6 +41,7 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
   const getFrameContext = elementLocator.getFrameContext || null;
   const actionabilityChecker = createActionabilityChecker(session);
   const elementValidator = createElementValidator(session);
+  const lazyResolver = createLazyResolver(session, { getFrameContext });
 
   /** Build Runtime.evaluate params with frame context when in an iframe. */
   function frameEvalParams(expression, returnByValue = true) {
@@ -306,27 +308,125 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     return { targetReceived: true };
   }
 
+  /**
+   * Browser-side lazy resolution script that always re-resolves refs from metadata.
+   * This eliminates stale element errors by never relying on cached DOM references.
+   */
+  const LAZY_RESOLVE_SCRIPT = `
+    function lazyResolveRef(ref) {
+      const meta = window.__ariaRefMeta && window.__ariaRefMeta.get(ref);
+      if (!meta) return null;
+
+      // Helper: check if candidate matches role+name from metadata
+      function matchesRoleAndName(candidate) {
+        if (!candidate || !candidate.isConnected) return false;
+        if (!meta.role) return true;
+
+        // Get element's role
+        const explicit = candidate.getAttribute('role');
+        let candidateRole = explicit ? explicit.split(/\\s+/)[0] : null;
+        if (!candidateRole) {
+          const tag = candidate.tagName.toUpperCase();
+          const implicitMap = {
+            'A': 'link', 'BUTTON': 'button', 'SELECT': 'combobox', 'TEXTAREA': 'textbox',
+            'H1': 'heading', 'H2': 'heading', 'H3': 'heading', 'H4': 'heading', 'H5': 'heading', 'H6': 'heading',
+            'NAV': 'navigation', 'MAIN': 'main', 'LI': 'listitem', 'OPTION': 'option'
+          };
+          if (tag === 'INPUT') {
+            const type = (candidate.type || 'text').toLowerCase();
+            const typeMap = { 'checkbox': 'checkbox', 'radio': 'radio', 'range': 'slider', 'number': 'spinbutton', 'search': 'searchbox' };
+            candidateRole = typeMap[type] || 'textbox';
+          } else {
+            candidateRole = implicitMap[tag] || null;
+          }
+        }
+
+        const roleMatch = !meta.role || candidateRole === meta.role;
+        if (!roleMatch) return false;
+        if (!meta.name) return true;
+
+        // Check accessible name
+        const candidateName = (
+          candidate.getAttribute('aria-label') ||
+          candidate.getAttribute('title') ||
+          candidate.getAttribute('placeholder') ||
+          (candidate.textContent || '').replace(/\\s+/g, ' ').trim().substring(0, 200) ||
+          ''
+        );
+        return candidateName.toLowerCase().includes(meta.name.toLowerCase().substring(0, 100));
+      }
+
+      // Helper: resolve through shadow DOM
+      function queryShadow(shadowHostPath, selector) {
+        let root = document;
+        for (const hostSel of shadowHostPath) {
+          try {
+            const host = root.querySelector(hostSel);
+            if (!host || !host.shadowRoot) return null;
+            root = host.shadowRoot;
+          } catch (e) { return null; }
+        }
+        try { return root.querySelector(selector); } catch (e) { return null; }
+      }
+
+      // Strategy 1: Try selector (with shadow path if applicable)
+      if (meta.selector) {
+        const hasShadow = meta.shadowHostPath && meta.shadowHostPath.length > 0;
+        const candidate = hasShadow
+          ? queryShadow(meta.shadowHostPath, meta.selector)
+          : document.querySelector(meta.selector);
+        if (matchesRoleAndName(candidate)) return candidate;
+      }
+
+      // Strategy 2: Role+name search
+      if (meta.role) {
+        const ROLE_SELECTORS = {
+          button: 'button, input[type="button"], input[type="submit"], input[type="reset"], [role="button"]',
+          textbox: 'input:not([type]), input[type="text"], input[type="email"], input[type="password"], input[type="search"], input[type="tel"], input[type="url"], textarea, [role="textbox"]',
+          checkbox: 'input[type="checkbox"], [role="checkbox"]',
+          link: 'a[href], [role="link"]',
+          heading: 'h1, h2, h3, h4, h5, h6, [role="heading"]',
+          combobox: 'select, [role="combobox"]',
+          radio: 'input[type="radio"], [role="radio"]',
+          tab: '[role="tab"]',
+          menuitem: '[role="menuitem"]',
+          option: 'option, [role="option"]',
+          slider: 'input[type="range"], [role="slider"]',
+          spinbutton: 'input[type="number"], [role="spinbutton"]',
+          searchbox: 'input[type="search"], [role="searchbox"]',
+          switch: '[role="switch"]'
+        };
+        const selectorString = ROLE_SELECTORS[meta.role] || '[role="' + meta.role + '"]';
+        const elements = document.querySelectorAll(selectorString);
+        for (const el of elements) {
+          if (matchesRoleAndName(el)) return el;
+        }
+
+        // Strategy 3: Search in shadow roots
+        const shadowHosts = document.querySelectorAll('*');
+        for (const host of shadowHosts) {
+          if (host.shadowRoot) {
+            const els = host.shadowRoot.querySelectorAll(selectorString);
+            for (const el of els) {
+              if (matchesRoleAndName(el)) return el;
+            }
+          }
+        }
+      }
+
+      return null;
+    }
+  `;
+
   async function executeJsClickOnRef(ref) {
     const result = await session.send('Runtime.evaluate', frameEvalParams(`
         (function() {
-          let el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
+          ${LAZY_RESOLVE_SCRIPT}
 
-          // Re-resolve if element is missing or stale
-          if (!el || !el.isConnected) {
-            const meta = window.__ariaRefMeta && window.__ariaRefMeta.get(${JSON.stringify(ref)});
-            if (meta && meta.selector) {
-              try {
-                const candidate = document.querySelector(meta.selector);
-                if (candidate && candidate.isConnected) {
-                  el = candidate;
-                  if (window.__ariaRefs) window.__ariaRefs.set(${JSON.stringify(ref)}, el);
-                }
-              } catch (e) {}
-            }
-          }
+          const el = lazyResolveRef(${JSON.stringify(ref)});
 
           if (!el) {
-            return { success: false, reason: 'ref not found in __ariaRefs' };
+            return { success: false, reason: 'ref could not be resolved - element not found' };
           }
           if (!el.isConnected) {
             return { success: false, reason: 'element is no longer attached to DOM' };
@@ -502,22 +602,15 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     // React re-renders between mousedown and click, destroying the original DOM node.
     // pointerdown fires synchronously before any re-render.
     // Also uses document-level capture as fallback for descendant hits.
+    // LAZY RESOLUTION: Always resolve ref from metadata, never rely on cached element.
     await session.send('Runtime.evaluate', frameEvalParams(`
         (function() {
-          let el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
-          if ((!el || !el.isConnected) && window.__ariaRefMeta) {
-            const meta = window.__ariaRefMeta.get(${JSON.stringify(ref)});
-            if (meta && meta.selector) {
-              try {
-                const candidate = document.querySelector(meta.selector);
-                if (candidate && candidate.isConnected) {
-                  el = candidate;
-                  if (window.__ariaRefs) window.__ariaRefs.set(${JSON.stringify(ref)}, el);
-                }
-              } catch (e) {}
-            }
-          }
+          ${LAZY_RESOLVE_SCRIPT}
+
+          const el = lazyResolveRef(${JSON.stringify(ref)});
           if (el && el.isConnected) {
+            // Store resolved element for verification phase
+            window.__clickVerifyEl = el;
             el.__clickReceived = false;
             el.__ptrHandler = () => { el.__clickReceived = true; };
             el.addEventListener('pointerdown', el.__ptrHandler, { once: true });
@@ -539,7 +632,8 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     try {
       verifyResult = await session.send('Runtime.evaluate', frameEvalParams(`
           (function() {
-            const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
+            const el = window.__clickVerifyEl;
+            delete window.__clickVerifyEl;
             if (!el) return { targetReceived: false, reason: 'element not found' };
             if (el.__ptrHandler) el.removeEventListener('pointerdown', el.__ptrHandler);
             if (el.__docHandler) document.removeEventListener('pointerdown', el.__docHandler, { capture: true });
@@ -565,29 +659,41 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
   async function clickByRef(ref, jsClick = false, opts = {}) {
     const { force = false, debug = false, nativeOnly = false, waitForNavigation, navigationTimeout = 100 } = opts;
 
-    if (!ariaSnapshot) {
-      throw new Error('ariaSnapshot is required for ref-based clicks');
-    }
-
-    const refInfo = await ariaSnapshot.getElementByRef(ref);
-    if (!refInfo) {
+    // LAZY RESOLUTION: Always resolve ref from metadata, never rely on cached element
+    // This eliminates stale element errors entirely
+    const resolved = await lazyResolver.resolveRef(ref);
+    if (!resolved) {
       throw elementNotFoundError(`ref:${ref}`, 0);
     }
 
-    if (refInfo.stale) {
-      return {
-        clicked: false,
-        stale: true,
-        warning: `Element ref:${ref} is no longer attached to the DOM. Page content may have changed. Run 'snapshot' again to get fresh refs.`
-      };
-    }
+    // Get visibility info using the resolved element
+    const visibilityResult = await session.send('Runtime.callFunctionOn', {
+      objectId: resolved.objectId,
+      functionDeclaration: `function() {
+        const style = window.getComputedStyle(this);
+        const rect = this.getBoundingClientRect();
+        return {
+          isVisible: style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && rect.width > 0 && rect.height > 0,
+          box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+        };
+      }`,
+      returnByValue: true
+    });
+
+    const refInfo = {
+      box: visibilityResult.result?.value?.box || resolved.box,
+      isVisible: visibilityResult.result?.value?.isVisible ?? true,
+      resolvedBy: resolved.resolvedBy
+    };
 
     if (!force && refInfo.isVisible === false) {
       // Special case: hidden radio/checkbox inputs — try to click associated label
+      // LAZY RESOLUTION: Always resolve ref from metadata
       const labelResult = await session.send('Runtime.evaluate', frameEvalParams(`
         (function() {
-          const ref = ${JSON.stringify(ref)};
-          const el = window.__ariaRefs && window.__ariaRefs.get(ref);
+          ${LAZY_RESOLVE_SCRIPT}
+
+          const el = lazyResolveRef(${JSON.stringify(ref)});
           if (!el) return { found: false };
 
           const tag = el.tagName.toUpperCase();
@@ -649,20 +755,22 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     }
 
     // If element is outside viewport (e.g., inside an unscrolled container), scroll it into view first
+    // LAZY RESOLUTION: Always resolve ref from metadata for scroll
     const box = refInfo.box;
     if (box && (box.x < 0 || box.y < 0 || box.x + box.width > 1920 || box.y + box.height > 1080)) {
       try {
         await session.send('Runtime.evaluate', frameEvalParams(`
           (function() {
-            const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
+            ${LAZY_RESOLVE_SCRIPT}
+            const el = lazyResolveRef(${JSON.stringify(ref)});
             if (el) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
           })()
         `, true));
         await sleep(100);
-        // Re-fetch element info after scroll
-        const updatedInfo = await ariaSnapshot.getElementByRef(ref);
-        if (updatedInfo && updatedInfo.box) {
-          refInfo.box = updatedInfo.box;
+        // Re-fetch element info after scroll using lazy resolution
+        const updatedResult = await lazyResolver.resolveRef(ref);
+        if (updatedResult && updatedResult.box) {
+          refInfo.box = updatedResult.box;
         }
       } catch {
         // Scroll failed — proceed with original coordinates

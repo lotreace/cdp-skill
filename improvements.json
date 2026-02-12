@@ -334,7 +334,8 @@
       "section": "Stagehand-Inspired Improvements",
       "title": "Lazy selector resolution (eliminate stale refs)",
       "votes": 10,
-      "status": "open",
+      "status": "implemented",
+      "implementedIn": "v1.0.14",
       "symptoms": [
         "Cached element handles can become stale creating stale element errors",
         "Re-resolving selector from scratch for every action would eliminate this class of errors"
@@ -342,8 +343,9 @@
       "expected": "Never cache element references, re-resolve selector for every action",
       "workaround": null,
       "files": [
-        "src/dom.js",
-        "src/aria.js"
+        "src/dom/LazyResolver.js",
+        "src/dom/click-executor.js",
+        "src/dom/fill-executor.js"
       ],
       "fixAttempts": []
     },

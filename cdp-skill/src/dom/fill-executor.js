@@ -16,6 +16,7 @@
 import { createActionabilityChecker } from './actionability.js';
 import { createElementValidator } from './element-validator.js';
 import { createReactInputFiller } from './react-filler.js';
+import { createLazyResolver } from './LazyResolver.js';
 import {
   sleep,
   elementNotFoundError,
@@ -44,6 +45,7 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
   const actionabilityChecker = createActionabilityChecker(session);
   const elementValidator = createElementValidator(session);
   const reactInputFiller = createReactInputFiller(session);
+  const lazyResolver = createLazyResolver(session, { getFrameContext });
 
   /**
    * Build Runtime.evaluate params, injecting contextId when in an iframe.
@@ -87,35 +89,38 @@ export function createFillExecutor(session, elementLocator, inputEmulator, ariaS
   async function fillByRef(ref, value, opts = {}) {
     const { clear = true, react = false } = opts;
 
-    if (!ariaSnapshot) {
-      throw new Error('ariaSnapshot is required for ref-based fills');
-    }
-
-    const refInfo = await ariaSnapshot.getElementByRef(ref);
-    if (!refInfo) {
+    // LAZY RESOLUTION: Always resolve ref from metadata, never rely on cached element
+    // This eliminates stale element errors entirely
+    const resolved = await lazyResolver.resolveRef(ref);
+    if (!resolved) {
       throw elementNotFoundError(`ref:${ref}`, 0);
     }
 
-    if (refInfo.stale) {
-      throw new Error(`Element ref:${ref} is no longer attached to the DOM. Page content may have changed. Run 'snapshot' again to get fresh refs.`);
-    }
+    const objectId = resolved.objectId;
+
+    // Get visibility info using the resolved element
+    const visibilityResult = await session.send('Runtime.callFunctionOn', {
+      objectId,
+      functionDeclaration: `function() {
+        const style = window.getComputedStyle(this);
+        const rect = this.getBoundingClientRect();
+        return {
+          isVisible: style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && rect.width > 0 && rect.height > 0,
+          box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+        };
+      }`,
+      returnByValue: true
+    });
+
+    const refInfo = {
+      box: visibilityResult.result?.value?.box || resolved.box,
+      isVisible: visibilityResult.result?.value?.isVisible ?? true
+    };
 
     if (refInfo.isVisible === false) {
+      await releaseObject(session, objectId);
       throw new Error(`Element ref:${ref} exists but is not visible. It may be hidden or have zero dimensions.`);
     }
-
-    const elementResult = await session.send('Runtime.evaluate',
-      evalParams(`(function() {
-        const el = window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)});
-        return el;
-      })()`, false)
-    );
-
-    if (!elementResult.result.objectId) {
-      throw elementNotFoundError(`ref:${ref}`, 0);
-    }
-
-    const objectId = elementResult.result.objectId;
 
     const editableCheck = await elementValidator.isEditable(objectId);
     if (!editableCheck.editable) {

@@ -76,6 +76,9 @@ export { createKeyboardExecutor } from './keyboard-executor.js';
 // Wait executor (waiting operations)
 export { createWaitExecutor } from './wait-executor.js';
 
+// Lazy resolver (stateless element resolution)
+export { createLazyResolver } from './LazyResolver.js';
+
 // ============================================================================
 // Convenience Functions
 // ============================================================================
