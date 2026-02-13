@@ -50,60 +50,6 @@ Close when done:
 {"steps":[{"closeTab":"t1"}]}
 ```
 
-### Check Chrome Status (optional diagnostic)
-```json
-{"steps":[{"chromeStatus":true}]}
-```
-```json
-{"steps":[{"chromeStatus":{"port":9333,"headless":true}}]}
-```
-
-Response:
-```json
-{
-  "status": "ok",
-  "chrome": {
-    "running": true,
-    "launched": true,
-    "version": "Chrome/120.0.6099.109",
-    "port": 9222,
-    "tabs": [{"targetId": "ABC123", "url": "about:blank", "title": ""}]
-  }
-}
-```
-
-### switchTab — Connect to Existing Tab
-By alias:
-```json
-{"steps":[{"switchTab":"t2"},{"snapshot":true}]}
-```
-
-By URL regex:
-```json
-{"steps":[{"switchTab":{"url":"github\\.com"}},{"snapshot":true}]}
-```
-
-By targetId:
-```json
-{"steps":[{"switchTab":{"targetId":"ABC123..."}},{"snapshot":true}]}
-```
-
-### New Tab Handling — click → detect → switchTab
-When a click opens a new tab (e.g. `target="_blank"`), the response includes `newTabs`:
-```json
-{
-  "steps": [{"action": "click", "status": "ok", "output": {
-    "method": "cdp",
-    "newTabs": [{"targetId": "DEF456", "url": "https://other.com", "title": "Other"}]
-  }}]
-}
-```
-
-Then connect to the new tab:
-```json
-{"steps":[{"switchTab":{"url":"other\\.com"}},{"snapshot":true}]}
-```
-
 ---
 
 ## Input / Output Schema
@@ -212,61 +158,6 @@ Then connect to the new tab:
 }
 ```
 
-### Active Element Context
-```json
-{
-  "tag": "INPUT",
-  "type": "text",
-  "selector": "#search-input",
-  "value": "query",
-  "placeholder": "Search...",
-  "editable": true,
-  "box": {"x": 100, "y": 50, "width": 200, "height": 32}
-}
-```
-
----
-
-## Chrome Management
-
-### chromeStatus Variants
-```json
-{"chromeStatus": true}
-{"chromeStatus": {"autoLaunch": false}}
-{"chromeStatus": {"headless": true}}
-```
-
-Response:
-```json
-{
-  "running": true,
-  "launched": false,
-  "version": "Chrome/120.0.6099.109",
-  "port": 9222,
-  "tabs": [
-    {"targetId": "ABC123...", "url": "https://google.com", "title": "Google"}
-  ]
-}
-```
-
-Chrome not found:
-```json
-{"running": false, "launched": false, "error": "Chrome not found..."}
-```
-
-### macOS Chrome Behavior
-
-Response when Chrome needed intervention:
-```json
-{
-  "running": true,
-  "launched": true,
-  "createdTab": true,
-  "note": "Chrome was running without CDP port. Launched new instance with debugging enabled. Created new tab.",
-  "tabs": [{"targetId": "ABC123", "url": "about:blank", "title": ""}]
-}
-```
-
 ---
 
 ## Navigation
@@ -277,16 +168,24 @@ Response when Chrome needed intervention:
 {"goto": {"url": "https://google.com", "waitUntil": "networkidle"}}
 ```
 
-### reload
-```json
-{"reload": true}
-{"reload": {"waitUntil": "networkidle"}}
-```
-
 ### back / forward
 ```json
 {"back": true}
 {"forward": true}
+```
+Response:
+```json
+{"url": "https://example.com/previous", "title": "Previous Page"}
+```
+Or when no history:
+```json
+{"noHistory": true}
+```
+
+### reload
+```json
+{"reload": true}
+{"reload": {"waitUntil": "networkidle"}}
 ```
 
 ### waitForNavigation
@@ -295,107 +194,84 @@ Response when Chrome needed intervention:
 {"waitForNavigation": {"timeout": 5000, "waitUntil": "networkidle"}}
 ```
 
----
-
-## Frames
-
-### frame — List frames
+### switchTab — Connect to Existing Tab
+By alias:
 ```json
-{"frame": {"list": true}}
+{"steps":[{"switchTab":"t2"},{"snapshot":true}]}
 ```
 
-### frame — Switch to frame
+By URL regex:
 ```json
-{"frame": "iframe#content"}
-{"frame": 0}
-{"frame": {"name": "myFrame"}}
+{"steps":[{"switchTab":{"url":"github\\.com"}},{"snapshot":true}]}
 ```
 
-### frame — Return to main frame
+By targetId:
 ```json
-{"frame": "top"}
+{"steps":[{"switchTab":{"targetId":"ABC123..."}},{"snapshot":true}]}
 ```
 
----
-
-## Waiting
-
-### wait — Element
+### New Tab Handling — click → detect → switchTab
+When a click opens a new tab (e.g. `target="_blank"`), the response includes `newTabs`:
 ```json
-{"wait": "#content"}
-{"wait": {"selector": "#loading", "hidden": true}}
-{"wait": {"selector": ".item", "minCount": 10}}
+{
+  "steps": [{"action": "click", "status": "ok", "output": {
+    "method": "cdp",
+    "newTabs": [{"targetId": "DEF456", "url": "https://other.com", "title": "Other"}]
+  }}]
+}
 ```
 
-### wait — Text
+Then connect to the new tab:
 ```json
-{"wait": {"text": "Welcome"}}
-{"wait": {"textRegex": "Order #[A-Z0-9]+"}}
-```
-
-### wait — URL
-```json
-{"wait": {"urlContains": "/success"}}
-```
-
-### sleep — Fixed time delay
-```json
-{"sleep": 2000}
+{"steps":[{"switchTab":{"url":"other\\.com"}},{"snapshot":true}]}
 ```
 
 ---
 
-## Click
+## Interaction
 
-### Basic
+### click — Basic
 ```json
 {"click": "#submit"}
-{"click": {"selector": "#btn", "verify": true}}
 {"click": {"ref": "s1e4"}}
 {"click": {"x": 450, "y": 200}}
 ```
 
-### Force JavaScript click
-```json
-{"click": {"selector": "#submit", "jsClick": true}}
-{"click": {"ref": "s1e4", "jsClick": true}}
-```
-
-### Disable auto-fallback
-```json
-{"click": {"selector": "#btn", "nativeOnly": true}}
-```
-
-### Multi-selector fallback
-```json
-{"click": {"selectors": ["[ref=s1e4]", "#submit", {"role": "button", "name": "Submit"}]}}
-```
-Response: `{clicked: true, matchedSelector: "#submit"}`
-
-### Click by visible text
+### click — By visible text
 ```json
 {"click": {"text": "Submit"}}
 {"click": {"text": "Learn more", "exact": true}}
 ```
 
-### Frame auto-detection
+### click — Force JavaScript click
 ```json
-{"click": {"selector": "#editor", "searchFrames": true}}
+{"click": {"selector": "#submit", "jsClick": true}}
+{"click": {"ref": "s1e4", "jsClick": true}}
 ```
 
-### Scroll until visible
+### click — Disable auto-fallback
+```json
+{"click": {"selector": "#btn", "nativeOnly": true}}
+```
+
+### click — Multi-selector fallback
+```json
+{"click": {"selectors": ["[ref=s1e4]", "#submit", {"role": "button", "name": "Submit"}]}}
+```
+Response: `{clicked: true, matchedSelector: "#submit"}`
+
+### click — Scroll until visible
 ```json
 {"click": {"selector": "#btn", "scrollUntilVisible": true}}
 ```
 
-### Auto-wait after click
+### click — Wait after click
 ```json
-{"click": "#submit", "waitAfter": true}
-{"click": {"selector": "#nav-link", "waitAfter": {"networkidle": true}}}
-{"click": {"selector": "#tab", "waitAfter": {"delay": 500}}}
+{"click": {"selector": "#submit", "waitAfter": true}}
+{"click": {"selector": "#nav-link", "waitAfter": true, "waitAfterOptions": {"timeout": 10000}}}
 ```
 
-### Click diagnostics (element covered)
+### click — Diagnostics (element covered)
 ```json
 {
   "error": "Element is covered by another element",
@@ -408,28 +284,12 @@ Response: `{clicked: true, matchedSelector: "#submit"}`
 }
 ```
 
----
-
-## Fill
-
-### Basic
+### fill — Targeted
 ```json
 {"fill": {"selector": "#email", "value": "user@example.com"}}
 {"fill": {"ref": "s1e3", "value": "text"}}
-```
-
-### Fill by label
-```json
 {"fill": {"label": "Email address", "value": "test@example.com"}}
-{"fill": {"label": "Password", "value": "secret123", "exact": true}}
 ```
-
-### fill — Multiple fields (batch)
-```json
-{"fill": {"#firstName": "John", "#lastName": "Doe"}}
-{"fill": {"fields": {"#firstName": "John"}, "react": true}}
-```
-Response: `{total, filled, failed, results: [{selector, status, value}], mode: "batch"}`
 
 ### fill — Currently focused element
 ```json
@@ -441,8 +301,17 @@ Response:
 {"filled": true, "tag": "INPUT", "type": "text", "selector": "#search", "valueBefore": "", "valueAfter": "search query", "mode": "focused"}
 ```
 
-### Autocomplete pattern
-Fill triggers suggestions → wait for dropdown → click or press to select:
+### fill — Batch (multiple fields)
+```json
+{"fill": {"#firstName": "John", "#lastName": "Doe"}}
+{"fill": {"fields": {"#firstName": "John"}, "react": true}}
+```
+Response:
+```json
+{"total": 2, "filled": 2, "failed": 0, "results": [{"selector": "#firstName", "status": "ok", "value": "John"}], "mode": "batch"}
+```
+
+### fill — Autocomplete pattern
 ```json
 {"steps": [
   {"fill": {"selector": "#city", "value": "San Fra"}},
@@ -451,20 +320,6 @@ Fill triggers suggestions → wait for dropdown → click or press to select:
 ]}
 ```
 
-Or with keyboard:
-```json
-{"steps": [
-  {"fill": {"selector": "#city", "value": "San Fra"}},
-  {"wait": ".autocomplete-dropdown"},
-  {"press": "ArrowDown"},
-  {"press": "Enter"}
-]}
-```
-
----
-
-## Press / SelectText
-
 ### press
 ```json
 {"press": "Enter"}
@@ -472,23 +327,13 @@ Or with keyboard:
 {"press": "Meta+Shift+Enter"}
 ```
 
-### selectText
-```json
-{"selectText": "#input"}
-{"selectText": {"selector": "#input", "start": 0, "end": 5}}
-```
-
----
-
-## Hover
-
-### Basic
+### hover — Basic
 ```json
 {"hover": "#menu"}
 {"hover": {"selector": "#tooltip", "duration": 500}}
 ```
 
-### With result capture
+### hover — With result capture
 ```json
 {"hover": {"selector": "#menu", "captureResult": true}}
 ```
@@ -505,10 +350,7 @@ Response:
 }
 ```
 
----
-
-## Drag
-
+### drag
 ```json
 {"drag": {"source": "#draggable", "target": "#dropzone"}}
 {"drag": {"source": {"ref": "s1e1"}, "target": {"ref": "s1e5"}}}
@@ -517,17 +359,17 @@ Response:
 {"drag": {"source": "#item", "target": "#container", "steps": 20, "delay": 10}}
 ```
 
-### Drag with method
+### drag — With method
 ```json
 {"drag": {"source": "#item", "target": "#zone", "method": "mouse"}}
 {"drag": {"source": "#item", "target": "#zone", "method": "html5"}}
-{"drag": {"source": "#item", "target": "#zone", "method": "auto"}}
+```
+Response:
+```json
+{"dragged": true, "method": "mouse-events", "source": {"x": 100, "y": 100}, "target": {"x": 300, "y": 200}, "steps": 10}
 ```
 
----
-
-## selectOption
-
+### selectOption
 ```json
 {"selectOption": {"selector": "#country", "value": "US"}}
 {"selectOption": {"selector": "#country", "label": "United States"}}
@@ -535,217 +377,38 @@ Response:
 {"selectOption": {"selector": "#colors", "values": ["red", "blue"]}}
 ```
 
----
-
-## Scrolling
-
+### selectText
 ```json
-{"scroll": "top"}
-{"scroll": "bottom"}
-{"scroll": "#element"}
-{"scroll": {"deltaY": 500}}
-{"scroll": {"x": 0, "y": 1000}}
+{"selectText": "#input"}
+{"selectText": {"selector": "#input", "start": 0, "end": 5}}
 ```
 
----
-
-## Data Extraction
-
-### get (unified content extraction)
+### upload
 ```json
-// Text extraction (default)
-{"get": "#content"}
-{"get": {"selector": "#content"}}
-{"get": {"selector": "#content", "mode": "text"}}
-
-// HTML extraction
-{"get": {"selector": "#content", "mode": "html"}}
-
-// Form value extraction
-{"get": {"selector": "#form", "mode": "value"}}
-
-// Bounding box extraction
-{"get": {"selector": "#element", "mode": "box"}}
-{"get": {"ref": "s1e1", "mode": "box"}}
-
-// Attributes extraction
-{"get": {"selector": "#link", "mode": "attributes"}}
-
-// Table/list extraction (auto-detected)
-{"get": "table.results"}
-{"get": {"selector": "ul.items", "type": "list"}}
-{"get": {"selector": "#data-grid", "type": "table", "includeHeaders": true}}
-```
-
-Text response:
-```json
-{"text": "Extracted content text"}
-```
-
-HTML response:
-```json
-{"html": "<div>...</div>", "tagName": "DIV", "length": 1245}
-```
-
-Box response:
-```json
-{"x": 100, "y": 200, "width": 150, "height": 40, "center": {"x": 175, "y": 220}}
-```
-
-Attributes response:
-```json
-{"attributes": {"href": "/page", "class": "link", "id": "main-link"}}
-```
-
-Table response:
-```json
-{
-  "type": "table",
-  "headers": ["Name", "Email", "Status"],
-  "rows": [
-    ["John Doe", "john@example.com", "Active"],
-    ["Jane Smith", "jane@example.com", "Pending"]
-  ],
-  "rowCount": 2,
-  "columnCount": 3
-}
-```
-
-Form value response:
-```json
-{
-  "selector": "#checkout-form",
-  "action": "/api/checkout",
-  "method": "POST",
-  "fields": [
-    {
-      "name": "email",
-      "type": "email",
-      "value": "user@example.com",
-      "label": "Email Address",
-      "required": true,
-      "valid": true
-    }
-  ],
-  "valid": true,
-  "fieldCount": 3
-}
-```
-
-### getUrl
-```json
-{"getUrl": true}
+{"upload": "/path/to/file.pdf"}
+{"upload": ["/path/to/a.txt", "/path/to/b.png"]}
+{"upload": {"selector": "#file-input", "file": "/path/to/doc.pdf"}}
+{"upload": {"selector": "#file-input", "files": ["/path/to/a.txt", "/path/to/b.png"]}}
+{"upload": {"ref": "f0s1e3", "files": ["/path/to/photo.jpg"]}}
 ```
 Response:
 ```json
-{"url": "https://example.com/page"}
+{"uploaded": true, "files": ["/path/to/file.pdf"], "accept": ".pdf,.doc", "multiple": false, "target": "input[type=\"file\"]"}
 ```
 
-### getTitle
+### submit
 ```json
-{"getTitle": true}
-```
-Response:
-```json
-{"title": "Page Title"}
-```
-
-### elementsAt
-
-Single point (returns the element at a specific coordinate):
-```json
-{"elementsAt": {"x": 600, "y": 200}}
+{"submit": "form"}
+{"submit": {"selector": "#login-form", "reportValidity": true}}
 ```
 Response:
 ```json
-{
-  "ref": "s1e5",
-  "existing": false,
-  "tag": "BUTTON",
-  "selector": "#submit-btn",
-  "clickable": true,
-  "role": "button",
-  "name": "Submit",
-  "box": {"x": 580, "y": 190, "width": 100, "height": 40}
-}
-```
-
-Batch (multiple coordinates):
-```json
-{"elementsAt": [{"x": 100, "y": 200}, {"x": 300, "y": 400}, {"x": 500, "y": 150}]}
-```
-Response:
-```json
-{
-  "count": 3,
-  "elements": [
-    {"x": 100, "y": 200, "ref": "s1e1", "tag": "BUTTON", "selector": "#btn1", "clickable": true},
-    {"x": 300, "y": 400, "ref": "s1e2", "tag": "DIV", "selector": "div.card", "clickable": false},
-    {"x": 500, "y": 150, "error": "No element at this coordinate"}
-  ]
-}
-```
-
-Nearby search (with radius):
-```json
-{"elementsAt": {"x": 400, "y": 300}}
-{"elementsAt": {"x": 400, "y": 300, "radius": 100}}
-{"elementsAt": {"x": 400, "y": 300, "radius": 75, "limit": 10}}
-```
-Response:
-```json
-{
-  "center": {"x": 400, "y": 300},
-  "radius": 50,
-  "count": 5,
-  "elements": [
-    {"ref": "s1e1", "tag": "BUTTON", "selector": "#nearby-btn", "clickable": true, "distance": 12},
-    {"ref": "s1e2", "tag": "SPAN", "selector": "span.label", "clickable": false, "distance": 28}
-  ]
-}
-```
-
-
----
-
-## Query
-
-### By CSS
-```json
-{"query": "h1"}
-{"query": {"selector": "a", "limit": 5, "output": "href"}}
-{"query": {"selector": "div", "output": ["text", "href"]}}
-{"query": {"selector": "button", "output": {"attribute": "data-id"}}}
-```
-
-### By ARIA role
-```json
-{"query": {"role": "button"}}
-{"query": {"role": "button", "name": "Submit"}}
-{"query": {"role": "heading", "level": 2}}
-{"query": {"role": ["button", "link"], "refs": true}}
-```
-
-### queryAll
-```json
-{"queryAll": {"title": "h1", "links": "a", "buttons": {"role": "button"}}}
-```
-
-### inspect
-```json
-{"inspect": true}
-{"inspect": {"selectors": [".item"], "limit": 3}}
-```
-
-### console
-```json
-{"console": true}
-{"console": {"level": "error", "limit": 20, "stackTrace": true}}
+{"submitted": true, "valid": true, "errors": []}
 ```
 
 ---
 
-## Accessibility Snapshot
+## Query & Extraction
 
 ### snapshot
 ```json
@@ -776,20 +439,12 @@ YAML output example:
 
 Unchanged:
 ```json
-{
-  "unchanged": true,
-  "snapshotId": "s1",
-  "message": "Page unchanged since s1"
-}
+{"unchanged": true, "snapshotId": "s1", "message": "Page unchanged since s1"}
 ```
 
 Changed:
 ```json
-{
-  "snapshotId": "s2",
-  "yaml": "- button \"Login\" [ref=s2e1]\n...",
-  "refs": {}
-}
+{"snapshotId": "s2", "yaml": "- button \"Login\" [ref=s2e1]\n...", "refs": {}}
 ```
 
 ### Detail: summary
@@ -838,34 +493,271 @@ Response:
 }
 ```
 
----
+### query — By CSS
+```json
+{"query": "h1"}
+{"query": {"selector": "a", "limit": 5, "output": "href"}}
+{"query": {"selector": "div", "output": ["text", "href"]}}
+{"query": {"selector": "button", "output": {"attribute": "data-id"}}}
+```
 
-## Screenshots & PDF
+### query — By ARIA role
+```json
+{"query": {"role": "button"}}
+{"query": {"role": "button", "name": "Submit"}}
+{"query": {"role": "heading", "level": 2}}
+{"query": {"role": ["button", "link"], "refs": true}}
+```
 
-### Automatic Screenshots
-Every visual action captures before/after screenshots:
+### queryAll
+```json
+{"queryAll": {"title": "h1", "links": "a", "buttons": {"role": "button"}}}
+```
+
+### get — Text extraction (default)
+```json
+{"get": "#content"}
+{"get": {"selector": "#content"}}
+{"get": {"selector": "#content", "mode": "text"}}
+```
+Response:
+```json
+{"text": "Extracted content text", "mode": "text"}
+```
+
+### get — HTML extraction
+```json
+{"get": {"selector": "#content", "mode": "html"}}
+```
+Response:
+```json
+{"html": "<div>...</div>", "tagName": "DIV", "length": 1245, "mode": "html"}
+```
+
+### get — Form value extraction
+```json
+{"get": {"selector": "#form", "mode": "value"}}
+```
+Response:
 ```json
 {
-  "summary": "OK | 1 step | after: /tmp/cdp-skill/t1.after.png | ...",
-  "screenshotBefore": "/tmp/cdp-skill/t1.before.png",
-  "screenshotAfter": "/tmp/cdp-skill/t1.after.png",
-  "hint": "Use Read tool to view screenshotAfter (current state) and screenshotBefore (previous state)"
+  "selector": "#checkout-form",
+  "action": "/api/checkout",
+  "method": "POST",
+  "fields": [
+    {"name": "email", "type": "email", "value": "user@example.com", "label": "Email Address", "required": true, "valid": true}
+  ],
+  "valid": true,
+  "fieldCount": 3,
+  "mode": "value"
 }
 ```
 
-### pdf
+### get — Bounding box extraction
 ```json
-{"pdf": "report.pdf"}
-{"pdf": {"path": "/absolute/path/report.pdf", "landscape": true, "printBackground": true}}
+{"get": {"selector": "#element", "mode": "box"}}
+{"get": {"ref": "s1e1", "mode": "box"}}
+```
+Response:
+```json
+{"x": 100, "y": 200, "width": 150, "height": 40, "center": {"x": 175, "y": 220}, "mode": "box"}
+```
+
+### get — Attributes extraction
+```json
+{"get": {"selector": "#link", "mode": "attributes"}}
+```
+Response:
+```json
+{"attributes": {"href": "/page", "class": "link", "id": "main-link"}, "mode": "attributes"}
+```
+
+### get — Table extraction (auto-detected)
+```json
+{"get": "table.results"}
+{"get": {"selector": "#data-grid", "type": "table"}}
+```
+Response:
+```json
+{
+  "type": "table",
+  "headers": ["Name", "Email", "Status"],
+  "rows": [
+    ["John Doe", "john@example.com", "Active"],
+    ["Jane Smith", "jane@example.com", "Pending"]
+  ],
+  "rowCount": 2,
+  "mode": "text"
+}
+```
+
+### get — List extraction (auto-detected)
+```json
+{"get": "ul.items"}
+{"get": {"selector": "#nav-links", "type": "list"}}
+```
+Response:
+```json
+{
+  "type": "list",
+  "items": ["Home", "About", "Contact"],
+  "itemCount": 3,
+  "mode": "text"
+}
+```
+
+### getUrl
+```json
+{"getUrl": true}
+```
+Response:
+```json
+{"url": "https://example.com/page"}
+```
+
+### getTitle
+```json
+{"getTitle": true}
+```
+Response:
+```json
+{"title": "Page Title"}
+```
+
+### inspect
+```json
+{"inspect": true}
+{"inspect": {"selectors": [".item"], "limit": 3}}
+```
+
+### elementsAt — Single point
+```json
+{"elementsAt": {"x": 600, "y": 200}}
+```
+Response:
+```json
+{
+  "ref": "s1e5",
+  "existing": false,
+  "tag": "BUTTON",
+  "selector": "#submit-btn",
+  "clickable": true,
+  "role": "button",
+  "name": "Submit",
+  "box": {"x": 580, "y": 190, "width": 100, "height": 40}
+}
+```
+
+### elementsAt — Batch
+```json
+{"elementsAt": [{"x": 100, "y": 200}, {"x": 300, "y": 400}, {"x": 500, "y": 150}]}
+```
+Response:
+```json
+{
+  "count": 3,
+  "elements": [
+    {"x": 100, "y": 200, "ref": "s1e1", "tag": "BUTTON", "selector": "#btn1", "clickable": true},
+    {"x": 300, "y": 400, "ref": "s1e2", "tag": "DIV", "selector": "div.card", "clickable": false},
+    {"x": 500, "y": 150, "error": "No element at this coordinate"}
+  ]
+}
+```
+
+### elementsAt — Nearby search
+```json
+{"elementsAt": {"x": 400, "y": 300, "radius": 100}}
+{"elementsAt": {"x": 400, "y": 300, "radius": 75, "limit": 10}}
+```
+Response:
+```json
+{
+  "center": {"x": 400, "y": 300},
+  "radius": 100,
+  "count": 5,
+  "elements": [
+    {"ref": "s1e1", "tag": "BUTTON", "selector": "#nearby-btn", "clickable": true, "distance": 12},
+    {"ref": "s1e2", "tag": "SPAN", "selector": "span.label", "clickable": false, "distance": 28}
+  ]
+}
 ```
 
 ---
 
-## Dynamic Browser Execution
+## Page Control
+
+### wait — Element
+```json
+{"wait": "#content"}
+{"wait": {"selector": "#loading", "hidden": true}}
+{"wait": {"selector": ".item", "minCount": 10}}
+```
+
+### wait — Text
+```json
+{"wait": {"text": "Welcome"}}
+{"wait": {"textRegex": "Order #[A-Z0-9]+"}}
+```
+
+### wait — URL
+```json
+{"wait": {"urlContains": "/success"}}
+```
+
+### sleep
+```json
+{"sleep": 2000}
+```
+
+### scroll
+```json
+{"scroll": "top"}
+{"scroll": "bottom"}
+{"scroll": "up"}
+{"scroll": "down"}
+{"scroll": "#element"}
+{"scroll": {"deltaY": 500}}
+{"scroll": {"x": 0, "y": 1000}}
+```
+
+### frame — List frames
+```json
+{"frame": {"list": true}}
+```
+
+### frame — Switch to frame
+```json
+{"frame": "iframe#content"}
+{"frame": 0}
+{"frame": {"name": "myFrame"}}
+```
+
+### frame — Return to main frame
+```json
+{"frame": "top"}
+```
+
+### frame — Workflow (switch → interact → return)
+```json
+{"steps": [
+  {"frame": "iframe#editor"},
+  {"fill": {"selector": "#input", "value": "Hello"}},
+  {"click": "#save"},
+  {"frame": "top"}
+]}
+```
+
+### viewport
+```json
+{"viewport": "iphone-14"}
+{"viewport": {"width": 1280, "height": 720}}
+{"viewport": {"width": 375, "height": 667, "mobile": true, "hasTouch": true, "isLandscape": true}}
+```
 
 ### pageFunction
 ```json
 {"pageFunction": "() => document.title"}
+{"pageFunction": "document.title"}
 {"pageFunction": "(document) => [...document.querySelectorAll('.item')].map(i => ({text: i.textContent, href: i.href}))"}
 ```
 
@@ -873,7 +765,16 @@ Object form:
 ```json
 {"pageFunction": {"fn": "(refs) => refs.size", "refs": true}}
 {"pageFunction": {"fn": "() => document.querySelectorAll('button').length", "timeout": 5000}}
+{"pageFunction": {"expression": "fetch('/api').then(r=>r.json())"}}
 ```
+
+### Typed Return Values
+- Numbers: `{type: "number", repr: "Infinity|NaN|-Infinity"}`
+- Date: `{type: "Date", value: "ISO string", timestamp: N}`
+- Map: `{type: "Map", size: N, entries: [...]}`
+- Set: `{type: "Set", size: N, values: [...]}`
+- Element: `{type: "Element", tagName, id, className, textContent, isConnected}`
+- NodeList: `{type: "NodeList", length: N, items: [...]}`
 
 ### poll
 ```json
@@ -884,6 +785,86 @@ Object form:
 Object form:
 ```json
 {"poll": {"fn": "() => !document.querySelector('.spinner') && document.querySelector('.results')?.children.length > 0", "interval": 100, "timeout": 10000}}
+```
+
+### assert
+```json
+{"assert": {"url": {"contains": "/success"}}}
+{"assert": {"url": {"equals": "https://example.com/done"}}}
+{"assert": {"url": {"startsWith": "https://"}}}
+{"assert": {"url": {"matches": "^https://.*\\.example\\.com"}}}
+{"assert": {"text": "Welcome"}}
+{"assert": {"selector": "h1", "text": "Title", "caseSensitive": false}}
+```
+Response:
+```json
+{
+  "passed": true,
+  "assertions": [
+    {"type": "url", "actual": "https://example.com/success", "expected": {"contains": "/success"}, "passed": true}
+  ]
+}
+```
+
+---
+
+## Browser & Tabs
+
+### chromeStatus
+```json
+{"steps":[{"chromeStatus":true}]}
+{"steps":[{"chromeStatus":{"port":9333,"headless":true}}]}
+{"steps":[{"chromeStatus":{"autoLaunch":false}}]}
+```
+Response:
+```json
+{
+  "status": "ok",
+  "chrome": {
+    "running": true,
+    "launched": true,
+    "version": "Chrome/120.0.6099.109",
+    "port": 9222,
+    "tabs": [{"targetId": "ABC123", "url": "about:blank", "title": ""}]
+  }
+}
+```
+
+### listTabs
+```json
+{"steps":[{"listTabs":true}]}
+```
+Response:
+```json
+{"count": 2, "tabs": [{"targetId": "ABC123", "url": "https://google.com", "title": "Google", "alias": "t1"}]}
+```
+
+### closeTab
+```json
+{"closeTab": "t1"}
+```
+
+### cookies
+```json
+{"cookies": {"get": true}}
+{"cookies": {"get": ["https://other-domain.com"], "name": "session_id"}}
+{"cookies": {"set": [{"name": "token", "value": "abc", "domain": "example.com", "expires": "7d"}]}}
+{"cookies": {"delete": "session_id"}}
+{"cookies": {"delete": "session_id", "domain": "example.com"}}
+{"cookies": {"clear": true}}
+{"cookies": {"clear": true, "domain": "example.com"}}
+```
+
+### console
+```json
+{"console": true}
+{"console": {"level": "error", "limit": 20, "stackTrace": true}}
+```
+
+### pdf
+```json
+{"pdf": "report.pdf"}
+{"pdf": {"path": "/absolute/path/report.pdf", "landscape": true, "printBackground": true}}
 ```
 
 ---
@@ -923,13 +904,23 @@ Object form:
 
 ### writeSiteProfile
 ```json
-{"writeSiteProfile": {"domain": "github.com", "content": "# github.com\nFitted: 2024-02-03 (full)\n\n## Environment\n..."}}
+{"writeSiteProfile": {"domain": "github.com", "content": "# github.com\nUpdated: 2025-01-15\n\n## Environment\n- React SPA\n..."}}
+```
+
+### readSiteProfile
+```json
+{"readSiteProfile": "github.com"}
+{"readSiteProfile": {"domain": "github.com"}}
+```
+Response:
+```json
+{"found": true, "domain": "github.com", "content": "# github.com\n..."}
 ```
 
 ### Full Profile Template
 ```markdown
 # example.com
-Updated: 2024-02-03  |  Fingerprint: <hash>
+Updated: 2025-01-15  |  Fingerprint: React 18, Next.js
 
 ## Environment
 - React 18.x, Next.js (SSR)
@@ -942,13 +933,7 @@ Updated: 2024-02-03  |  Fingerprint: <hash>
 
 ## Strategies
 ### fill (React controlled inputs)
-\`\`\`js
-(el, value) => {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-  setter.call(el, value);
-  el.dispatchEvent(new Event('input', {bubbles: true}));
-}
-\`\`\`
+Use `react: true` option or settledWhen to verify input accepted.
 
 ## Regions
 - mainContent: `main, [role="main"]`
@@ -956,88 +941,12 @@ Updated: 2024-02-03  |  Fingerprint: <hash>
 
 ## Recipes
 ### Login
-\`\`\`json
 {"steps": [
   {"fill": {"selector": "#username", "value": "{{user}}"}},
   {"fill": {"selector": "#password", "value": "{{pass}}"}},
   {"click": "#login"},
   {"wait": {"urlContains": "/dashboard"}}
 ]}
-\`\`\`
-```
-
----
-
-## JavaScript Execution
-
-### pageFunction (bare expressions)
-```json
-{"pageFunction": "document.title"}
-{"pageFunction": {"expression": "fetch('/api').then(r=>r.json())", "await": true}}
-```
-
-### Shell Escaping Tips
-```bash
-# Heredoc approach (Unix)
-node src/cdp-skill.js <<'EOF'
-{"steps":[{"pageFunction":"document.querySelectorAll('button').length"}]}
-EOF
-
-# Or save to file and pipe
-cat steps.json | node src/cdp-skill.js
-```
-
-### Typed Return Values
-- Numbers: `{type: "number", repr: "Infinity|NaN|-Infinity"}`
-- Date: `{type: "Date", value: "ISO string", timestamp: N}`
-- Map: `{type: "Map", size: N, entries: [...]}`
-- Set: `{type: "Set", size: N, values: [...]}`
-- Element: `{type: "Element", tagName, id, className, textContent, isConnected}`
-- NodeList: `{type: "NodeList", length: N, items: [...]}`
-
----
-
-## Viewport
-
-```json
-{"viewport": "iphone-14"}
-{"viewport": {"width": 1280, "height": 720}}
-{"viewport": {"width": 375, "height": 667, "mobile": true, "hasTouch": true, "isLandscape": true}}
-```
-
----
-
-## Cookies
-
-```json
-{"cookies": {"get": true}}
-{"cookies": {"get": ["https://other-domain.com"], "name": "session_id"}}
-{"cookies": {"set": [{"name": "token", "value": "abc", "domain": "example.com", "expires": "7d"}]}}
-{"cookies": {"delete": "session_id"}}
-{"cookies": {"delete": "session_id", "domain": "example.com"}}
-{"cookies": {"clear": true}}
-{"cookies": {"clear": true, "domain": "example.com"}}
-```
-
----
-
-## Form Submission
-
-### submit
-```json
-{"submit": "form"}
-{"submit": {"selector": "#login-form", "reportValidity": true}}
-```
-
----
-
-## Assertions
-
-```json
-{"assert": {"url": {"contains": "/success"}}}
-{"assert": {"url": {"matches": "^https://.*\\.example\\.com"}}}
-{"assert": {"text": "Welcome"}}
-{"assert": {"selector": "h1", "text": "Title", "caseSensitive": false}}
 ```
 
 ---
@@ -1057,9 +966,13 @@ cat steps.json | node src/cdp-skill.js
 node src/cdp-skill.js --debug '{"steps":[{"goto":"https://google.com"}]}'
 ```
 
-Creates files like:
-- `log/001-chromeStatus.ok.json`
-- `log/002-t1-newTab.ok.json`
-- `log/003-t1-click-fill.ok.json`
-- `log/004-t1-scroll.error.json`
+### Shell Escaping Tips
+```bash
+# Heredoc approach (Unix)
+node src/cdp-skill.js <<'EOF'
+{"steps":[{"pageFunction":"document.querySelectorAll('button').length"}]}
+EOF
 
+# Or save to file and pipe
+cat steps.json | node src/cdp-skill.js
+```

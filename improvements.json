@@ -1,7 +1,7 @@
 {
   "meta": {
     "totalVotes": 87,
-    "lastUpdated": "2026-02-12T21:54:07.878Z"
+    "lastUpdated": "2026-02-13T23:40:57.835Z"
   },
   "issues": [
     {
@@ -92,7 +92,7 @@
       "section": "Input / Typing Issues",
       "title": "Keyboard shortcuts with modifiers don't trigger SPA event handlers",
       "votes": 6,
-      "status": "open",
+      "status": "implemented",
       "symptoms": [
         "Meta+k dispatches keydown but doesn't trigger GitHub command palette",
         "Shortcut works manually in Chrome but not via CDP",
@@ -110,7 +110,7 @@
       "section": "Error Handling Issues",
       "title": "Invalid CSS selector doesn't show parsing error",
       "votes": 2,
-      "status": "open",
+      "status": "implemented",
       "symptoms": [
         "{\"click\": \"[[[invalid\"} times out instead of immediate error",
         "No indication that selector syntax is invalid"
@@ -159,7 +159,7 @@
       "id": "6.1",
       "section": "Snapshot / Query Issues",
       "title": "Snapshot returns limited content on some React SPAs",
-      "votes": 3,
+      "votes": 4,
       "status": "open",
       "symptoms": [
         "Airbnb page snapshot returns only 2 elements (Skip to content, alert)",
@@ -536,7 +536,15 @@
       "files": [
         "src/aria.js"
       ],
-      "fixAttempts": []
+      "fixAttempts": [
+        {
+          "date": "2026-02-13",
+          "outcome": "failed",
+          "crank": 15,
+          "version": "1.0.16",
+          "shsDelta": -18
+        }
+      ]
     },
     {
       "id": "9.6",
@@ -561,7 +569,7 @@
       "section": "Snapshot Content/Accuracy Issues",
       "title": "Headings and non-interactive elements have no refs in snapshotSearch",
       "votes": 5,
-      "status": "open",
+      "status": "implemented",
       "symptoms": [
         "snapshotSearch returns ref=None for all heading matches",
         "Wikipedia: all 11 section headings return ref=None",
@@ -822,7 +830,7 @@
       "id": "12.1",
       "section": "Session Resilience",
       "title": "Page reload invalidates CDP session with no recovery",
-      "votes": 1,
+      "votes": 2,
       "status": "open",
       "symptoms": [
         "reload destroys CDP session entirely",
@@ -971,7 +979,7 @@
       "section": "Input / Typing Issues",
       "title": "No native file upload support - had to use pageFunction with Dropzone API",
       "votes": 7,
-      "status": "open",
+      "status": "implemented",
       "symptoms": [
         "cdp-skill fill step rejects file inputs as 'not editable'. Had to use pageFunction to call Dropzone.forElement().addFile() to programmatically upload. CDP protocol supports DOM.setFileInputFiles which could be exposed as a dedicated step (e.g., 'uploadFile' or 'setFileInput') for native file upload support without requiring pageFunction workarounds."
       ],
@@ -1031,7 +1039,7 @@
       "id": "1.5",
       "section": "Timeout / Actionability Issues",
       "title": "Multiselect input click needed jsClick fallback",
-      "votes": 1,
+      "votes": 2,
       "status": "open",
       "symptoms": [
         "Clicking the multiselect input (ref s1e8) required jsClick-auto fallback because the CDP click was intercepted. The auto-fallback handled this transparently."
@@ -1234,7 +1242,7 @@
       "section": "Other Issues",
       "title": "drag with method:'auto' defaults to mouse-events which fails on HTML5 DnD sites",
       "votes": 6,
-      "status": "open",
+      "status": "implemented",
       "symptoms": [
         "The 'auto' method (default) for drag chose 'mouse-events' on the-internet.herokuapp.com/drag_and_drop, which uses the HTML5 Drag and Drop API. The drag step reported success (dragged: true) but the elements did NOT actually swap. Only when explicitly using method:'html5' did the drag work correctly. The 'auto' method should detect HTML5 DnD attributes (draggable='true', ondragstart handlers) and automatically select the html5 method. Additionally, the step should not report dragged:true when the drag had no visible effect - this is a misleading success response."
       ],
@@ -1287,7 +1295,7 @@
       "id": "1.6",
       "section": "Timeout / Actionability Issues",
       "title": "Click on ref s1e17 triggered unexpected newTabs creation (t204 to challenging_do",
-      "votes": 1,
+      "votes": 4,
       "status": "open",
       "symptoms": [
         "Click on ref s1e17 triggered unexpected newTabs creation (t204 to challenging_dom). This appears to be spurious tab opening during comment link navigation."
@@ -1308,7 +1316,7 @@
       "id": "1.7",
       "section": "Timeout / Actionability Issues",
       "title": "Cross-origin consent iframe blocks interaction on BBC",
-      "votes": 2,
+      "votes": 3,
       "status": "open",
       "symptoms": [
         "BBC shows a consent modal in a cross-origin iframe (#sp_message_iframe_1355822) that cannot be interacted with via cdp-skill frame switching. Workaround was to navigate directly to the search URL, bypassing the consent modal. A built-in mechanism to handle or dismiss cross-origin consent modals would improve reliability for sites using third-party consent management platforms."
@@ -1329,7 +1337,7 @@
       "id": "7.19",
       "section": "Other Issues",
       "title": "Radio button click requires text targeting instead of ref",
-      "votes": 1,
+      "votes": 2,
       "status": "open",
       "symptoms": [
         "Clicking a radio button ref (f0s1e8) reported 'element not visible' and did not check the radio. Using text-based click with force:true on the label text 'Male' worked. The radio input elements on demoqa have zero dimensions and are styled via CSS custom radio, so ref-based clicks fail silently."
@@ -1341,6 +1349,150 @@
       "source": "runner-feedback",
       "sourceTests": [
         "024-demoqa-forms"
+      ]
+    },
+    {
+      "id": "7.20",
+      "section": "Other Issues",
+      "title": "Cross-origin detection incorrect for about:srcdoc iframes",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "The mce_0_ifr iframe (about:srcdoc) within previewframe is flagged as cross-origin, preventing click, fill, and other DOM actions. However, the previewframe can access mce_0_ifr's contentDocument just fine from JS, indicating they share an origin. CDP should allow actions in about:srcdoc iframes that inherit their parent's origin."
+      ],
+      "expected": "",
+      "workaround": null,
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "025-tinymce"
+      ]
+    },
+    {
+      "id": "7.21",
+      "section": "Other Issues",
+      "title": "Used pageFunction in parent frame to set TinyMCE editor content",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Since direct interaction with the mce_0_ifr frame was blocked by the cross-origin detection, the workaround was to switch to previewframe and use pageFunction to access iframe.contentDocument.body.innerHTML directly. This bypasses the normal click+type workflow."
+      ],
+      "expected": "",
+      "workaround": "Since direct interaction with the mce_0_ifr frame was blocked by the cross-origin detection, the workaround was to switch to previewframe and use pageFunction to access iframe.contentDocument.body.innerHTML directly. This bypasses the normal click+type workflow.",
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "025-tinymce"
+      ]
+    },
+    {
+      "id": "7.22",
+      "section": "Other Issues",
+      "title": "middle_frame_content milestone eval does not account for nested framesets",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "The eval_truthy for middle_frame_content runs document.querySelectorAll('frame') in the main frame context, but the MIDDLE frame is a child of the frame-top frameset (depth 2), not a direct child of the top-level document. The eval only finds 2 direct <frame> children (frame-top and frame-bottom) and cannot access MIDDLE via contentDocument from the main frame. The eval should either recurse into nested framesets or specify it must run in the frame-top context."
+      ],
+      "expected": "",
+      "workaround": null,
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "031-herokuapp-nested-frames"
+      ]
+    },
+    {
+      "id": "7.23",
+      "section": "Other Issues",
+      "title": "IIFE syntax in pageFunction causes '__fn is not a function' error",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Passing an IIFE like '(() => { ... })()' to pageFunction fails with 'TypeError: __fn is not a function'. The tool auto-wraps expressions as IIFEs internally, so passing a pre-wrapped IIFE causes double-wrapping. The workaround is to pass arrow functions without invocation: '() => { ... }'. This is documented behavior but the error message is cryptic and could be improved to detect the double-wrap pattern and provide a helpful hint."
+      ],
+      "expected": "",
+      "workaround": null,
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "036-herokuapp-challenging-dom"
+      ]
+    },
+    {
+      "id": "7.24",
+      "section": "Other Issues",
+      "title": "Assert text check fails on input element values",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Using assert with selector and text on an input element fails even when the value matches exactly. The near-match shows score 100 but the assertion still fails. Assert appears to check textContent rather than the input value attribute."
+      ],
+      "expected": "",
+      "workaround": null,
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "037-demoqa-datepicker"
+      ]
+    },
+    {
+      "id": "7.25",
+      "section": "Other Issues",
+      "title": "Get mode:value returns error for datepicker inputs",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Using get with mode:value on #datePickerMonthYearInput and #dateAndTimePickerInput returns 'Element is not a form' error, even though these are standard input[type=text] elements rendered by react-datepicker."
+      ],
+      "expected": "",
+      "workaround": null,
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "037-demoqa-datepicker"
+      ]
+    },
+    {
+      "id": "7.26",
+      "section": "Other Issues",
+      "title": "Text-based click fails for React Select dropdown options",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "Using {text: 'Green'} to click a React Select option fails with 'Element not found' even though the dropdown is open and the option is visible. The dropdown options are rendered in a portal div and do not appear as discrete elements in the accessibility snapshot. Workaround: use the internal React Select option IDs (e.g. #react-select-4-option-0) to target options by CSS selector."
+      ],
+      "expected": "",
+      "workaround": "Using {text: 'Green'} to click a React Select option fails with 'Element not found' even though the dropdown is open and the option is visible. The dropdown options are rendered in a portal div and do not appear as discrete elements in the accessibility snapshot. Workaround: use the internal React Select option IDs (e.g. #react-select-4-option-0) to target options by CSS selector.",
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "038-demoqa-selectmenu"
+      ]
+    },
+    {
+      "id": "7.27",
+      "section": "Other Issues",
+      "title": "Cart state persists across headless sessions",
+      "votes": 1,
+      "status": "open",
+      "symptoms": [
+        "When opening saucedemo.com in a new headless tab, cart items from a previous session (same browser instance) are already present. The test had Onesie and Bike Light already added from a prior failed run. The site profile documents this ('items from previous session may persist in cart') but cdp-skill does not automatically handle it. Tests that require a clean cart state may produce false positives or false negatives."
+      ],
+      "expected": "",
+      "workaround": null,
+      "files": [],
+      "fixAttempts": [],
+      "source": "runner-feedback",
+      "sourceTests": [
+        "040-saucedemo-cart-validation"
       ]
     }
   ],

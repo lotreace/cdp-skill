@@ -47,7 +47,7 @@ import { validateSteps } from './step-validator.js';
 // Import domain executors
 import { executeWait, executeWaitForNavigation, executeScroll } from './execute-navigation.js';
 import { executeClick, executeHover, executeDrag } from './execute-interaction.js';
-import { executeFillActive, executeSelectOption } from './execute-input.js';
+import { executeFillActive, executeSelectOption, executeUpload } from './execute-input.js';
 import { executeSnapshot, executeSnapshotSearch, executeQuery, executeQueryAll, executeInspect, executeGetDom, executeGetBox, executeRefAt, executeElementsAt, executeElementsNear } from './execute-query.js';
 // executeRefAt, executeElementsNear kept for internal dispatch from unified elementsAt
 import { executeSubmit, executeExtract } from './execute-form.js';
@@ -397,6 +397,9 @@ export async function executeStep(deps, step, options = {}) {
     } else if (step.drag !== undefined) {
       stepResult.action = 'drag';
       stepResult.output = await executeDrag(elementLocator, inputEmulator, pageController, deps.ariaSnapshot, step.drag);
+    } else if (step.upload !== undefined) {
+      stepResult.action = 'upload';
+      stepResult.output = await executeUpload(elementLocator, pageController, step.upload);
     } else if (step.get !== undefined) {
       stepResult.action = 'get';
       const getParams = step.get;

@@ -32,18 +32,25 @@ function readJsonLines(filePath) {
 
 function readTrend() {
   const rows = readJsonLines(path.join(BENCH_DIR, 'baselines/trend.jsonl'));
-  return rows.map((row, i) => ({
-    ts: row.ts,
-    crank: i + 1,
-    version: row.version,
-    shs: row.shs,
-    passRate: row.passRate,
-    perfectRate: row.perfectRate,
-    avgCompletion: row.avgCompletion,
-    avgEfficiency: row.avgEfficiency,
-    categoryCoverage: row.categoryCoverage,
-    tests: row.tests
-  }));
+  return rows.map((row, i) => {
+    const tests = row.tests || 0;
+    const perfect = row.perfect ?? 0;
+    const passed = row.passed ?? tests;
+    const perfectRate = row.perfectRate ?? (tests > 0 ? perfect / tests : 0);
+    const categoryCoverage = row.categoryCoverage ?? 1;
+    return {
+      ts: row.ts,
+      crank: i + 1,
+      version: row.version,
+      shs: row.shs,
+      passRate: row.passRate,
+      perfectRate,
+      avgCompletion: row.avgCompletion,
+      avgEfficiency: row.avgEfficiency,
+      categoryCoverage,
+      tests
+    };
+  });
 }
 
 function readFixes() {

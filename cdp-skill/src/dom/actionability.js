@@ -65,6 +65,15 @@ export function createActionabilityChecker(session, options = {}) {
         evalParams(`document.querySelector(${JSON.stringify(selector)})`, false)
       );
 
+      // Check for selector syntax errors (e.g., invalid CSS selectors)
+      if (result.exceptionDetails) {
+        const msg = result.exceptionDetails.exception?.description ||
+                    result.exceptionDetails.exception?.value ||
+                    result.exceptionDetails.text ||
+                    'Unknown selector error';
+        return { success: false, error: `Selector error: ${msg}`, immediate: true };
+      }
+
       if (result.result.subtype === 'null' || !result.result.objectId) {
         return { success: false, error: `Element not found: ${selector}` };
       }
@@ -314,6 +323,10 @@ export function createActionabilityChecker(session, options = {}) {
       const element = await findElementInternal(selector);
       if (!element.success) {
         lastError = element.error;
+        // Immediate failures (syntax errors) should not retry
+        if (element.immediate) {
+          return { success: false, error: element.error };
+        }
         retry++;
         continue;
       }

@@ -113,16 +113,20 @@ function renderMetricsChart(canvas, trend, cranks, crankLabels) {
     { key: 'avgEfficiency', label: 'Avg Efficiency' },
     { key: 'categoryCoverage', label: 'Category Coverage' }
   ];
-  const palette = [COLORS.orangeAlpha, COLORS.blueAlpha, COLORS.greenAlpha];
-  const borders = [COLORS.orange, COLORS.blue, COLORS.green];
+  const palette = [COLORS.orangeAlpha, COLORS.blueAlpha, COLORS.greenAlpha, COLORS.purpleAlpha];
+  const borders = [COLORS.orange, COLORS.blue, COLORS.green, COLORS.purple];
+
+  // Show only the last 4 cranks to keep the radar readable
+  const maxRadar = 4;
+  const recentIndices = cranks.slice(-maxRadar).map(c => c - 1);
 
   new Chart(canvas, {
     type: 'radar',
     data: {
       labels: metricKeys.map(m => m.label),
-      datasets: cranks.map((c, i) => ({
-        label: crankLabels[i],
-        data: metricKeys.map(m => trend[i][m.key]),
+      datasets: recentIndices.map((idx, i) => ({
+        label: crankLabels[idx],
+        data: metricKeys.map(m => trend[idx][m.key] ?? 0),
         borderColor: borders[i % borders.length],
         backgroundColor: palette[i % palette.length],
         pointRadius: 4

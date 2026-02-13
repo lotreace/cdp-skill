@@ -57,7 +57,8 @@ export const STEP_TYPES = {
   READ_SITE_PROFILE: 'readSiteProfile',
   SWITCH_TAB: 'switchTab',
   GET_URL: 'getUrl',
-  GET_TITLE: 'getTitle'
+  GET_TITLE: 'getTitle',
+  UPLOAD: 'upload'
 };
 
 /**
@@ -1002,6 +1003,48 @@ export const STEP_CONFIG = {
     },
     isVisual: false,
     hooks: []
+  },
+
+  [STEP_TYPES.UPLOAD]: {
+    validate: (params) => {
+      const errors = [];
+      if (typeof params === 'string') {
+        // Shape 1: single file path
+        if (params.length === 0) {
+          errors.push('upload requires a non-empty file path');
+        }
+      } else if (Array.isArray(params)) {
+        // Shape 2: array of file paths
+        if (params.length === 0) {
+          errors.push('upload requires at least one file path');
+        }
+        for (const p of params) {
+          if (typeof p !== 'string' || p.length === 0) {
+            errors.push('upload file paths must be non-empty strings');
+            break;
+          }
+        }
+      } else if (params && typeof params === 'object') {
+        // Shape 3: object with selector/ref + files
+        if (!params.selector && !params.ref) {
+          errors.push('upload object requires selector or ref to target a file input');
+        }
+        if (!params.files && !params.file) {
+          errors.push('upload object requires files (array) or file (string)');
+        }
+        if (params.files && !Array.isArray(params.files)) {
+          errors.push('upload files must be an array of file path strings');
+        }
+        if (params.file && typeof params.file !== 'string') {
+          errors.push('upload file must be a string');
+        }
+      } else {
+        errors.push('upload requires a file path string, array of paths, or object with selector/ref and files');
+      }
+      return errors;
+    },
+    isVisual: true,
+    hooks: ['readyWhen', 'settledWhen', 'observe']
   }
 };
 

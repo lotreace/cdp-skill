@@ -1,0 +1,26 @@
+{
+  "id": "031-herokuapp-nested-frames",
+  "url": "https://the-internet.herokuapp.com/nested_frames",
+  "category": "read",
+  "difficulty": "hard",
+  "stability": "stable",
+  "task": "This page uses nested framesets. The top frameset contains a row of three frames (LEFT, MIDDLE, RIGHT) and a bottom frame (BOTTOM). Switch into the MIDDLE frame of the top row and read its text content. Then switch to the BOTTOM frame and read its text. Report the text found in all four frames. You must use frame-switching to access content inside nested framesets.",
+  "milestones": [
+    {
+      "id": "frames_present",
+      "weight": 0.2,
+      "verify": { "eval_truthy": "document.querySelectorAll('frame').length >= 4 || window.frames.length >= 2" }
+    },
+    {
+      "id": "middle_frame_content",
+      "weight": 0.4,
+      "verify": { "eval_truthy": "Array.from(document.querySelectorAll('frame')).some(f => { try { return f.contentDocument?.body?.textContent?.trim() === 'MIDDLE'; } catch(e) { return false; } })" }
+    },
+    {
+      "id": "bottom_frame_content",
+      "weight": 0.4,
+      "verify": { "eval_truthy": "Array.from(document.querySelectorAll('frame')).some(f => { try { return f.contentDocument?.body?.textContent?.trim() === 'BOTTOM'; } catch(e) { return false; } })" }
+    }
+  ],
+  "budget": { "maxSteps": 20, "maxTimeMs": 60000 }
+}

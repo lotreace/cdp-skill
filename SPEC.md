@@ -2,7 +2,7 @@
 
 > **Living Document** — This specification describes _what_ cdp-skill does and _why_, not how it is implemented. It should be updated whenever capabilities are added, behaviors change, or lessons are learned. It serves as the authoritative reference for ongoing refactoring and future development.
 >
-> Last updated: 2026-02-08
+> Last updated: 2026-02-14
 
 ---
 
@@ -791,6 +791,29 @@ When no option matches, the error includes the first 10 available options (value
 
 **Output**: `{selected: [...], multiple: boolean}`
 
+### 9.9 Upload
+
+Upload sets files on `<input type="file">` elements via CDP's `DOM.setFileInputFiles`.
+
+**Input formats**:
+- Single file: `{"upload": "/path/to/file.txt"}`
+- Multiple files: `{"upload": ["/path/a.txt", "/path/b.png"]}`
+- Targeted: `{"upload": {"selector": "#file-input", "file": "a.txt"}}`
+- Targeted multiple: `{"upload": {"selector": "#file-input", "files": ["a.txt", "b.png"]}}`
+- Ref-targeted: `{"upload": {"ref": "s1e3", "files": ["a.txt"]}}`
+
+When no selector or ref is provided, the system auto-finds a file input on the page. The target element must be an `<input type="file">`.
+
+**Output**: `{uploaded, files, accept, multiple, target}`
+
+### 9.10 Sleep
+
+Sleep pauses execution for a fixed duration.
+
+**Input**: A number of milliseconds: `{"sleep": 1000}`
+
+This is a raw delay with no conditions. Prefer `wait` (which waits for a selector or condition) or action hooks (`readyWhen`, `settledWhen`) over `sleep` when possible.
+
 
 ## 10. Action Lifecycle & Hooks
 
@@ -944,7 +967,7 @@ This step is useful for quick orientation on a page before deciding whether to t
 
 ### 11.6 get (Unified Content Extraction)
 
-The `get` step is a unified content extraction mechanism that replaces the separate `extract`, `getDom`, `getBox`, and `formState` steps. It supports multiple extraction modes via a `mode` parameter.
+The `get` step is a unified content extraction mechanism. It supports multiple extraction modes via a `mode` parameter. The `getDom` and `getBox` steps also remain available as standalone shortcuts for their respective modes.
 
 **Input forms:**
 - String: `"selector"` (defaults to text mode)
@@ -1735,7 +1758,7 @@ Custom date pickers, color pickers, sliders, and other complex composite widgets
 - Require scrolling within internal containers (not the page viewport) to reach options
 - Use custom event handling that does not respond to standard CDP input dispatch
 
-Evaluation testing has shown specific weaknesses: date pickers (test 037) scored 0.71 due to time list items requiring force-clicks, and progress bars (test 039) scored 0.64 due to timing sensitivity. Workarounds include `pageFunction` for direct DOM manipulation, `getDom` for HTML inspection, and `pipeline` for coordinated multi-step DOM operations within a single evaluation context.
+Workarounds include `pageFunction` for direct DOM manipulation and `get` with `mode: "html"` for HTML inspection.
 
 ### 19.11 Stale Element References
 
@@ -1756,7 +1779,7 @@ Frame context established via `frame` does not persist across CLI invocations. E
 
 ### 19.13 File Upload
 
-The system does not natively support file uploads. The `fill` step rejects file inputs as "not editable" because file input values cannot be set via standard DOM manipulation for security reasons. CDP provides `DOM.setFileInputFiles` for this purpose, but it is not currently exposed as a step. Agents must use `pageFunction` with direct API calls (e.g., to Dropzone or similar libraries) as a workaround.
+The `upload` step supports native `<input type="file">` elements via CDP's `DOM.setFileInputFiles`. However, custom upload widgets (drag-and-drop zones, Dropzone, react-dropzone) that do not use a native file input may not respond to this step. For those, agents must use `pageFunction` with direct API calls as a workaround.
 
 ### 19.14 Invalid CSS Selector Handling
 

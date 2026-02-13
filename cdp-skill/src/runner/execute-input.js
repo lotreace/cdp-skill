@@ -208,6 +208,128 @@ export async function executeFillActive(pageController, inputEmulator, params) {
 }
 
 /**
+ * Execute an upload step - set files on a file input element via CDP
+ * Uses DOM.setFileInputFiles to set file paths on <input type="file"> elements
+ *
+ * Shapes:
+ *   {"upload": "/path/to/file.txt"}                           — single file, auto-find file input
+ *   {"upload": ["/path/a.txt", "/path/b.png"]}                — multiple files, auto-find file input
+ *   {"upload": {"selector": "#file-input", "file": "a.txt"}}  — targeted single file
+ *   {"upload": {"selector": "#file-input", "files": ["a.txt", "b.png"]}} — targeted multiple files
+ *   {"upload": {"ref": "f0s1e3", "files": ["a.txt"]}}         — ref-targeted
+ */
+export async function executeUpload(elementLocator, pageController, params) {
+  const session = elementLocator.session;
+
+  // Normalize params into { files, selector?, ref? }
+  let files, selector, ref;
+  if (typeof params === 'string') {
+    files = [params];
+  } else if (Array.isArray(params)) {
+    files = params;
+  } else {
+    selector = params.selector;
+    ref = params.ref;
+    files = params.files || (params.file ? [params.file] : []);
+  }
+
+  // Find the file input element
+  let objectId;
+  try {
+    if (ref) {
+      // Resolve ref to objectId via aria refs
+      const evalParams = {
+        expression: `window.__ariaRefs && window.__ariaRefs.get(${JSON.stringify(ref)})`,
+        returnByValue: false
+      };
+      const contextId = pageController.getFrameContext();
+      if (contextId) evalParams.contextId = contextId;
+      const result = await session.send('Runtime.evaluate', evalParams);
+      if (!result.result.objectId) {
+        throw new Error(`Element ref ${ref} not found — run 'snapshot' to get fresh refs`);
+      }
+      objectId = result.result.objectId;
+    } else if (selector) {
+      // Find by CSS selector
+      const evalParams = {
+        expression: `document.querySelector(${JSON.stringify(selector)})`,
+        returnByValue: false
+      };
+      const contextId = pageController.getFrameContext();
+      if (contextId) evalParams.contextId = contextId;
+      const result = await session.send('Runtime.evaluate', evalParams);
+      if (!result.result.objectId) {
+        throw elementNotFoundError(selector, 0);
+      }
+      objectId = result.result.objectId;
+    } else {
+      // Auto-find: look for a file input on the page
+      const evalParams = {
+        expression: `document.querySelector('input[type="file"]')`,
+        returnByValue: false
+      };
+      const contextId = pageController.getFrameContext();
+      if (contextId) evalParams.contextId = contextId;
+      const result = await session.send('Runtime.evaluate', evalParams);
+      if (!result.result.objectId) {
+        throw new Error('No file input (input[type="file"]) found on the page');
+      }
+      objectId = result.result.objectId;
+    }
+
+    // Verify it's actually a file input
+    const typeCheck = await session.send('Runtime.callFunctionOn', {
+      objectId,
+      functionDeclaration: `function() {
+        return {
+          tagName: this.tagName,
+          type: this.type,
+          accept: this.accept || '',
+          multiple: this.hasAttribute('multiple')
+        };
+      }`,
+      returnByValue: true
+    });
+
+    const info = typeCheck.result.value;
+    if (!info || info.tagName !== 'INPUT' || info.type !== 'file') {
+      throw new Error(`Target element is ${info?.tagName || 'unknown'} type="${info?.type || 'unknown'}" — expected input[type="file"]`);
+    }
+
+    if (files.length > 1 && !info.multiple) {
+      throw new Error(`File input does not have 'multiple' attribute but ${files.length} files were provided`);
+    }
+
+    // Set files via CDP
+    await session.send('DOM.setFileInputFiles', {
+      objectId,
+      files
+    });
+
+    // Dispatch change event so frameworks detect the file selection
+    await session.send('Runtime.callFunctionOn', {
+      objectId,
+      functionDeclaration: `function() {
+        this.dispatchEvent(new Event('change', { bubbles: true }));
+        this.dispatchEvent(new Event('input', { bubbles: true }));
+      }`
+    });
+
+    return {
+      uploaded: true,
+      files,
+      accept: info.accept,
+      multiple: info.multiple,
+      target: selector || ref || 'input[type="file"]'
+    };
+  } finally {
+    if (objectId) {
+      try { await session.send('Runtime.releaseObject', { objectId }); } catch {}
+    }
+  }
+}
+
+/**
  * Execute a refAt step - get or create a ref for the element at given coordinates
  * Uses document.elementFromPoint to find the element, then assigns/retrieves a ref
  */

@@ -69,6 +69,13 @@ export function buildActionContext(action, params, context) {
     case 'press': {
       return `Pressed ${params || 'key'}`;
     }
+    case 'upload': {
+      if (typeof params === 'string') return `Uploaded ${params}`;
+      if (Array.isArray(params)) return `Uploaded ${params.length} file(s)`;
+      if (params?.selector) return `Uploaded to ${params.selector}`;
+      if (params?.ref) return `Uploaded to [ref=${params.ref}]`;
+      return 'Uploaded file(s)';
+    }
     default:
       return '';
   }

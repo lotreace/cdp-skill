@@ -488,27 +488,29 @@ export async function executeDrag(elementLocator, inputEmulator, pageController,
         if (method === 'mouse') return doMouseDrag();
         if (method === 'html5') return doHtml5Drag();
 
-        // auto: try mouse first (works for jQuery UI, sortable lists), then HTML5 DnD
-        const mouseResult = doMouseDrag();
-        if (!mouseResult.success) {
-          // Mouse drag failed entirely (no source element)
-          if (sourceEl && targetEl) {
-            const html5Result = doHtml5Drag();
-            if (html5Result.success) return html5Result;
-          }
-          return mouseResult;
-        }
+        // auto: detect HTML5 DnD indicators before choosing method
+        const needsHtml5 = sourceEl && targetEl && (
+          sourceEl.draggable ||
+          sourceEl.hasAttribute('ondragstart') ||
+          sourceEl.hasAttribute('ondrag') ||
+          targetEl.hasAttribute('ondrop') ||
+          targetEl.hasAttribute('ondragover')
+        );
 
-        // Mouse events dispatched — if source has draggable attribute or ondragstart,
-        // it likely needs HTML5 DnD instead of mouse events
-        if (sourceEl && targetEl && (sourceEl.draggable || sourceEl.getAttribute('ondragstart'))) {
+        if (needsHtml5) {
+          // Try HTML5 DnD first for elements that clearly use it
           const html5Result = doHtml5Drag();
-          if (html5Result.success) {
-            html5Result.mouseTriedFirst = true;
-            return html5Result;
-          }
+          if (html5Result.success) return html5Result;
+          // Fall back to mouse if HTML5 failed
+          return doMouseDrag();
         }
 
+        // No HTML5 indicators — use mouse events, fall back to HTML5
+        const mouseResult = doMouseDrag();
+        if (!mouseResult.success && sourceEl && targetEl) {
+          const html5Result = doHtml5Drag();
+          if (html5Result.success) return html5Result;
+        }
         return mouseResult;
       })()
     `,

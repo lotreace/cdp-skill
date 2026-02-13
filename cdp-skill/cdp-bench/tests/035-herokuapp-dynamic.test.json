@@ -1,0 +1,26 @@
+{
+  "id": "035-herokuapp-dynamic",
+  "url": "https://the-internet.herokuapp.com/dynamic_loading/2",
+  "category": "read",
+  "difficulty": "medium",
+  "stability": "stable",
+  "task": "This page has a dynamically loaded element. Click the 'Start' button to begin loading. A loading spinner will appear for several seconds. Wait for the loading to complete — do NOT read the result until the spinner disappears and the content is fully rendered. Read and report the text that appears after loading completes.",
+  "milestones": [
+    {
+      "id": "start_button_exists",
+      "weight": 0.1,
+      "verify": { "eval_truthy": "document.querySelector('#start button') !== null || document.getElementById('finish') !== null" }
+    },
+    {
+      "id": "loading_complete",
+      "weight": 0.3,
+      "verify": { "eval_truthy": "document.getElementById('loading')?.style?.display === 'none' || !document.getElementById('loading')?.offsetParent" }
+    },
+    {
+      "id": "hello_world_visible",
+      "weight": 0.6,
+      "verify": { "eval_truthy": "document.querySelector('#finish h4')?.textContent?.trim() === 'Hello World!'" }
+    }
+  ],
+  "budget": { "maxSteps": 15, "maxTimeMs": 60000 }
+}

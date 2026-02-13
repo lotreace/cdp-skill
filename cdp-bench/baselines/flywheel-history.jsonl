@@ -22,3 +22,6 @@
 {"type":"crank","ts":"2026-02-11T21:26:14.598Z","crank":11,"shs":93,"shsDelta":-3,"fixAttempt":{"issueId":"7.8","outcome":"success","version":"1.0.14"},"testsRun":30,"testsPassed":28,"testsPerfect":26,"feedbackExtracted":72,"feedbackMatched":10}
 {"type":"crank","ts":"2026-02-12T19:19:03.849Z","crank":12,"shs":99,"shsDelta":6,"fixAttempt":null,"testsRun":30,"testsPassed":30,"testsPerfect":29,"feedbackExtracted":16,"feedbackMatched":0}
 {"type":"crank","ts":"2026-02-12T21:54:07.878Z","crank":13,"shs":91,"shsDelta":-8,"fixAttempt":null,"testsRun":14,"testsPassed":13,"testsPerfect":11,"feedbackExtracted":14,"feedbackMatched":2}
+{"type":"crank","ts":"2026-02-13T22:03:40.409Z","crank":14,"shs":99,"shsDelta":8,"fixAttempt":null,"testsRun":14,"testsPassed":14,"testsPerfect":13,"feedbackExtracted":0,"feedbackMatched":0}
+{"type":"fix_outcome","ts":"2026-02-13T23:40:57.835Z","issueId":"9.4","outcome":"failed","crank":15,"version":"1.0.16","shsDelta":-18}
+{"type":"crank","ts":"2026-02-13T23:40:57.836Z","crank":15,"shs":81,"shsDelta":-18,"fixAttempt":{"issueId":"9.4","outcome":"failed","version":"1.0.16"},"testsRun":14,"testsPassed":11,"testsPerfect":10,"feedbackExtracted":28,"feedbackMatched":8}

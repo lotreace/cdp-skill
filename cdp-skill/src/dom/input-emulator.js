@@ -277,20 +277,42 @@ export function createInputEmulator(session) {
     await type(text, opts);
   }
 
+  // Mapping of Meta+key combos to macOS editing commands (sent via CDP commands param)
+  const MAC_COMMANDS = {
+    'a': ['selectAll'], 'c': ['copy'], 'v': ['paste'], 'x': ['cut'],
+    'z': ['undo'],
+  };
+  const MAC_SHIFT_COMMANDS = {
+    'z': ['redo'],
+  };
+
   async function press(key, opts = {}) {
-    const { modifiers = {}, delay = 0 } = opts;
+    const { modifiers = {}, delay = 0, commands } = opts;
     const keyDef = KEY_DEFINITIONS[key] || getKeyDefinition(key);
     const modifierFlags = calculateModifiers(modifiers);
 
-    await session.send('Input.dispatchKeyEvent', {
+    // Resolve commands: explicit > auto-detect for Meta combos on macOS
+    const resolvedCommands = commands
+      || (modifiers.meta && modifiers.shift && MAC_SHIFT_COMMANDS[keyDef.key])
+      || (modifiers.meta && MAC_COMMANDS[keyDef.key])
+      || undefined;
+
+    const keyDown = {
       type: 'rawKeyDown',
       key: keyDef.key,
       code: keyDef.code,
       windowsVirtualKeyCode: keyDef.keyCode,
+      nativeVirtualKeyCode: keyDef.keyCode,
       modifiers: modifierFlags
-    });
+    };
+    if (resolvedCommands) keyDown.commands = resolvedCommands;
 
-    if (keyDef.text) {
+    await session.send('Input.dispatchKeyEvent', keyDown);
+
+    // Skip char event when command modifiers are held (shortcuts shouldn't produce text)
+    // Shift alone still produces text (e.g., Shift+a → "A")
+    const hasCommandModifier = modifiers.ctrl || modifiers.meta || modifiers.alt;
+    if (keyDef.text && !hasCommandModifier) {
       await session.send('Input.dispatchKeyEvent', {
         type: 'char',
         text: keyDef.text,
@@ -306,6 +328,7 @@ export function createInputEmulator(session) {
       key: keyDef.key,
       code: keyDef.code,
       windowsVirtualKeyCode: keyDef.keyCode,
+      nativeVirtualKeyCode: keyDef.keyCode,
       modifiers: modifierFlags
     });
   }

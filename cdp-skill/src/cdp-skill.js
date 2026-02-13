@@ -62,7 +62,8 @@ function generateDebugFilename(steps, status, tabId) {
     const actionKeys = ['goto', 'click', 'fill', 'type', 'press', 'scroll', 'snapshot',
       'query', 'hover', 'wait', 'sleep', 'pageFunction', 'newTab', 'closeTab',
       'selectOption', 'select', 'viewport', 'cookies', 'back', 'forward', 'drag',
-      'frame', 'elementsAt', 'extract', 'formState', 'assert', 'validate', 'submit'];
+      'frame', 'elementsAt', 'extract', 'formState', 'assert', 'validate', 'submit',
+      'upload'];
     for (const key of actionKeys) {
       if (step[key] !== undefined) return key;
     }

@@ -1,0 +1,26 @@
+{
+  "id": "034-herokuapp-upload",
+  "url": "https://the-internet.herokuapp.com/upload",
+  "category": "create",
+  "difficulty": "hard",
+  "stability": "stable",
+  "task": "Upload a file to this page. The page uses a drag-and-drop file upload area (Dropzone.js). Create a temporary text file, then upload it by either:\n- Finding the hidden file input element and setting the file on it\n- Using the dropzone click area to trigger the file chooser\nAfter selecting the file, ensure the upload completes. Verify the file was uploaded successfully — the page should show the uploaded filename.",
+  "milestones": [
+    {
+      "id": "upload_area_present",
+      "weight": 0.15,
+      "verify": { "eval_truthy": "document.getElementById('drag-drop-upload') !== null || document.getElementById('file-upload') !== null" }
+    },
+    {
+      "id": "file_uploaded",
+      "weight": 0.45,
+      "verify": { "eval_truthy": "document.querySelector('.dz-filename, .dz-details, #uploaded-files, .dz-success')?.textContent?.trim()?.length > 0 || document.querySelector('h3')?.textContent?.includes('File Uploaded')" }
+    },
+    {
+      "id": "upload_confirmed",
+      "weight": 0.4,
+      "verify": { "eval_truthy": "document.querySelector('.dz-success-mark, .dz-complete, #uploaded-files') !== null || document.body.innerText.includes('File Uploaded')" }
+    }
+  ],
+  "budget": { "maxSteps": 20, "maxTimeMs": 90000 }
+}
