@@ -17,7 +17,9 @@ Execute ONE browser automation test and write a trace file.
 
 ### 1. Read Test Definition
 
-Read `{{test_file_path}}`. Note the `url`, `task`, `milestones`, and `budget`.
+Read `{{test_file_path}}`. Note the `id`, `url`, `task`, `milestones`, and `budget`.
+
+**CRITICAL**: The test's `id` field (e.g., `024-demoqa-forms`) may differ from the filename (e.g., `024-demoqa.test.json`). Always use the `id` field from inside the JSON for the trace filename and testId — never derive it from the filename.
 
 ### 2. Read cdp-skill Docs
 

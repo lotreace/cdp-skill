@@ -78,7 +78,16 @@ function validateTest(testPath, options = {}) {
   let trace = options.trace || null;
   if (!trace && options.runDir) {
     const traceFile = path.join(options.runDir, `${testDef.id}.trace.json`);
-    try { trace = JSON.parse(fs.readFileSync(traceFile, 'utf8')); } catch (e) { /* no trace */ }
+    try { trace = JSON.parse(fs.readFileSync(traceFile, 'utf8')); } catch (e) {
+      // Fallback: scan all trace files for matching testId field
+      try {
+        const traceFiles = fs.readdirSync(options.runDir).filter(f => f.endsWith('.trace.json'));
+        for (const f of traceFiles) {
+          const candidate = JSON.parse(fs.readFileSync(path.join(options.runDir, f), 'utf8'));
+          if (candidate.testId === testDef.id) { trace = candidate; break; }
+        }
+      } catch (e2) { /* no trace */ }
+    }
   }
 
   // Use runner's self-reported milestoneResults
@@ -146,7 +155,16 @@ function validateRunDir(runDir, testsDir) {
 
     let trace = null;
     const traceFile = path.join(runDir, `${testId}.trace.json`);
-    try { trace = JSON.parse(fs.readFileSync(traceFile, 'utf8')); } catch (e) { /* no trace */ }
+    try { trace = JSON.parse(fs.readFileSync(traceFile, 'utf8')); } catch (e) {
+      // Fallback: scan all trace files for matching testId field
+      try {
+        const traceFiles = fs.readdirSync(runDir).filter(f => f.endsWith('.trace.json'));
+        for (const f of traceFiles) {
+          const candidate = JSON.parse(fs.readFileSync(path.join(runDir, f), 'utf8'));
+          if (candidate.testId === testId) { trace = candidate; break; }
+        }
+      } catch (e2) { /* no trace */ }
+    }
 
     const result = validateTest(testPath, { trace, runDir });
     results.push(result);
