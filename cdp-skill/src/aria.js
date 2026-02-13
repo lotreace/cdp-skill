@@ -475,7 +475,7 @@ export function createRoleQueryExecutor(session, elementLocator, options = {}) {
 // The snapshot script runs entirely in the browser context
 const SNAPSHOT_SCRIPT = `
 (function generateAriaSnapshot(rootSelector, options) {
-  const { mode = 'ai', maxDepth = 50, maxElements = 0, includeText = false, includeFrames = false, viewportOnly = false, pierceShadow = false, preserveRefs = false, since = null, internal = false, frameIdentifier = 'f0' } = options || {};
+  const { mode = 'ai', maxDepth = 50, maxElements = 0, maxNameLength = 150, includeText = false, includeFrames = false, viewportOnly = false, pierceShadow = false, preserveRefs = false, since = null, internal = false, frameIdentifier = 'f0' } = options || {};
 
   // Viewport dimensions for viewport-only mode
   const viewportWidth = window.innerWidth;
@@ -628,7 +628,7 @@ const SNAPSHOT_SCRIPT = `
     'searchbox', 'slider', 'spinbutton', 'textbox', 'tree'];
 
   // Interactable roles for AI mode
-  const INTERACTABLE_ROLES = ['button', 'checkbox', 'combobox', 'link', 'listbox', 'menuitem',
+  const INTERACTABLE_ROLES = ['button', 'checkbox', 'combobox', 'heading', 'link', 'listbox', 'menuitem',
     'menuitemcheckbox', 'menuitemradio', 'option', 'radio', 'searchbox', 'slider', 'spinbutton',
     'switch', 'tab', 'textbox', 'treeitem'];
 
@@ -764,6 +764,11 @@ const SNAPSHOT_SCRIPT = `
   function normalizeWhitespace(text) {
     if (!text) return '';
     return text.replace(/\\s+/g, ' ').trim();
+  }
+
+  function truncateName(text) {
+    if (!text || maxNameLength <= 0 || text.length <= maxNameLength) return text;
+    return text.substring(0, maxNameLength) + '…';
   }
 
   function getCheckedState(el, role) {
@@ -1017,7 +1022,7 @@ const SNAPSHOT_SCRIPT = `
     if (mode === 'ai' && !visible) return null;
 
     const role = getAriaRole(el);
-    const name = getAccessibleName(el);
+    const name = truncateName(getAccessibleName(el));
 
     // Skip elements without semantic meaning
     if (!role && mode === 'ai') {
@@ -1415,6 +1420,7 @@ export function createAriaSnapshot(session, options = {}) {
    * @param {string} options.detail - Detail level: 'summary', 'interactive', or 'full' (default: 'full')
    * @param {number} options.maxDepth - Maximum tree depth (default: 50)
    * @param {number} options.maxElements - Maximum elements to include (default: unlimited)
+   * @param {number} options.maxNameLength - Truncate accessible names longer than this (default: 150, 0 to disable)
    * @param {boolean} options.includeText - Include static text nodes in output (default: false for ai mode)
    * @param {boolean} options.includeFrames - Include same-origin iframe content (default: false)
    * @param {boolean} options.viewportOnly - Only include elements visible in viewport (default: false)
@@ -1424,13 +1430,13 @@ export function createAriaSnapshot(session, options = {}) {
    * @returns {Promise<Object>} Snapshot result with tree, yaml, refs, and snapshotId
    */
   async function generate(options = {}) {
-    const { root = null, mode = 'ai', detail = 'full', maxDepth = 50, maxElements = 0, includeText = false, includeFrames = false, viewportOnly = false, pierceShadow = false, preserveRefs = false, since = null, internal = false } = options;
+    const { root = null, mode = 'ai', detail = 'full', maxDepth = 50, maxElements = 0, maxNameLength = 150, includeText = false, includeFrames = false, viewportOnly = false, pierceShadow = false, preserveRefs = false, since = null, internal = false } = options;
 
     // Get frame identifier for ref generation (f0 for main frame, f1, f2, etc. for iframes)
     const frameIdentifier = getFrameIdentifier ? await getFrameIdentifier() : 'f0';
 
     const evalArgs = {
-      expression: `(${SNAPSHOT_SCRIPT})(${JSON.stringify(root)}, ${JSON.stringify({ mode, detail, maxDepth, maxElements, includeText, includeFrames, viewportOnly, pierceShadow, preserveRefs, since, internal, frameIdentifier })})`,
+      expression: `(${SNAPSHOT_SCRIPT})(${JSON.stringify(root)}, ${JSON.stringify({ mode, detail, maxDepth, maxElements, maxNameLength, includeText, includeFrames, viewportOnly, pierceShadow, preserveRefs, since, internal, frameIdentifier })})`,
       returnByValue: true,
       awaitPromise: false
     };
