@@ -80,13 +80,13 @@ function validateTest(testPath, options = {}) {
     const traceFile = path.join(options.runDir, `${testDef.id}.trace.json`);
     try { trace = JSON.parse(fs.readFileSync(traceFile, 'utf8')); } catch (e) {
       // Fallback: scan all trace files for matching testId field
-      try {
-        const traceFiles = fs.readdirSync(options.runDir).filter(f => f.endsWith('.trace.json'));
-        for (const f of traceFiles) {
+      const traceFiles = fs.readdirSync(options.runDir).filter(f => f.endsWith('.trace.json'));
+      for (const f of traceFiles) {
+        try {
           const candidate = JSON.parse(fs.readFileSync(path.join(options.runDir, f), 'utf8'));
           if (candidate.testId === testDef.id) { trace = candidate; break; }
-        }
-      } catch (e2) { /* no trace */ }
+        } catch (e2) { /* skip malformed trace */ }
+      }
     }
   }
 
@@ -157,13 +157,13 @@ function validateRunDir(runDir, testsDir) {
     const traceFile = path.join(runDir, `${testId}.trace.json`);
     try { trace = JSON.parse(fs.readFileSync(traceFile, 'utf8')); } catch (e) {
       // Fallback: scan all trace files for matching testId field
-      try {
-        const traceFiles = fs.readdirSync(runDir).filter(f => f.endsWith('.trace.json'));
-        for (const f of traceFiles) {
+      const traceFiles = fs.readdirSync(runDir).filter(f => f.endsWith('.trace.json'));
+      for (const f of traceFiles) {
+        try {
           const candidate = JSON.parse(fs.readFileSync(path.join(runDir, f), 'utf8'));
           if (candidate.testId === testId) { trace = candidate; break; }
-        }
-      } catch (e2) { /* no trace */ }
+        } catch (e2) { /* skip malformed trace */ }
+      }
     }
 
     const result = validateTest(testPath, { trace, runDir });
