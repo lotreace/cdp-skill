@@ -65,8 +65,20 @@ export async function executePageFunction(pageController, params) {
   const arg = useRefs ? 'window.__ariaRefs' : '';
   const serializerFn = getSerializationWrapper();
 
+  // Detect async functions to await their return value
+  const isAsync = /^async[\s(]/.test(fn.trim()) ||
+    (fn.trim().startsWith('(') && /^async[\s(]/.test(fn.trim().slice(1).trim()));
+
   // Wrap the agent function so its return value is serialized
-  const wrapped = `(function() {
+  // Use async wrapper when the function is async so we can await its result
+  const wrapped = isAsync
+    ? `(async function() {
+  const __fn = ${fn};
+  const __serialize = ${serializerFn};
+  const __result = await __fn(${arg});
+  return __serialize(__result);
+})()`
+    : `(function() {
   const __fn = ${fn};
   const __serialize = ${serializerFn};
   const __result = __fn(${arg});
@@ -75,7 +87,7 @@ export async function executePageFunction(pageController, params) {
 
   const evalPromise = pageController.evaluateInFrame(wrapped, {
     returnByValue: true,
-    awaitPromise: false
+    awaitPromise: isAsync
   });
 
   let result;
@@ -122,7 +134,18 @@ export async function executePoll(pageController, params) {
   }
 
   const serializerFn = getSerializationWrapper();
-  const expression = `(function() {
+
+  // Detect async predicates to properly await their return value
+  const isAsync = /^async[\s(]/.test(fn.trim()) ||
+    (fn.trim().startsWith('(') && /^async[\s(]/.test(fn.trim().slice(1).trim()));
+
+  const expression = isAsync
+    ? `(async function() {
+  const __fn = ${fn};
+  const __serialize = ${serializerFn};
+  return __serialize(await __fn());
+})()`
+    : `(function() {
   const __fn = ${fn};
   const __serialize = ${serializerFn};
   return __serialize(__fn());
@@ -134,7 +157,7 @@ export async function executePoll(pageController, params) {
   while (true) {
     const result = await pageController.evaluateInFrame(expression, {
       returnByValue: true,
-      awaitPromise: false
+      awaitPromise: isAsync
     });
 
     if (result.exceptionDetails) {

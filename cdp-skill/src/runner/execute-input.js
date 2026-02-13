@@ -3,105 +3,14 @@
  * Fill and select step executors
  *
  * EXPORTS:
- * - executeFill(elementLocator, inputEmulator, params) → Promise<void>
  * - executeFillActive(pageController, inputEmulator, params) → Promise<Object>
  * - executeSelectOption(elementLocator, params) → Promise<Object>
  *
  * DEPENDENCIES:
- * - ../dom/index.js: createElementValidator, createReactInputFiller
- * - ../utils.js: elementNotFoundError, elementNotEditableError, resetInputState
+ * - ../utils.js: elementNotFoundError
  */
 
-import { createElementValidator, createReactInputFiller } from '../dom/index.js';
-import { elementNotFoundError, elementNotEditableError, resetInputState } from '../utils.js';
-
-export async function executeFill(elementLocator, inputEmulator, params) {
-  const { selector, value, react } = params;
-
-  if (!selector || value === undefined) {
-    throw new Error('Fill requires selector and value');
-  }
-
-  const element = await elementLocator.findElement(selector);
-  if (!element) {
-    throw elementNotFoundError(selector, 0);
-  }
-
-  // Validate element is editable before attempting fill
-  const validator = createElementValidator(elementLocator.session);
-  const editableCheck = await validator.isEditable(element._handle.objectId);
-  if (!editableCheck.editable) {
-    await element._handle.dispose();
-    throw elementNotEditableError(selector, editableCheck.reason);
-  }
-
-  // Try fast path first - scroll to center with short stability check
-  let actionable;
-  try {
-    await element._handle.scrollIntoView({ block: 'center' });
-    // Use short stability timeout - most elements stabilize quickly
-    await element._handle.waitForStability({ frames: 2, timeout: 300 });
-    actionable = await element._handle.isActionable();
-  } catch (e) {
-    // Stability check failed, check actionability anyway
-    actionable = await element._handle.isActionable();
-  }
-
-  // If not actionable, try alternative scroll strategies
-  if (!actionable.actionable) {
-    let lastError = new Error(`Element not actionable: ${actionable.reason}`);
-
-    for (const strategy of ['end', 'start', 'nearest']) {
-      try {
-        await element._handle.scrollIntoView({ block: strategy });
-        await element._handle.waitForStability({ frames: 2, timeout: 500 });
-        actionable = await element._handle.isActionable();
-
-        if (actionable.actionable) break;
-        lastError = new Error(`Element not actionable: ${actionable.reason}`);
-      } catch (e) {
-        lastError = e;
-      }
-    }
-
-    if (!actionable.actionable) {
-      await element._handle.dispose();
-      await resetInputState(elementLocator.session);
-      throw lastError;
-    }
-  }
-
-  try {
-    // Use React-specific fill approach if react option is set
-    if (react) {
-      const reactFiller = createReactInputFiller(elementLocator.session);
-      await reactFiller.fillByObjectId(element._handle.objectId, value);
-      return; // Success
-    }
-
-    // Standard fill approach using keyboard events
-    const box = await element._handle.getBoundingBox();
-    const x = box.x + box.width / 2;
-    const y = box.y + box.height / 2;
-
-    // Click to focus
-    await inputEmulator.click(x, y);
-
-    // Focus element directly - more reliable than relying on click
-    await element._handle.focus();
-
-    if (params.clear !== false) {
-      await inputEmulator.selectAll();
-    }
-
-    await inputEmulator.type(String(value));
-  } catch (e) {
-    await resetInputState(elementLocator.session);
-    throw e;
-  } finally {
-    await element._handle.dispose();
-  }
-}
+import { elementNotFoundError } from '../utils.js';
 
 /**
  * Execute a selectOption step - select option in dropdown
@@ -226,15 +135,12 @@ export async function executeSelectOption(elementLocator, params) {
  */
 
 export async function executeFillActive(pageController, inputEmulator, params) {
-  const session = pageController.session;
-
   // Parse params
   const value = typeof params === 'string' ? params : (params && params.value);
   const clear = typeof params === 'object' && params !== null ? params.clear !== false : true;
 
   // Check if there's an active element and if it's editable
-  const checkResult = await session.send('Runtime.evaluate', {
-    expression: `(function() {
+  const checkResult = await pageController.evaluateInFrame(`(function() {
       const el = document.activeElement;
       if (!el || el === document.body || el === document.documentElement) {
         return { error: 'No element is focused' };
@@ -271,9 +177,8 @@ export async function executeFillActive(pageController, inputEmulator, params) {
         selector: selector,
         valueBefore: el.value || ''
       };
-    })()`,
-    returnByValue: true
-  });
+    })()`);
+
 
   if (checkResult.exceptionDetails) {
     throw new Error(`fillActive error: ${checkResult.exceptionDetails.text}`);

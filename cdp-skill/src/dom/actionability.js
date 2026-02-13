@@ -22,9 +22,22 @@ const stableFrameCount = 3;
 /**
  * Create an actionability checker for Playwright-style auto-waiting
  * @param {Object} session - CDP session
+ * @param {Object} [options] - Options
+ * @param {function(): number|null} [options.getFrameContext] - Returns contextId for current frame
  * @returns {Object} Actionability checker interface
  */
-export function createActionabilityChecker(session) {
+export function createActionabilityChecker(session, options = {}) {
+  const { getFrameContext } = options;
+
+  /** Build Runtime.evaluate params with frame context when in an iframe. */
+  function evalParams(expression, returnByValue = true) {
+    const params = { expression, returnByValue };
+    if (getFrameContext) {
+      const contextId = getFrameContext();
+      if (contextId) params.contextId = contextId;
+    }
+    return params;
+  }
   // Simplified: removed stability check, shorter retry delays
   const retryDelays = [0, 50, 100, 200];
 
@@ -48,10 +61,9 @@ export function createActionabilityChecker(session) {
 
   async function findElementInternal(selector) {
     try {
-      const result = await session.send('Runtime.evaluate', {
-        expression: `document.querySelector(${JSON.stringify(selector)})`,
-        returnByValue: false
-      });
+      const result = await session.send('Runtime.evaluate',
+        evalParams(`document.querySelector(${JSON.stringify(selector)})`, false)
+      );
 
       if (result.result.subtype === 'null' || !result.result.objectId) {
         return { success: false, error: `Element not found: ${selector}` };
@@ -592,9 +604,7 @@ export function createActionabilityChecker(session) {
 
       // Scroll the page
       const scrollDir = direction === 'up' ? -scrollAmount : scrollAmount;
-      await session.send('Runtime.evaluate', {
-        expression: `window.scrollBy(0, ${scrollDir})`
-      });
+      await session.send('Runtime.evaluate', evalParams(`window.scrollBy(0, ${scrollDir})`));
 
       scrollCount++;
       await sleep(200); // Wait for content to load/render

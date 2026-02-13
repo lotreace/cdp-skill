@@ -152,7 +152,7 @@ export const STEP_CONFIG = {
           errors.push('wait hidden must be a boolean');
         }
       } else {
-        errors.push('wait requires a number (ms), selector string, or params object');
+        errors.push('wait requires a selector string or params object with selector/text/textRegex/urlContains');
       }
       return errors;
     },
@@ -309,7 +309,8 @@ export const STEP_CONFIG = {
       if (!params || typeof params !== 'object') {
         errors.push('queryAll requires an object mapping names to selectors');
       } else {
-        const entries = Object.entries(params);
+        const hookKeys = new Set(['readyWhen', 'settledWhen', 'observe', 'timeout', 'optional']);
+        const entries = Object.entries(params).filter(([name]) => !hookKeys.has(name));
         if (entries.length === 0) {
           errors.push('queryAll requires at least one query');
         }
@@ -358,7 +359,7 @@ export const STEP_CONFIG = {
   [STEP_TYPES.CONSOLE]: {
     validate: (params) => {
       const errors = [];
-      if (params !== true && params !== false && typeof params !== 'object') {
+      if (params !== true && params !== false && (typeof params !== 'object' || params === null)) {
         errors.push('console requires true, false, or params object');
       }
       return errors;

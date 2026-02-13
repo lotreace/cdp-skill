@@ -32,9 +32,13 @@ export function createDialogHandler(session) {
       promptText = queued.promptText;
     } else if (dialogCallback) {
       // If custom callback is set, use it
-      const result = dialogCallback({ type, message, defaultPrompt });
-      accept = result.accept !== false;
-      promptText = result.promptText;
+      try {
+        const result = dialogCallback({ type, message, defaultPrompt });
+        accept = result.accept !== false;
+        promptText = result.promptText;
+      } catch {
+        // Callback threw — fall through to default accept behavior
+      }
     } else {
       // Auto-accept with reasonable defaults for prompts
       if (type === 'prompt') {

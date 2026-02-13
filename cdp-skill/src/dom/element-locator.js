@@ -205,16 +205,16 @@ export function createElementLocator(session, options = {}) {
   async function findElement(selector) {
     const element = await querySelector(selector);
     if (!element) return null;
-    return { nodeId: element.objectId, _handle: element };
+    return { objectId: element.objectId, _handle: element };
   }
 
-  async function getBoundingBox(nodeId) {
-    if (!nodeId) return null;
+  async function getBoundingBox(objectId) {
+    if (!objectId) return null;
 
     let result;
     try {
       result = await session.send('Runtime.callFunctionOn', {
-        objectId: nodeId,
+        objectId,
         functionDeclaration: `function() {
           const rect = this.getBoundingClientRect();
           return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };

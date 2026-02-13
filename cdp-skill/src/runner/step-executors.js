@@ -9,7 +9,7 @@
  * SUBMODULES:
  * - ./execute-navigation.js: executeWait, executeWaitForNavigation, executeScroll
  * - ./execute-interaction.js: executeClick, executeHover, executeDrag
- * - ./execute-input.js: executeFill, executeFillActive, executeSelectOption
+ * - ./execute-input.js: executeFillActive, executeSelectOption
  * - ./execute-query.js: executeSnapshot, executeQuery, executeQueryAll, executeInspect, etc.
  * - ./execute-form.js: executeValidate, executeSubmit, executeFormState, executeExtract, executeAssert
  * - ./execute-browser.js: executePdf, executeEval, executeCookies, executeConsole, etc.
@@ -115,7 +115,7 @@ export async function executeStep(deps, step, options = {}) {
     if (actionValue && typeof actionValue === 'object' && actionValue.readyWhen) {
       const readyResult = await executePoll(pageController, {
         fn: actionValue.readyWhen,
-        timeout: options.stepTimeout || 30000
+        timeout: stepTimeout || 30000
       });
       if (!readyResult.resolved) {
         throw new Error(`readyWhen did not resolve within timeout`);

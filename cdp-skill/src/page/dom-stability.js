@@ -24,14 +24,20 @@ export function lcsLength(a, b) {
   const m = a.length;
   const n = b.length;
 
-  // Use space-optimized version for large arrays
+  // Use frequency-based intersection for large arrays (preserves duplicate counts)
   if (m > 1000 || n > 1000) {
-    // For very large arrays, use a simpler similarity metric
-    const setA = new Set(a);
-    const setB = new Set(b);
+    const freqA = new Map();
+    for (const item of a) {
+      freqA.set(item, (freqA.get(item) || 0) + 1);
+    }
+    const freqB = new Map();
+    for (const item of b) {
+      freqB.set(item, (freqB.get(item) || 0) + 1);
+    }
     let common = 0;
-    for (const item of setA) {
-      if (setB.has(item)) common++;
+    for (const [item, countA] of freqA) {
+      const countB = freqB.get(item) || 0;
+      common += Math.min(countA, countB);
     }
     return common;
   }

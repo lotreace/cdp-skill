@@ -4,6 +4,7 @@
  *
  * EXPORTS:
  * - executeClick(elementLocator, inputEmulator, ariaSnapshot, params) → Promise<Object>
+ * - clickWithVerification: removed (stale, superseded by click-executor.js pointerdown version)
  * - executeHover(elementLocator, inputEmulator, ariaSnapshot, params) → Promise<Object>
  * - executeDrag(elementLocator, inputEmulator, pageController, ariaSnapshot, params) → Promise<Object>
  *
@@ -15,8 +16,6 @@
 import { createClickExecutor, createActionabilityChecker } from '../dom/index.js';
 import { elementNotFoundError, sleep, resetInputState, releaseObject } from '../utils.js';
 
-const SCROLL_STRATEGIES = ['center', 'end', 'start', 'nearest'];
-
 export async function executeClick(elementLocator, inputEmulator, ariaSnapshot, params) {
   // Delegate to ClickExecutor for improved click handling with JS fallback
   const clickExecutor = createClickExecutor(
@@ -26,42 +25,6 @@ export async function executeClick(elementLocator, inputEmulator, ariaSnapshot, 
     ariaSnapshot
   );
   return clickExecutor.execute(params);
-}
-
-export async function clickWithVerification(elementLocator, inputEmulator, x, y, targetObjectId) {
-  const session = elementLocator.session;
-
-  // Setup event listener on target before clicking
-  await session.send('Runtime.callFunctionOn', {
-    objectId: targetObjectId,
-    functionDeclaration: `function() {
-      this.__clickReceived = false;
-      this.__clickHandler = () => { this.__clickReceived = true; };
-      this.addEventListener('click', this.__clickHandler, { once: true });
-    }`
-  });
-
-  // Perform click
-  await inputEmulator.click(x, y);
-  await sleep(50);
-
-  // Check if target received the click
-  const verifyResult = await session.send('Runtime.callFunctionOn', {
-    objectId: targetObjectId,
-    functionDeclaration: `function() {
-      this.removeEventListener('click', this.__clickHandler);
-      const received = this.__clickReceived;
-      delete this.__clickReceived;
-      delete this.__clickHandler;
-      return received;
-    }`,
-    returnByValue: true
-  });
-
-  return {
-    clicked: true,
-    targetReceived: verifyResult.result.value === true
-  };
 }
 
 /**
@@ -187,7 +150,9 @@ export async function executeHover(elementLocator, inputEmulator, ariaSnapshot, 
 
   // Use Playwright-style auto-waiting for element to be actionable
   // Hover requires: visible, stable
-  const actionabilityChecker = createActionabilityChecker(elementLocator.session);
+  const actionabilityChecker = createActionabilityChecker(elementLocator.session, {
+    getFrameContext: elementLocator.getFrameContext || null
+  });
   const waitResult = await actionabilityChecker.waitForActionable(selector, 'hover', {
     timeout,
     force
@@ -428,7 +393,7 @@ export async function executeDrag(elementLocator, inputEmulator, pageController,
   const sourceSelector = getSelectorExpression(source);
   const targetSelector = getSelectorExpression(target);
 
-  const jsDragResult = await session.send('Runtime.evaluate', {
+  const dragEvalParams = {
     expression: `
       (function() {
         const sourceEl = ${sourceSelector || 'null'};
@@ -525,11 +490,23 @@ export async function executeDrag(elementLocator, inputEmulator, pageController,
 
         // auto: try mouse first (works for jQuery UI, sortable lists), then HTML5 DnD
         const mouseResult = doMouseDrag();
-        if (mouseResult.success) return mouseResult;
+        if (!mouseResult.success) {
+          // Mouse drag failed entirely (no source element)
+          if (sourceEl && targetEl) {
+            const html5Result = doHtml5Drag();
+            if (html5Result.success) return html5Result;
+          }
+          return mouseResult;
+        }
 
-        if (sourceEl && targetEl) {
+        // Mouse events dispatched — if source has draggable attribute or ondragstart,
+        // it likely needs HTML5 DnD instead of mouse events
+        if (sourceEl && targetEl && (sourceEl.draggable || sourceEl.getAttribute('ondragstart'))) {
           const html5Result = doHtml5Drag();
-          if (html5Result.success) return html5Result;
+          if (html5Result.success) {
+            html5Result.mouseTriedFirst = true;
+            return html5Result;
+          }
         }
 
         return mouseResult;
@@ -537,7 +514,13 @@ export async function executeDrag(elementLocator, inputEmulator, pageController,
     `,
     returnByValue: true,
     awaitPromise: false
-  });
+  };
+
+  // Add frame context if in an iframe
+  const contextId = pageController.getFrameContext();
+  if (contextId) dragEvalParams.contextId = contextId;
+
+  const jsDragResult = await session.send('Runtime.evaluate', dragEvalParams);
 
   const dragResult = jsDragResult.result?.value;
 

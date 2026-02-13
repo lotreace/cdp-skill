@@ -121,6 +121,7 @@ async function runValidatePhase(flags) {
     crank,
     results: results.map(r => ({
       testId: r.testId,
+      category: r.category,
       status: r.status,
       completion: r.scores?.completion || 0,
       composite: r.scores?.composite || 0,

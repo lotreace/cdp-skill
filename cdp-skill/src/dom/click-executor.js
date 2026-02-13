@@ -8,12 +8,10 @@
  *
  * DEPENDENCIES:
  * - ./actionability.js: createActionabilityChecker
- * - ./element-validator.js: createElementValidator
  * - ../utils.js: sleep, elementNotFoundError, getCurrentUrl, getElementAtPoint, detectNavigation, releaseObject
  */
 
 import { createActionabilityChecker } from './actionability.js';
-import { createElementValidator } from './element-validator.js';
 import { createLazyResolver } from './LazyResolver.js';
 import {
   sleep,
@@ -39,8 +37,7 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
   if (!inputEmulator) throw new Error('Input emulator is required');
 
   const getFrameContext = elementLocator.getFrameContext || null;
-  const actionabilityChecker = createActionabilityChecker(session);
-  const elementValidator = createElementValidator(session);
+  const actionabilityChecker = createActionabilityChecker(session, { getFrameContext });
   const lazyResolver = createLazyResolver(session, { getFrameContext });
 
   /** Build Runtime.evaluate params with frame context when in an iframe. */
@@ -61,8 +58,8 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       visibleBox.y = Math.max(box.y, 0);
       const right = Math.min(box.x + box.width, viewport.width);
       const bottom = Math.min(box.y + box.height, viewport.height);
-      visibleBox.width = right - visibleBox.x;
-      visibleBox.height = bottom - visibleBox.y;
+      visibleBox.width = Math.max(0, right - visibleBox.x);
+      visibleBox.height = Math.max(0, bottom - visibleBox.y);
     }
 
     return {
@@ -562,7 +559,7 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
   }
 
   async function clickAtCoordinates(x, y, opts = {}) {
-    const { debug = false, waitForNavigation = false, navigationTimeout = 100 } = opts;
+    const { debug = false, waitForNavigation = false, navigationTimeout = 100, waitAfter = false, waitAfterOptions = {} } = opts;
 
     const urlBeforeClick = await getCurrentUrl(session);
 
@@ -579,23 +576,10 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       coordinates: { x, y }
     };
 
-    if (waitForNavigation) {
-      const navResult = await detectNavigation(session, urlBeforeClick, navigationTimeout);
-      result.navigated = navResult.navigated;
-      if (navResult.newUrl) {
-        result.newUrl = navResult.newUrl;
-      }
-    }
-
-    if (debug) {
-      result.debug = {
-        clickedAt: { x, y },
-        elementHit: elementAtPoint
-      };
-    }
-
-    return result;
+    return addNavigationAndDebugInfo(result, urlBeforeClick, { point: { x, y }, elementAtPoint }, { waitForNavigation, navigationTimeout, debug, waitAfter, waitAfterOptions });
   }
+
+  let clickVerifyCounter = 0;
 
   async function clickWithVerificationByRef(ref, x, y) {
     // Use pointerdown for verification instead of click.
@@ -603,14 +587,16 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     // pointerdown fires synchronously before any re-render.
     // Also uses document-level capture as fallback for descendant hits.
     // LAZY RESOLUTION: Always resolve ref from metadata, never rely on cached element.
+    const verifyKey = `__clickVerify_${++clickVerifyCounter}`;
+
     await session.send('Runtime.evaluate', frameEvalParams(`
         (function() {
           ${LAZY_RESOLVE_SCRIPT}
 
           const el = lazyResolveRef(${JSON.stringify(ref)});
           if (el && el.isConnected) {
-            // Store resolved element for verification phase
-            window.__clickVerifyEl = el;
+            // Store resolved element for verification phase (unique key per click)
+            window[${JSON.stringify(verifyKey)}] = el;
             el.__clickReceived = false;
             el.__ptrHandler = () => { el.__clickReceived = true; };
             el.addEventListener('pointerdown', el.__ptrHandler, { once: true });
@@ -624,16 +610,35 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
         })()
       `, false));
 
-    await inputEmulator.click(x, y);
-    await sleep(50);
+    try {
+      await inputEmulator.click(x, y);
+      await sleep(50);
+    } catch (clickError) {
+      // Cleanup listeners on click failure
+      try {
+        await session.send('Runtime.evaluate', frameEvalParams(`
+            (function() {
+              const el = window[${JSON.stringify(verifyKey)}];
+              delete window[${JSON.stringify(verifyKey)}];
+              if (!el) return;
+              if (el.__ptrHandler) el.removeEventListener('pointerdown', el.__ptrHandler);
+              if (el.__docHandler) document.removeEventListener('pointerdown', el.__docHandler, { capture: true });
+              delete el.__clickReceived;
+              delete el.__ptrHandler;
+              delete el.__docHandler;
+            })()
+          `, true));
+      } catch { /* ignore cleanup errors */ }
+      throw clickError;
+    }
 
     // Check if pointerdown was received
     let verifyResult;
     try {
       verifyResult = await session.send('Runtime.evaluate', frameEvalParams(`
           (function() {
-            const el = window.__clickVerifyEl;
-            delete window.__clickVerifyEl;
+            const el = window[${JSON.stringify(verifyKey)}];
+            delete window[${JSON.stringify(verifyKey)}];
             if (!el) return { targetReceived: false, reason: 'element not found' };
             if (el.__ptrHandler) el.removeEventListener('pointerdown', el.__ptrHandler);
             if (el.__docHandler) document.removeEventListener('pointerdown', el.__docHandler, { capture: true });
@@ -657,7 +662,7 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
   }
 
   async function clickByRef(ref, jsClick = false, opts = {}) {
-    const { force = false, debug = false, nativeOnly = false, waitForNavigation, navigationTimeout = 100 } = opts;
+    const { force = false, debug = false, nativeOnly = false, waitForNavigation, navigationTimeout = 100, waitAfter = false, waitAfterOptions = {} } = opts;
 
     // LAZY RESOLUTION: Always resolve ref from metadata, never rely on cached element
     // This eliminates stale element errors entirely
@@ -666,19 +671,24 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       throw elementNotFoundError(`ref:${ref}`, 0);
     }
 
-    // Get visibility info using the resolved element
-    const visibilityResult = await session.send('Runtime.callFunctionOn', {
-      objectId: resolved.objectId,
-      functionDeclaration: `function() {
-        const style = window.getComputedStyle(this);
-        const rect = this.getBoundingClientRect();
-        return {
-          isVisible: style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && rect.width > 0 && rect.height > 0,
-          box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
-        };
-      }`,
-      returnByValue: true
-    });
+    // Get visibility info using the resolved element, then release the objectId
+    let visibilityResult;
+    try {
+      visibilityResult = await session.send('Runtime.callFunctionOn', {
+        objectId: resolved.objectId,
+        functionDeclaration: `function() {
+          const style = window.getComputedStyle(this);
+          const rect = this.getBoundingClientRect();
+          return {
+            isVisible: style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && rect.width > 0 && rect.height > 0,
+            box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+          };
+        }`,
+        returnByValue: true
+      });
+    } finally {
+      await releaseObject(session, resolved.objectId);
+    }
 
     const refInfo = {
       box: visibilityResult.result?.value?.box || resolved.box,
@@ -757,7 +767,8 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
     // If element is outside viewport (e.g., inside an unscrolled container), scroll it into view first
     // LAZY RESOLUTION: Always resolve ref from metadata for scroll
     const box = refInfo.box;
-    if (box && (box.x < 0 || box.y < 0 || box.x + box.width > 1920 || box.y + box.height > 1080)) {
+    const vp = await getViewportBounds().catch(() => null) || { width: 1280, height: 720 };
+    if (box && (box.x < 0 || box.y < 0 || box.x + box.width > vp.width || box.y + box.height > vp.height)) {
       try {
         await session.send('Runtime.evaluate', frameEvalParams(`
           (function() {
@@ -769,8 +780,13 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
         await sleep(100);
         // Re-fetch element info after scroll using lazy resolution
         const updatedResult = await lazyResolver.resolveRef(ref);
-        if (updatedResult && updatedResult.box) {
-          refInfo.box = updatedResult.box;
+        if (updatedResult) {
+          if (updatedResult.box) {
+            refInfo.box = updatedResult.box;
+          }
+          if (updatedResult.objectId) {
+            await releaseObject(session, updatedResult.objectId);
+          }
         }
       } catch {
         // Scroll failed — proceed with original coordinates
@@ -875,6 +891,16 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       } catch {
         // Page still navigating
       }
+    }
+
+    // Auto-wait after click
+    if (waitAfter) {
+      const changeResult = await detectContentChange({
+        timeout: waitAfterOptions.timeout || 5000,
+        stableTime: waitAfterOptions.stableTime || 500,
+        checkNavigation: true
+      });
+      result.waitResult = changeResult;
     }
 
     if (debug) {
@@ -1194,8 +1220,10 @@ export function createClickExecutor(session, elementLocator, inputEmulator, aria
       if (!scrollResult.found) {
         throw elementNotFoundError(selector, scrollOptions.timeout || 30000);
       }
-      // Element found, now proceed with normal click
-      // The scrollUntilVisible already scrolled it into view, so the actionability check should pass
+      // Release the objectId from scrollUntilVisible — clickBySelector will re-find the element
+      if (scrollResult.objectId) {
+        await releaseObject(session, scrollResult.objectId);
+      }
     }
 
     return clickBySelector(selector, { jsClick, nativeOnly, force, debug, waitForNavigation, navigationTimeout, waitAfter, waitAfterOptions });

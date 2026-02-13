@@ -140,8 +140,7 @@ export function createPageController(cdpClient, options = {}) {
     }
   }
 
-  function onRequestStarted({ requestId, frameId }) {
-    if (frameId && frameId !== mainFrameId) return;
+  function onRequestStarted({ requestId }) {
     pendingRequests.add(requestId);
     networkRequestCount++;
     lastNetworkActivity = Date.now();
@@ -439,6 +438,11 @@ export function createPageController(cdpClient, options = {}) {
       }
     });
 
+    addListener('Runtime.executionContextsCleared', () => {
+      frameExecutionContexts.clear();
+      currentExecutionContextId = null;
+    });
+
     addListener('Page.lifecycleEvent', onLifecycleEvent);
     addListener('Page.frameNavigated', onFrameNavigated);
     addListener('Network.requestWillBeSent', onRequestStarted);
@@ -552,9 +556,8 @@ export function createPageController(cdpClient, options = {}) {
 
       await waitPromise;
 
-      if (abortReason) {
-        throw navigationAbortedError(abortReason, url);
-      }
+      // Note: if abort happened during waitPromise, abortWaiters already rejected it.
+      // We don't re-check abortReason here to avoid rejecting a successfully completed navigation.
 
       return {
         frameId: response.frameId,
@@ -646,10 +649,7 @@ export function createPageController(cdpClient, options = {}) {
    */
   async function getUrl() {
     try {
-      const result = await cdpClient.send('Runtime.evaluate', {
-        expression: 'window.location.href',
-        returnByValue: true
-      });
+      const result = await evaluateInFrame('window.location.href');
       return result.result.value;
     } catch (error) {
       throw connectionError(error.message, 'Runtime.evaluate (getUrl)');
@@ -662,10 +662,7 @@ export function createPageController(cdpClient, options = {}) {
    */
   async function getTitle() {
     try {
-      const result = await cdpClient.send('Runtime.evaluate', {
-        expression: 'document.title',
-        returnByValue: true
-      });
+      const result = await evaluateInFrame('document.title');
       return result.result.value;
     } catch (error) {
       throw connectionError(error.message, 'Runtime.evaluate (getTitle)');
@@ -689,6 +686,7 @@ export function createPageController(cdpClient, options = {}) {
     pendingRequests.clear();
     crashWaiters.clear();
     abortWaiters.clear();
+    networkIdleWaiters.clear();
   }
 
   /**
@@ -923,10 +921,11 @@ export function createPageController(cdpClient, options = {}) {
           if (srcResult.result.value) {
             const { src, name } = srcResult.result.value;
             targetFrame = allFrames.find(f =>
-              (src && f.frame.url === src) ||
-              (src && f.frame.url.endsWith(src)) ||
-              (name && f.frame.name === name) ||
-              f.frame.parentId
+              f.frame.parentId && (
+                (src && f.frame.url === src) ||
+                (src && f.frame.url.endsWith(src)) ||
+                (name && f.frame.name === name)
+              )
             );
 
             if (!targetFrame) {
@@ -1108,10 +1107,7 @@ export function createPageController(cdpClient, options = {}) {
    */
   async function getViewport() {
     try {
-      const result = await cdpClient.send('Runtime.evaluate', {
-        expression: '({ width: window.innerWidth, height: window.innerHeight })',
-        returnByValue: true
-      });
+      const result = await evaluateInFrame('({ width: window.innerWidth, height: window.innerHeight })');
       return result.result.value;
     } catch (error) {
       throw connectionError(error.message, 'Runtime.evaluate (getViewport)');

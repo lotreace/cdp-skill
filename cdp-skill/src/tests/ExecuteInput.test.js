@@ -2,7 +2,6 @@ import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 
 import {
-  executeFill,
   executeFillActive,
   executeSelectOption
 } from '../runner/execute-input.js';
@@ -103,203 +102,74 @@ function createMockInputEmulator() {
 }
 
 function createMockPageController(opts = {}) {
+  const evaluateResult = () => {
+    if (opts.noFocus) {
+      return Promise.resolve({
+        result: {
+          value: {
+            error: 'No element is focused'
+          }
+        }
+      });
+    }
+    if (opts.notEditable) {
+      return Promise.resolve({
+        result: {
+          value: {
+            error: 'Focused element is not editable',
+            tag: 'DIV'
+          }
+        }
+      });
+    }
+    if (opts.disabled) {
+      return Promise.resolve({
+        result: {
+          value: {
+            error: 'Focused element is disabled',
+            tag: 'INPUT'
+          }
+        }
+      });
+    }
+    if (opts.readonly) {
+      return Promise.resolve({
+        result: {
+          value: {
+            error: 'Focused element is readonly',
+            tag: 'INPUT'
+          }
+        }
+      });
+    }
+    if (opts.exception) {
+      return Promise.resolve({
+        result: { value: undefined },
+        exceptionDetails: {
+          text: opts.exception
+        }
+      });
+    }
+    return Promise.resolve({
+      result: {
+        value: {
+          editable: true,
+          tag: 'INPUT',
+          type: 'text',
+          selector: '#username',
+          valueBefore: ''
+        }
+      }
+    });
+  };
+
   return {
     session: {
-      send: mock.fn((method, params) => {
-        if (method === 'Runtime.evaluate') {
-          if (opts.noFocus) {
-            return Promise.resolve({
-              result: {
-                value: {
-                  error: 'No element is focused'
-                }
-              }
-            });
-          }
-          if (opts.notEditable) {
-            return Promise.resolve({
-              result: {
-                value: {
-                  error: 'Focused element is not editable',
-                  tag: 'DIV'
-                }
-              }
-            });
-          }
-          if (opts.disabled) {
-            return Promise.resolve({
-              result: {
-                value: {
-                  error: 'Focused element is disabled',
-                  tag: 'INPUT'
-                }
-              }
-            });
-          }
-          if (opts.readonly) {
-            return Promise.resolve({
-              result: {
-                value: {
-                  error: 'Focused element is readonly',
-                  tag: 'INPUT'
-                }
-              }
-            });
-          }
-          if (opts.exception) {
-            return Promise.resolve({
-              result: { value: undefined },
-              exceptionDetails: {
-                text: opts.exception
-              }
-            });
-          }
-          return Promise.resolve({
-            result: {
-              value: {
-                editable: true,
-                tag: 'INPUT',
-                type: 'text',
-                selector: '#username',
-                valueBefore: ''
-              }
-            }
-          });
-        }
-        return Promise.resolve({});
-      })
-    }
+      send: mock.fn(() => Promise.resolve({}))
+    },
+    evaluateInFrame: mock.fn(() => evaluateResult())
   };
 }
-
-// ---------------------------------------------------------------------------
-// Tests: executeFill
-// ---------------------------------------------------------------------------
-
-describe('executeFill', () => {
-  afterEach(() => { mock.reset(); });
-
-  it('should throw if selector is missing', async () => {
-    const locator = createMockElementLocator();
-    const emulator = createMockInputEmulator();
-
-    await assert.rejects(
-      executeFill(locator, emulator, { value: 'test' }),
-      { message: 'Fill requires selector and value' }
-    );
-  });
-
-  it('should throw if value is missing', async () => {
-    const locator = createMockElementLocator();
-    const emulator = createMockInputEmulator();
-
-    await assert.rejects(
-      executeFill(locator, emulator, { selector: '#input' }),
-      { message: 'Fill requires selector and value' }
-    );
-  });
-
-  it('should throw if element not found', async () => {
-    const locator = createMockElementLocator({ notFound: true });
-    const emulator = createMockInputEmulator();
-
-    await assert.rejects(
-      executeFill(locator, emulator, { selector: '#missing', value: 'test' }),
-      { message: /element not found/i }
-    );
-  });
-
-  it('should throw if element is not editable', async () => {
-    const locator = createMockElementLocator({ notEditable: true });
-    const emulator = createMockInputEmulator();
-
-    await assert.rejects(
-      executeFill(locator, emulator, { selector: '#disabled', value: 'test' }),
-      { message: /not editable/i }
-    );
-  });
-
-  it('should throw if element is not actionable after all scroll strategies', async () => {
-    const locator = createMockElementLocator({ actionable: false, reason: 'Element is covered' });
-    const emulator = createMockInputEmulator();
-
-    await assert.rejects(
-      executeFill(locator, emulator, { selector: '#input', value: 'test' }),
-      { message: /not actionable/i }
-    );
-  });
-
-  it('should fill element with standard approach', async () => {
-    const locator = createMockElementLocator();
-    const emulator = createMockInputEmulator();
-
-    await executeFill(locator, emulator, { selector: '#input', value: 'hello' });
-
-    assert.strictEqual(locator.findElement.mock.calls.length, 1);
-    assert.strictEqual(emulator.click.mock.calls.length, 1);
-    assert.strictEqual(emulator.selectAll.mock.calls.length, 1);
-    assert.strictEqual(emulator.type.mock.calls.length, 1);
-    assert.strictEqual(emulator.type.mock.calls[0].arguments[0], 'hello');
-  });
-
-  it('should skip clear if clear option is false', async () => {
-    const locator = createMockElementLocator();
-    const emulator = createMockInputEmulator();
-
-    await executeFill(locator, emulator, { selector: '#input', value: 'hello', clear: false });
-
-    assert.strictEqual(emulator.selectAll.mock.calls.length, 0);
-    assert.strictEqual(emulator.type.mock.calls.length, 1);
-  });
-
-  it('should use React filler if react option is true', async () => {
-    const locator = createMockElementLocator();
-    const emulator = createMockInputEmulator();
-
-    // Mock createReactInputFiller
-    await executeFill(locator, emulator, { selector: '#input', value: 'hello', react: true });
-
-    // React mode skips click and type
-    assert.strictEqual(emulator.click.mock.calls.length, 0);
-    assert.strictEqual(emulator.type.mock.calls.length, 0);
-  });
-
-  it('should dispose element handle on success', async () => {
-    const locator = createMockElementLocator();
-    const emulator = createMockInputEmulator();
-
-    await executeFill(locator, emulator, { selector: '#input', value: 'test' });
-
-    const element = await locator.findElement('#input');
-    // Can't directly check if dispose was called, but ensure no errors
-    assert.ok(element);
-  });
-
-  it('should try multiple scroll strategies if element not immediately actionable', async () => {
-    let callCount = 0;
-    const locator = createMockElementLocator({
-      actionable: true
-    });
-
-    // Override isActionable to succeed on second call
-    const originalHandle = await locator.findElement('#input');
-    originalHandle._handle.isActionable = mock.fn(() => {
-      callCount++;
-      return Promise.resolve({
-        actionable: callCount > 1,
-        reason: callCount > 1 ? null : 'Not visible'
-      });
-    });
-    locator.findElement = mock.fn(() => Promise.resolve(originalHandle));
-
-    const emulator = createMockInputEmulator();
-
-    await executeFill(locator, emulator, { selector: '#input', value: 'test' });
-
-    // Should have tried multiple times
-    assert.ok(originalHandle._handle.isActionable.mock.calls.length >= 2);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // Tests: executeFillActive

@@ -10,7 +10,7 @@
  * - ./step-registry.js: getAllStepTypes, getStepConfig, validateHooks
  */
 
-import { getAllStepTypes, getStepConfig, validateHooks } from './step-registry.js';
+import { getAllStepTypes, getStepConfig, validateHooks, stepSupportsHooks } from './step-registry.js';
 
 /**
  * Validate a single step definition
@@ -53,8 +53,18 @@ export function validateStepInternal(step) {
   errors.push(...stepErrors);
 
   // Validate hooks on action steps (readyWhen, settledWhen, observe)
-  const hookErrors = validateHooks(params);
-  errors.push(...hookErrors);
+  if (stepSupportsHooks(action)) {
+    const hookErrors = validateHooks(params);
+    errors.push(...hookErrors);
+  } else if (params && typeof params === 'object' && params !== null) {
+    // Reject hook keys on steps that don't support them
+    const hookKeys = ['readyWhen', 'settledWhen', 'observe'];
+    for (const key of hookKeys) {
+      if (params[key] !== undefined) {
+        errors.push(`${action} does not support the '${key}' hook`);
+      }
+    }
+  }
 
   return errors;
 }
