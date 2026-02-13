@@ -17,51 +17,28 @@ import { computeSHS as computeSHSScore } from './shs-calculator.js';
 // --- Scoring ---
 
 function extractTraceMetrics(trace) {
-  if (!trace) return { totalSteps: 0, totalErrors: 0, recoveredErrors: 0, wallClockMs: null };
-
-  const agg = trace.aggregate || {};
-  const stepsField = trace.steps;
-  const stepsCount = typeof stepsField === 'number' ? stepsField
-    : Array.isArray(stepsField) ? stepsField.length : 0;
-  const totalSteps = agg.totalSteps || trace.totalSteps || stepsCount;
-  const errorsField = agg.totalErrors ?? trace.errors ?? 0;
-  const totalErrors = typeof errorsField === 'number' ? errorsField
-    : Array.isArray(errorsField) ? errorsField.length : 0;
-  const recoveredField = agg.recoveredErrors ?? trace.recoveredErrors ?? 0;
-  const recoveredErrors = typeof recoveredField === 'number' ? recoveredField : 0;
-  const wallClockMs = trace.wallClockMs || null;
-
-  const computedWallClock = wallClockMs
-    || (trace.endTs && trace.startTs ? trace.endTs - trace.startTs : null);
-
-  return { totalSteps, totalErrors, recoveredErrors, wallClockMs: computedWallClock };
+  if (!trace) return { wallClockMs: null };
+  return { wallClockMs: trace.wallClockMs || null };
 }
 
-function computeTestScore(completionScore, trace, budget) {
+function computeTestScore(completionScore, trace) {
   const metrics = extractTraceMetrics(trace);
 
-  const maxSteps = budget?.maxSteps || 50;
-  const efficiency = Math.max(0, 1 - Math.max(0, metrics.totalSteps - maxSteps) / maxSteps);
-
-  const resilience = metrics.totalErrors === 0
-    ? 1.0
-    : 0.5 + 0.5 * (metrics.recoveredErrors / Math.max(1, metrics.totalErrors));
-
-  const responseQuality = 1.0;
-
+  // Runners self-report milestoneResults only — no step/error counts available.
+  // Composite is weighted by completion (primary signal) with a fixed baseline
+  // for efficiency/resilience/responseQuality since traces don't carry that data.
   const composite =
     0.60 * completionScore +
-    0.15 * efficiency +
-    0.10 * resilience +
-    0.15 * responseQuality;
+    0.15 * 1.0 +  // efficiency (no step count in trace)
+    0.10 * 1.0 +  // resilience (no error count in trace)
+    0.15 * 1.0;   // responseQuality
 
   return {
     completion: completionScore,
-    efficiency: Math.round(efficiency * 1000) / 1000,
-    resilience: Math.round(resilience * 1000) / 1000,
-    responseQuality,
+    efficiency: 1.0,
+    resilience: 1.0,
+    responseQuality: 1.0,
     composite: Math.round(composite * 1000) / 1000,
-    stepsUsed: metrics.totalSteps,
     wallClockMs: metrics.wallClockMs
   };
 }
@@ -121,7 +98,7 @@ function validateTest(testPath, options = {}) {
     }
 
     completionScore = Math.min(1.0, completionScore);
-    const scores = computeTestScore(completionScore, trace, testDef.budget);
+    const scores = computeTestScore(completionScore, trace);
 
     return {
       testId: testDef.id,
@@ -142,7 +119,7 @@ function validateTest(testPath, options = {}) {
     detail: trace ? 'milestoneResults missing from trace' : 'no trace file found'
   }));
 
-  const scores = computeTestScore(0, trace, testDef.budget);
+  const scores = computeTestScore(0, trace);
 
   return {
     testId: testDef.id,
@@ -190,9 +167,6 @@ function main() {
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--run-dir') flags.runDir = args[++i];
     else if (args[i] === '--tests-dir') flags.testsDir = args[++i];
-    // Legacy flags (ignored, kept for backward compatibility with CrankOrchestrator)
-    else if (args[i] === '--port' || args[i] === '--host' || args[i] === '--target') i++;
-    else if (args[i] === '--prefer-snapshot' || args[i] === '--no-prefer-snapshot') { /* skip */ }
   }
 
   if (flags.runDir) {

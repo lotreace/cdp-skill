@@ -6,7 +6,7 @@
  * single bash command, with the LLM matching step sandwiched between.
  *
  * Phase 1 (validate):
- *   Read traces -> validate (snapshot-first, live fallback) -> SHS ->
+ *   Read traces -> validate (runner self-reports) -> SHS ->
  *   extract feedback -> write validate-result.json
  *
  * Phase 2 (record):
@@ -17,7 +17,7 @@
  *   node CrankOrchestrator.js --phase validate \
  *     --run-dir <path> --tests-dir <path> \
  *     --improvements <path> --baselines-dir <path> \
- *     --port 9222 [--version <ver>] [--crank <N>]
+ *     [--version <ver>] [--crank <N>]
  *
  *   node CrankOrchestrator.js --phase record \
  *     --run-dir <path> --tests-dir <path> \
@@ -30,7 +30,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
-import { computeTestScore, computeSHS, validateRunDir } from './validator-harness.js';
+import { computeSHS, validateRunDir } from './validator-harness.js';
 import {
   readLatestBaseline,
   writeBaseline,
@@ -50,8 +50,6 @@ function parseFlags(args) {
     else if (args[i] === '--tests-dir') flags.testsDir = args[++i];
     else if (args[i] === '--improvements') flags.improvements = args[++i];
     else if (args[i] === '--baselines-dir') flags.baselinesDir = args[++i];
-    else if (args[i] === '--port') flags.port = parseInt(args[++i], 10);
-    else if (args[i] === '--host') flags.host = args[++i];
     else if (args[i] === '--version') flags.version = args[++i];
     else if (args[i] === '--crank') flags.crank = parseInt(args[++i], 10);
     else if (args[i] === '--fix-issue') flags.fixIssue = args[++i];
@@ -63,13 +61,10 @@ function parseFlags(args) {
 // --- Phase: Validate ---
 
 async function runValidatePhase(flags) {
-  const { runDir, testsDir, improvements: improvementsPath, baselinesDir, port, host, version, crank } = flags;
+  const { runDir, testsDir, improvements: improvementsPath, baselinesDir, version, crank } = flags;
 
-  // 1. Validate all traces (uses runner's milestoneResults, falls back to snapshot/CDP)
-  const results = await validateRunDir(
-    runDir, testsDir, host || 'localhost', port || 9222,
-    { preferSnapshot: true }
-  );
+  // 1. Validate all traces (reads runner self-reported milestoneResults)
+  const results = validateRunDir(runDir, testsDir);
 
   // 2. Compute SHS
   const shsResult = computeSHS(results);
@@ -112,9 +107,6 @@ async function runValidatePhase(flags) {
   });
   const missingTraces = allTestIds.filter(id => !traceIds.has(id));
 
-  const snapshotCount = results.filter(r => r.validationSource === 'snapshot').length;
-  const liveCount = results.filter(r => r.validationSource === 'live-cdp').length;
-
   // 5. Write validate-result.json
   const validateResult = {
     phase: 'validate',
@@ -125,7 +117,6 @@ async function runValidatePhase(flags) {
     testsPerfect: results.filter(r => r.scores?.completion === 1.0).length,
     missingTraces,
     feedbackExtracted,
-    validationSources: { snapshot: snapshotCount, liveCdp: liveCount },
     version,
     crank,
     results: results.map(r => ({
@@ -148,12 +139,6 @@ async function runValidatePhase(flags) {
 
   const validateResultPath = path.join(runDir, 'validate-result.json');
   fs.writeFileSync(validateResultPath, JSON.stringify(validateResult, null, 2));
-
-  // Write per-test result files
-  for (const result of results) {
-    const resultFile = path.join(runDir, `${result.testId}.result.json`);
-    fs.writeFileSync(resultFile, JSON.stringify(result, null, 2));
-  }
 
   // Print compact JSON to stdout for conductor
   const output = { ...validateResult };

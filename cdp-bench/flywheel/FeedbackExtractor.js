@@ -17,7 +17,6 @@
 import fs from 'fs';
 import path from 'path';
 import {
-  inferArea,
   normalizeType,
   extractTitle,
   extractDetail,
@@ -55,62 +54,14 @@ export function createFeedbackExtractor(runDir) {
 
   /**
    * Extract all feedback from a single trace object.
-   * Handles: feedback[], improvements[], bugs[], observations[] arrays.
+   * Traces have exactly 4 fields: testId, wallClockMs, milestoneResults, feedback[].
    */
   function extractFromTrace(trace, testId) {
     const entries = [];
 
-    // Primary: structured feedback array
     if (Array.isArray(trace.feedback)) {
       for (const fb of trace.feedback) {
         entries.push(normalizeFeedbackEntry(fb, testId));
-      }
-    }
-
-    // Legacy: improvements array
-    if (Array.isArray(trace.improvements)) {
-      for (const imp of trace.improvements) {
-        const desc = imp.description || '';
-        entries.push({
-          testId,
-          type: 'improvement',
-          area: imp.category || inferArea(desc),
-          title: desc.slice(0, 80),
-          detail: desc,
-          files: []
-        });
-      }
-    }
-
-    // Legacy: bugs array
-    if (Array.isArray(trace.bugs)) {
-      for (const bug of trace.bugs) {
-        const detail = typeof bug === 'string'
-          ? bug
-          : (bug.description || bug.error || JSON.stringify(bug));
-        entries.push({
-          testId,
-          type: 'bug',
-          area: inferArea(detail),
-          title: detail.slice(0, 80),
-          detail,
-          files: []
-        });
-      }
-    }
-
-    // Legacy: observations array
-    if (Array.isArray(trace.observations)) {
-      for (const obs of trace.observations) {
-        const text = typeof obs === 'string' ? obs : JSON.stringify(obs);
-        entries.push({
-          testId,
-          type: 'observation',
-          area: inferArea(text),
-          title: text.slice(0, 80),
-          detail: text,
-          files: []
-        });
       }
     }
 

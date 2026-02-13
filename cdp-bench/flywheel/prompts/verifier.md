@@ -26,7 +26,7 @@ For each affected test:
 ### 3. Run Validator Harness
 
 ```bash
-node cdp-bench/flywheel/validator-harness.js --run-dir {{verify_run_dir}} --tests-dir cdp-bench/tests --port 9222
+node cdp-bench/flywheel/validator-harness.js --run-dir {{verify_run_dir}} --tests-dir cdp-bench/tests
 ```
 
 ### 4. Compare Results
