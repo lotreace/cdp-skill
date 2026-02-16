@@ -17,8 +17,8 @@
       "expected": "Frame context should persist with tab session",
       "workaround": null,
       "files": [
-        "src/cdp-skill.js",
-        "src/page.js"
+        "scripts/cdp-skill.js",
+        "scripts/page.js"
       ],
       "fixAttempts": [
         {
@@ -41,7 +41,7 @@
       "expected": "Hover should accept x/y coordinates",
       "workaround": null,
       "files": [
-        "src/runner.js"
+        "scripts/runner.js"
       ],
       "fixAttempts": [
         {
@@ -66,7 +66,7 @@
       "expected": "Key presses should reach the focused input in dialogs",
       "workaround": null,
       "files": [
-        "src/runner.js"
+        "scripts/runner.js"
       ],
       "fixAttempts": []
     },
@@ -83,7 +83,7 @@
       "expected": "Option to preserve selection during click",
       "workaround": null,
       "files": [
-        "src/dom.js"
+        "scripts/dom.js"
       ],
       "fixAttempts": []
     },
@@ -101,7 +101,7 @@
       "expected": "Keyboard shortcuts with modifiers should trigger same handlers as physical presses",
       "workaround": "Click the button that triggers the same action",
       "files": [
-        "src/runner.js"
+        "scripts/runner.js"
       ],
       "fixAttempts": []
     },
@@ -118,7 +118,7 @@
       "expected": "Immediate error like 'Invalid CSS selector'",
       "workaround": null,
       "files": [
-        "src/dom.js"
+        "scripts/dom.js"
       ],
       "fixAttempts": []
     },
@@ -135,7 +135,7 @@
       "expected": "Always return JSON with error details",
       "workaround": null,
       "files": [
-        "src/cdp-skill.js"
+        "scripts/cdp-skill.js"
       ],
       "fixAttempts": []
     },
@@ -151,7 +151,7 @@
       "expected": "Single, clear timeout message",
       "workaround": null,
       "files": [
-        "src/dom.js"
+        "scripts/dom.js"
       ],
       "fixAttempts": []
     },
@@ -168,7 +168,7 @@
       "expected": "Snapshot should capture full accessibility tree for React SPAs",
       "workaround": null,
       "files": [
-        "src/aria.js"
+        "scripts/aria.js"
       ],
       "fixAttempts": []
     },
@@ -185,7 +185,7 @@
       "expected": "Make delay configurable or increase default",
       "workaround": null,
       "files": [
-        "src/runner.js"
+        "scripts/runner.js"
       ],
       "fixAttempts": []
     },
@@ -201,7 +201,7 @@
       "expected": "Include tooltip content in snapshot",
       "workaround": null,
       "files": [
-        "src/aria.js"
+        "scripts/aria.js"
       ],
       "fixAttempts": []
     },
@@ -219,7 +219,7 @@
       "expected": "Support :has-text() pseudo-selector or similar text matching",
       "workaround": null,
       "files": [
-        "src/dom.js"
+        "scripts/dom.js"
       ],
       "fixAttempts": []
     },
@@ -236,7 +236,7 @@
       "expected": "Drag should move the slider thumb and update the value",
       "workaround": "Use click-at-position on slider track or keyboard arrow keys",
       "files": [
-        "src/runner.js"
+        "scripts/runner.js"
       ],
       "fixAttempts": []
     },
@@ -254,8 +254,8 @@
       "expected": "Detect when click opens new tab, return info about new tab in response",
       "workaround": "Use chromeStatus after clicks that may open new tabs",
       "files": [
-        "src/runner.js",
-        "src/cdp-skill.js"
+        "scripts/runner.js",
+        "scripts/cdp-skill.js"
       ],
       "fixAttempts": []
     },
@@ -272,7 +272,7 @@
       "expected": "DOMRect should be serialized automatically or clearly documented",
       "workaround": "Use JSON.stringify() explicitly",
       "files": [
-        "src/runner.js"
+        "scripts/runner.js"
       ],
       "fixAttempts": []
     },
@@ -289,7 +289,7 @@
       "expected": "Scroll should report correct position after scrolling",
       "workaround": null,
       "files": [
-        "src/runner.js"
+        "scripts/runner.js"
       ],
       "fixAttempts": []
     },
@@ -306,8 +306,8 @@
       "expected": "Session should remain responsive after extended use",
       "workaround": "Periodically close and reopen tabs",
       "files": [
-        "src/cdp.js",
-        "src/page.js"
+        "scripts/cdp.js",
+        "scripts/page.js"
       ],
       "fixAttempts": []
     },
@@ -324,8 +324,8 @@
       "expected": "Add framework detection to goto and openTab responses",
       "workaround": null,
       "files": [
-        "src/runner.js",
-        "src/frameworks.js"
+        "scripts/runner.js",
+        "scripts/frameworks.js"
       ],
       "fixAttempts": []
     },
@@ -343,9 +343,9 @@
       "expected": "Never cache element references, re-resolve selector for every action",
       "workaround": null,
       "files": [
-        "src/dom/LazyResolver.js",
-        "src/dom/click-executor.js",
-        "src/dom/fill-executor.js"
+        "scripts/dom/LazyResolver.js",
+        "scripts/dom/click-executor.js",
+        "scripts/dom/fill-executor.js"
       ],
       "fixAttempts": []
     },
@@ -361,7 +361,7 @@
       "expected": "Use MutationObserver for real-time DOM change detection",
       "workaround": null,
       "files": [
-        "src/dom.js"
+        "scripts/dom.js"
       ],
       "fixAttempts": []
     },
@@ -377,8 +377,8 @@
       "expected": "Add XPath selector support alongside CSS",
       "workaround": null,
       "files": [
-        "src/dom.js",
-        "src/xpath.js"
+        "scripts/dom.js",
+        "scripts/xpath.js"
       ],
       "fixAttempts": []
     },
@@ -395,7 +395,7 @@
       "expected": "Filter text matches to return only innermost matching elements",
       "workaround": null,
       "files": [
-        "src/dom.js"
+        "scripts/dom.js"
       ],
       "fixAttempts": []
     },
@@ -412,7 +412,7 @@
       "expected": "Support scoped snapshots via focusSelector",
       "workaround": null,
       "files": [
-        "src/aria.js"
+        "scripts/aria.js"
       ],
       "fixAttempts": []
     },
@@ -428,8 +428,8 @@
       "expected": "Monkey-patch Element.attachShadow() to maintain WeakMap of closed shadow roots",
       "workaround": null,
       "files": [
-        "src/dom.js",
-        "src/piercer.js"
+        "scripts/dom.js",
+        "scripts/piercer.js"
       ],
       "fixAttempts": []
     },
@@ -445,8 +445,8 @@
       "expected": "Encode element IDs as frameOrdinal-backendNodeId pairs, support >> hop notation",
       "workaround": null,
       "files": [
-        "src/aria.js",
-        "src/dom.js"
+        "scripts/aria.js",
+        "scripts/dom.js"
       ],
       "fixAttempts": []
     },
@@ -462,7 +462,7 @@
       "expected": "Progressive depth reduction on encoder errors, re-hydrate missing branches",
       "workaround": null,
       "files": [
-        "src/aria.js"
+        "scripts/aria.js"
       ],
       "fixAttempts": []
     },
@@ -480,8 +480,8 @@
       "expected": "Refs should be written to file or omitted from JSON entirely",
       "workaround": null,
       "files": [
-        "src/runner/execute-query.js",
-        "src/runner/step-executors.js"
+        "scripts/runner/execute-query.js",
+        "scripts/runner/step-executors.js"
       ],
       "fixAttempts": []
     },
@@ -499,7 +499,7 @@
       "expected": "viewportSnapshot should only be included on action responses",
       "workaround": null,
       "files": [
-        "src/runner/step-executors.js"
+        "scripts/runner/step-executors.js"
       ],
       "fixAttempts": []
     },
@@ -516,7 +516,7 @@
       "expected": "Summary mode should return zero refs",
       "workaround": null,
       "files": [
-        "src/runner/execute-query.js"
+        "scripts/runner/execute-query.js"
       ],
       "fixAttempts": []
     },
@@ -534,7 +534,7 @@
       "expected": "Names truncated to ~150 characters by default, with maxNameLength option",
       "workaround": null,
       "files": [
-        "src/aria.js"
+        "scripts/aria.js"
       ],
       "fixAttempts": [
         {
@@ -560,7 +560,7 @@
       "expected": "Option to exclude fixed/sticky elements or auto-detect and omit after first snapshot",
       "workaround": null,
       "files": [
-        "src/aria.js"
+        "scripts/aria.js"
       ],
       "fixAttempts": []
     },
@@ -578,8 +578,8 @@
       "expected": "Headings should get refs as they are navigation targets",
       "workaround": null,
       "files": [
-        "src/aria.js",
-        "src/runner/execute-query.js"
+        "scripts/aria.js",
+        "scripts/runner/execute-query.js"
       ],
       "fixAttempts": []
     },
@@ -597,7 +597,7 @@
       "expected": "Interactive should always be strictly smaller than full",
       "workaround": null,
       "files": [
-        "src/aria.js"
+        "scripts/aria.js"
       ],
       "fixAttempts": []
     },
@@ -615,7 +615,7 @@
       "expected": "Hash should include lightweight checksum of interactive element states",
       "workaround": null,
       "files": [
-        "src/aria.js"
+        "scripts/aria.js"
       ],
       "fixAttempts": []
     },
@@ -632,7 +632,7 @@
       "expected": "Display like combobox \"Option 2\" [ref=s1e1] showing selected option",
       "workaround": null,
       "files": [
-        "src/aria.js"
+        "scripts/aria.js"
       ],
       "fixAttempts": []
     },
@@ -649,7 +649,7 @@
       "expected": "Table cells should show text content by default",
       "workaround": "Use extract step or snapshot with includeText: true",
       "files": [
-        "src/aria.js"
+        "scripts/aria.js"
       ],
       "fixAttempts": []
     },
@@ -666,7 +666,7 @@
       "expected": "Default matching should use word boundaries, add fuzzy parameter for control",
       "workaround": null,
       "files": [
-        "src/runner/execute-query.js"
+        "scripts/runner/execute-query.js"
       ],
       "fixAttempts": []
     },
@@ -684,7 +684,7 @@
       "expected": "Add states field to search results",
       "workaround": null,
       "files": [
-        "src/runner/execute-query.js"
+        "scripts/runner/execute-query.js"
       ],
       "fixAttempts": []
     },
@@ -701,7 +701,7 @@
       "expected": "Include article/section context in path with nearest named ancestor",
       "workaround": null,
       "files": [
-        "src/runner/execute-query.js"
+        "scripts/runner/execute-query.js"
       ],
       "fixAttempts": []
     },
@@ -718,7 +718,7 @@
       "expected": "Fall back to innerText, value, title, or child text content",
       "workaround": null,
       "files": [
-        "src/aria.js"
+        "scripts/aria.js"
       ],
       "fixAttempts": []
     },
@@ -736,8 +736,8 @@
       "expected": "Monkey-patch history.pushState/replaceState and detect URL changes within ~500ms",
       "workaround": "Add explicit wait steps after every link click on SPAs",
       "files": [
-        "src/runner/execute-interaction.js",
-        "src/runner/step-executors.js"
+        "scripts/runner/execute-interaction.js",
+        "scripts/runner/step-executors.js"
       ],
       "fixAttempts": []
     },
@@ -754,7 +754,7 @@
       "expected": "Detect same-origin URL with only hash difference and use location.hash + scroll",
       "workaround": null,
       "files": [
-        "src/runner/execute-navigation.js"
+        "scripts/runner/execute-navigation.js"
       ],
       "fixAttempts": []
     },
@@ -771,7 +771,7 @@
       "expected": "context.modal should only be populated for role=dialog or role=alertdialog",
       "workaround": null,
       "files": [
-        "src/runner/step-executors.js"
+        "scripts/runner/step-executors.js"
       ],
       "fixAttempts": []
     },
@@ -788,7 +788,7 @@
       "expected": "selectOption should produce diff showing value change",
       "workaround": null,
       "files": [
-        "src/runner/step-executors.js"
+        "scripts/runner/step-executors.js"
       ],
       "fixAttempts": []
     },
@@ -805,7 +805,7 @@
       "expected": "When click(text) finds multiple matches, return error listing all or prefer closest to viewport center",
       "workaround": null,
       "files": [
-        "src/dom/click-executor.js"
+        "scripts/dom/click-executor.js"
       ],
       "fixAttempts": []
     },
@@ -822,7 +822,7 @@
       "expected": "Strip HTML tags from accessible names during snapshot generation",
       "workaround": null,
       "files": [
-        "src/aria.js"
+        "scripts/aria.js"
       ],
       "fixAttempts": []
     },
@@ -840,8 +840,8 @@
       "expected": "Auto-reconnect to same tab after page reload",
       "workaround": null,
       "files": [
-        "src/cdp-skill.js",
-        "src/page.js"
+        "scripts/cdp-skill.js",
+        "scripts/page.js"
       ],
       "fixAttempts": []
     },
@@ -858,8 +858,8 @@
       "expected": "Add reconnect step that tries to re-attach by URL pattern or tab ID",
       "workaround": null,
       "files": [
-        "src/cdp-skill.js",
-        "src/page.js"
+        "scripts/cdp-skill.js",
+        "scripts/page.js"
       ],
       "fixAttempts": []
     },
@@ -876,7 +876,7 @@
       "expected": "Add clickAndSnapshot that performs both in one invocation",
       "workaround": null,
       "files": [
-        "src/runner.js"
+        "scripts/runner.js"
       ],
       "fixAttempts": []
     },
@@ -894,8 +894,8 @@
       "expected": "waitForSettled step that waits for no DOM mutations for N milliseconds",
       "workaround": null,
       "files": [
-        "src/runner.js",
-        "src/dom.js"
+        "scripts/runner.js",
+        "scripts/dom.js"
       ],
       "fixAttempts": []
     },
@@ -913,8 +913,8 @@
       "expected": "Auto-append discovered quirks to site profile after failures",
       "workaround": null,
       "files": [
-        "src/cdp-skill.js",
-        "src/site-profiles.js"
+        "scripts/cdp-skill.js",
+        "scripts/site-profiles.js"
       ],
       "fixAttempts": []
     },
@@ -966,7 +966,7 @@
       "expected": "",
       "workaround": null,
       "files": [
-        "src/cdp-skill.js"
+        "scripts/cdp-skill.js"
       ],
       "fixAttempts": [],
       "source": "runner-feedback",
@@ -986,8 +986,8 @@
       "expected": "",
       "workaround": "cdp-skill fill step rejects file inputs as 'not editable'. Had to use pageFunction to call Dropzone.forElement().addFile() to programmatically upload. CDP protocol supports DOM.setFileInputFiles which could be exposed as a dedicated step (e.g., 'uploadFile' or 'setFileInput') for native file upload support without requiring pageFunction workarounds.",
       "files": [
-        "src/element-locator.js",
-        "src/cdp-skill.js"
+        "scripts/element-locator.js",
+        "scripts/cdp-skill.js"
       ],
       "fixAttempts": [],
       "source": "runner-feedback",
@@ -1007,7 +1007,7 @@
       "expected": "",
       "workaround": "After two failed attempts to click via ref s1e12, used CSS selector 'table tbody tr:nth-of-type(5) td:nth-of-type(7) a:first-of-type' which succeeded via jsClick-auto fallback. Refs from earlier snapshots should remain valid and clickable regardless of scroll position.",
       "files": [
-        "src/click-executor.js"
+        "scripts/click-executor.js"
       ],
       "fixAttempts": [],
       "source": "runner-feedback",
@@ -1027,7 +1027,7 @@
       "expected": "",
       "workaround": "The react-datepicker time list is a scrollable container where most items are outside the browser viewport. Using ref click failed with 'Coordinates must be non-negative' and jsClick also failed with 'outside viewport'. Had to use force:true which fell back to jsClick-fallback. The scrollUntilVisible option could help but it scrolls the page, not the internal container.",
       "files": [
-        "src/click-executor.js"
+        "scripts/click-executor.js"
       ],
       "fixAttempts": [],
       "source": "runner-feedback",
@@ -1047,7 +1047,7 @@
       "expected": "",
       "workaround": "Clicking the multiselect input (ref s1e8) required jsClick-auto fallback because the CDP click was intercepted. The auto-fallback handled this transparently.",
       "files": [
-        "src/click-executor.js"
+        "scripts/click-executor.js"
       ],
       "fixAttempts": [],
       "source": "runner-feedback",
@@ -1149,7 +1149,7 @@
       "expected": "",
       "workaround": null,
       "files": [
-        "src/aria.js"
+        "scripts/aria.js"
       ],
       "fixAttempts": [],
       "source": "runner-feedback",
@@ -1303,8 +1303,8 @@
       "expected": "",
       "workaround": null,
       "files": [
-        "src/runner/execute-interaction.js",
-        "src/dom/click-executor.js"
+        "scripts/runner/execute-interaction.js",
+        "scripts/dom/click-executor.js"
       ],
       "fixAttempts": [],
       "source": "runner-feedback",
@@ -1324,8 +1324,8 @@
       "expected": "",
       "workaround": "BBC shows a consent modal in a cross-origin iframe (#sp_message_iframe_1355822) that cannot be interacted with via cdp-skill frame switching. Workaround was to navigate directly to the search URL, bypassing the consent modal. A built-in mechanism to handle or dismiss cross-origin consent modals would improve reliability for sites using third-party consent management platforms.",
       "files": [
-        "src/runner/execute-interaction.js",
-        "src/dom/click-executor.js"
+        "scripts/runner/execute-interaction.js",
+        "scripts/dom/click-executor.js"
       ],
       "fixAttempts": [],
       "source": "runner-feedback",

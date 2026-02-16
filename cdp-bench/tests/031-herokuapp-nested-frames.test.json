@@ -14,7 +14,7 @@
     {
       "id": "middle_frame_content",
       "weight": 0.4,
-      "verify": { "eval_truthy": "(function findText(doc, text) { try { const frames = doc.querySelectorAll('frame'); for (const f of frames) { try { if (f.contentDocument?.body?.textContent?.trim() === text) return true; if (findText(f.contentDocument, text)) return true; } catch(e) {} } } catch(e) {} return false; })(document, 'MIDDLE')" }
+      "verify": { "eval_truthy": "Array.from(document.querySelectorAll('frame')).some(f => { try { return f.contentDocument?.body?.textContent?.trim() === 'MIDDLE'; } catch(e) { return false; } })" }
     },
     {
       "id": "bottom_frame_content",

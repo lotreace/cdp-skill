@@ -49,7 +49,7 @@ try {
 ## Module Structure
 
 ```
-src/
+scripts/
 ├── cdp-skill.js           # CLI entry point
 ├── index.js               # Public API exports
 ├── types.js               # TypeScript-style JSDoc types

@@ -44,7 +44,7 @@ function computeTestScore(completionScore, trace) {
 }
 
 function computeSHS(testResults) {
-  if (testResults.length === 0) return 0;
+  if (testResults.length === 0) return { shs: 0, passRate: 0, avgCompletion: 0, perfectRate: 0, avgEfficiency: 0, categoryCoverage: 0, totalTests: 0, passed: 0, perfect: 0 };
 
   const passRate = testResults.filter(r => r.scores?.completion >= 0.5).length / testResults.length;
   const avgCompletion = testResults.reduce((s, r) => s + (r.scores?.completion || 0), 0) / testResults.length;

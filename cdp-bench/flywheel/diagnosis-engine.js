@@ -9,7 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 import { createDecisionEngine } from './DecisionEngine.js';
-import { STEP_TYPES } from '../../cdp-skill/src/runner/step-registry.js';
+import { STEP_TYPES } from '../../cdp-skill/scripts/runner/step-registry.js';
 
 // --- improvements.json Reader ---
 

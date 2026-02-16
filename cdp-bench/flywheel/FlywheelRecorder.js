@@ -14,6 +14,7 @@ function createFlywheelRecorder(improvementsPath, historyPath) {
   const fileLock = createFileLock();
 
   function readImprovements() {
+    if (!fs.existsSync(improvementsPath)) return { issues: [], implemented: [] };
     return JSON.parse(fs.readFileSync(improvementsPath, 'utf8'));
   }
 
@@ -50,6 +51,7 @@ function createFlywheelRecorder(improvementsPath, historyPath) {
         ...details
       };
 
+      if (!issue.fixAttempts) issue.fixAttempts = [];
       issue.fixAttempts.push(attempt);
       writeImprovements(data);
     });

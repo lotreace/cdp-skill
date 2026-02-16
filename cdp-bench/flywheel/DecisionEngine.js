@@ -8,10 +8,8 @@
  */
 
 import fs from 'fs';
-import { createFileLock } from './file-lock.js';
 
 function createDecisionEngine(improvementsPath, historyPath) {
-  const fileLock = createFileLock();
 
   function readImprovements() {
     if (!fs.existsSync(improvementsPath)) return { issues: [], implemented: [] };
@@ -53,7 +51,7 @@ function createDecisionEngine(improvementsPath, historyPath) {
       ? Math.max(...cranks.map(c => c.crank))
       : 0;
 
-    return diagnosisRecommendations.map(rec => {
+    const ranked = diagnosisRecommendations.map(rec => {
       const votingIds = rec.votingIds || rec.relatedVotingIssues?.map(v => v.id) || [];
 
       // Collect attempt history for every related issue

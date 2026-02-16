@@ -68,7 +68,7 @@ CDP-Skill installs itself as a skill into the agent's skill directories:
 - `~/.claude/skills/cdp-skill/` for Claude Code
 - `~/.codex/skills/cdp-skill/` for Codex
 
-In development mode (when the package root is not inside `node_modules`), installation creates a symlink to the source directory. In production mode (installed via npm), installation copies the necessary files (SKILL.md, EXAMPLES.md, and the src/ directory) into the skill directories. The SKILL.md file serves as the entry point that agents read to understand how to use the tool.
+In development mode (when the package root is not inside `node_modules`), installation creates a symlink to the source directory. In production mode (installed via npm), installation copies the necessary files (SKILL.md, EXAMPLES.md, and the scripts/ directory) into the skill directories. The SKILL.md file serves as the entry point that agents read to understand how to use the tool.
 
 
 ## 2. Architecture Overview
@@ -177,8 +177,8 @@ Connection parameters (host, port, headless) are specified via the `newTab` obje
 The `config` object is no longer supported. Passing `config` returns a validation error with migration instructions.
 
 Input is accepted via two channels:
-1. **CLI argument** (preferred): `node src/cdp-skill.js '{"steps":[...]}'`
-2. **Stdin** (fallback): `echo '{"steps":[...]}' | node src/cdp-skill.js`
+1. **CLI argument** (preferred): `node scripts/cdp-skill.js '{"steps":[...]}'`
+2. **Stdin** (fallback): `echo '{"steps":[...]}' | node scripts/cdp-skill.js`
 
 The CLI argument method is preferred for cross-platform compatibility. When reading from stdin, a 100ms timeout detects the absence of piped input to avoid hanging on TTY.
 
@@ -1659,8 +1659,8 @@ Custom viewports can also be specified as objects with `width` and `height` (req
 
 The CLI accepts input in two ways, with argument-based input preferred for cross-platform compatibility:
 
-1. **Command-line argument** (preferred): `node src/cdp-skill.js '{"steps":[...]}'`
-2. **Standard input** (fallback): `echo '{"steps":[...]}' | node src/cdp-skill.js`
+1. **Command-line argument** (preferred): `node scripts/cdp-skill.js '{"steps":[...]}'`
+2. **Standard input** (fallback): `echo '{"steps":[...]}' | node scripts/cdp-skill.js`
 
 When stdin is a TTY (interactive terminal) with no piped data, the system immediately proceeds without waiting for input. A 100ms timeout guards against edge cases where stdin availability is ambiguous.
 

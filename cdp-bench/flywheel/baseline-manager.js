@@ -6,8 +6,10 @@
 
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
-const BASELINES_DIR = path.join(import.meta.dirname || '.', '..', 'baselines');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const BASELINES_DIR = path.join(__dirname, '..', 'baselines');
 
 // --- Read ---
 

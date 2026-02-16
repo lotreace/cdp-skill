@@ -50,7 +50,7 @@ export class ActionabilityChecker {
 
 ## Shared Utilities
 
-Common utilities should be in `src/utils.js`:
+Common utilities should be in `scripts/utils.js`:
 - `sleep(ms)` - Promise-based delay
 - `releaseObject(session, objectId)` - CDP object cleanup
 - `resetInputState(session)` - Reset mouse/keyboard state

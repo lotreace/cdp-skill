@@ -49,12 +49,10 @@ export function createFeedbackApplier(improvementsPath) {
     const decisionsPath = path.join(runDir, 'match-decisions.json');
 
     if (!fs.existsSync(extractedPath)) {
-      console.error(`Missing: ${extractedPath} — run FeedbackExtractor first`);
-      process.exit(1);
+      throw new Error(`Missing: ${extractedPath} — run FeedbackExtractor first`);
     }
     if (!fs.existsSync(decisionsPath)) {
-      console.error(`Missing: ${decisionsPath} — run the matching subagent first`);
-      process.exit(1);
+      throw new Error(`Missing: ${decisionsPath} — run the matching subagent first`);
     }
 
     const extracted = JSON.parse(fs.readFileSync(extractedPath, 'utf8'));

@@ -114,10 +114,14 @@ export function createFeedbackExtractor(runDir) {
     const allFeedback = [];
 
     for (const file of traceFiles) {
-      const trace = JSON.parse(fs.readFileSync(path.join(runDir, file), 'utf8'));
-      const testId = trace.testId || file.replace('.trace.json', '');
-      const entries = extractFromTrace(trace, testId);
-      allFeedback.push(...entries);
+      try {
+        const trace = JSON.parse(fs.readFileSync(path.join(runDir, file), 'utf8'));
+        const testId = trace.testId || file.replace('.trace.json', '');
+        const entries = extractFromTrace(trace, testId);
+        allFeedback.push(...entries);
+      } catch (e) {
+        /* skip malformed trace file */
+      }
     }
 
     const deduped = deduplicateFeedback(allFeedback);

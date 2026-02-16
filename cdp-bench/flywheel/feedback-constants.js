@@ -18,14 +18,14 @@ export const AREA_TO_SECTION = {
 
 // Area → likely source files for auto-created issues
 export const AREA_TO_FILES = {
-  actions: ['src/runner/execute-interaction.js', 'src/dom/click-executor.js'],
-  snapshot: ['src/aria.js'],
-  navigation: ['src/page/page-controller.js', 'src/runner/execute-navigation.js'],
-  iframe: ['src/page/page-controller.js'],
-  input: ['src/dom/fill-executor.js', 'src/dom/keyboard-executor.js'],
-  'error-handling': ['src/utils.js'],
-  'shadow-dom': ['src/dom/element-locator.js', 'src/aria.js'],
-  timing: ['src/page/page-controller.js', 'src/page/wait-utilities.js']
+  actions: ['scripts/runner/execute-interaction.js', 'scripts/dom/click-executor.js'],
+  snapshot: ['scripts/aria.js'],
+  navigation: ['scripts/page/page-controller.js', 'scripts/runner/execute-navigation.js'],
+  iframe: ['scripts/page/page-controller.js'],
+  input: ['scripts/dom/fill-executor.js', 'scripts/dom/keyboard-executor.js'],
+  'error-handling': ['scripts/utils.js'],
+  'shadow-dom': ['scripts/dom/element-locator.js', 'scripts/aria.js'],
+  timing: ['scripts/page/page-controller.js', 'scripts/page/wait-utilities.js']
 };
 
 /**

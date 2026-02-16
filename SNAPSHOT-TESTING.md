@@ -6,7 +6,7 @@ Run parallel subagents to critically evaluate the CDP snapshot system against re
 
 - Chrome installed (auto-launched by the skill)
 - Node.js available
-- CLI at: `node cdp-skill/src/cdp-skill.js`
+- CLI at: `node cdp-skill/scripts/cdp-skill.js`
 
 ## Pre-Flight
 
@@ -170,7 +170,7 @@ irrelevant inline context returned to the using-agent.
    - `/path/to/cdp-skill/SKILL.md` — understand the CLI API
    - `/path/to/cdp-bench/VOTING.md` — understand known issues
 
-2. The CLI is at: `node /path/to/cdp-skill/src/cdp-skill.js`
+2. The CLI is at: `node /path/to/cdp-skill/scripts/cdp-skill.js`
 
 ## Your Test Target
 

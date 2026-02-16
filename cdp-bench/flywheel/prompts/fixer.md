@@ -6,7 +6,7 @@ You are the cdp-bench fixer. Implement the top-priority fix recommended by the d
 
 - **Diagnosis:** {{run_dir}}/diagnosis.json
 - **Recommendation rank:** {{rank}} (usually 1 = highest priority)
-- **Source directory:** cdp-skill/src/
+- **Source directory:** cdp-skill/scripts/
 
 ## Instructions
 

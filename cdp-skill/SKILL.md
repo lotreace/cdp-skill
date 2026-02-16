@@ -11,17 +11,17 @@ Automate Chrome browser interactions via JSON step definitions passed to a Node.
 
 > **See EXAMPLES.md** for full JSON examples, response shapes, and worked patterns for every step type.
 >
-> **For implementation details**, read the source in `cdp-skill/src/`.
+> **For implementation details**, read the source in `cdp-skill/scripts/`. The step registry (`runner/step-registry.js`) defines all step types and their validation. The executor files (`runner/execute-*.js`) contain the implementation for each step.
 
 ## Quick Start
 
 ```bash
-echo '{"steps":[{"newTab":"https://google.com"}]}' | node src/cdp-skill.js
-echo '{"tab":"t1","steps":[{"click":"#btn"}]}' | node src/cdp-skill.js
-echo '{"tab":"t1","steps":[{"snapshot":true}]}' | node src/cdp-skill.js
+echo '{"steps":[{"newTab":"https://google.com"}]}' | node scripts/cdp-skill.js
+echo '{"tab":"t1","steps":[{"click":"#btn"}]}' | node scripts/cdp-skill.js
+echo '{"tab":"t1","steps":[{"snapshot":true}]}' | node scripts/cdp-skill.js
 ```
 
-Tab IDs (t1, t2, ...) persist across CLI invocations. Chrome auto-launches if not running.
+Tab IDs (t1, t2, ...) persist across CLI invocations. Chrome auto-launches if not running. Steps execute sequentially — each step completes before the next begins.
 
 ## Input / Output Schema
 
@@ -56,7 +56,7 @@ Snapshots return versioned refs like `[ref=f0s1e4]` — format: `f{frameId}s{sna
 - `f1`, `f2`, ... = iframe by index
 - `f[name]` = iframe by name (e.g., `f[frame-top]`)
 
-Each frame maintains its own snapshot counter. Use refs with `click`, `fill`, `hover`. Refs remain valid while the element is in DOM.
+Each frame maintains its own snapshot counter. Use refs with `click`, `fill`, `hover`, `scroll`, `drag`, `upload`, `get`. Refs remain valid while the element is in DOM.
 
 **Auto re-resolution**: when a ref's element leaves the DOM (React re-render, lazy-load), the system tries to re-find it by stored selector + role + name. Response includes `reResolved: true` on success.
 
@@ -78,50 +78,60 @@ Optional parameters on action steps to customize the step lifecycle:
 - **settledWhen**: `"() => condition"` — polled until truthy **after** the action completes
 - **observe**: `"() => data"` — runs after settlement, return value appears in `result.observation`
 
-Hooks can be combined on any action step. Applies to: click, fill, press, hover, drag, selectOption, scroll, goto, reload, newTab, switchTab, snapshot, snapshotSearch, query, queryAll, inspect, get, submit, assert, wait, upload, pageFunction, selectText.
+Hooks can be combined on any visual action step: click, fill, press, hover, drag, selectOption, scroll, goto, reload, newTab, switchTab, snapshot, snapshotSearch, query, queryAll, inspect, get, submit, assert, wait, upload, pageFunction, selectText.
+
+## Optional Steps
+
+Add `"optional": true` to any step to continue on failure (status becomes "skipped"). Useful for dismissing optional modals or clicking elements that may not exist.
+
+---
 
 ## Steps
 
 ### Navigation
 
 #### goto
-`"url"` | `{url, waitUntil}` — navigate to URL.
-- Options: `waitUntil` — commit | domcontentloaded | load | networkidle
-- Returns: navigation result with snapshot
+`"url"` | `{url, waitUntil}`
+- **waitUntil**: `"commit"` | `"domcontentloaded"` | `"load"` | `"networkidle"`
+- **Returns**: navigation result with snapshot
 - Response includes top-level `siteProfile` or `actionRequired` (see Site Profiles)
 
 #### newTab
-`true` | `"url"` | `{url, host, port, headless, timeout}` — create a new tab.
-- Returns: `{opened, tab, url, navigated, viewportSnapshot, fullSnapshot, context}`
+`true` | `"url"` | `{url, host, port, headless, timeout}`
+- Opens a new browser tab. **Required as first step** when no tab exists. Chrome auto-launches if not running.
+- **Returns**: `{opened, tab, url, navigated, viewportSnapshot, fullSnapshot, context}`
 - Response includes top-level `siteProfile` or `actionRequired` when URL provided
-- **REQUIRED as first step** when no tab specified. Chrome auto-launches if not running.
 
 #### switchTab
-`"alias"` | `{targetId}` | `{url: "regex"}` | `{host, port}` — switch to existing tab.
-- Returns: tab context with snapshot
+`"alias"` | `{targetId}` | `{url: "regex"}` | `{host, port}`
+- Connects to an existing tab by alias (`"t2"`), targetId, or URL regex pattern.
+- **Returns**: tab context with snapshot
 
 #### back
-`true` — navigate back in history.
-- Returns: `{url, title}` or `{noHistory: true}`
+`true` | `{timeout}`
+- **Returns**: `{url, title}` or `{noHistory: true}`
 
 #### forward
-`true` — navigate forward in history.
-- Returns: `{url, title}` or `{noHistory: true}`
+`true` | `{timeout}`
+- **Returns**: `{url, title}` or `{noHistory: true}`
 
 #### reload
-`true` | `{waitUntil}` — reload current page.
-- Options: `waitUntil` — commit | domcontentloaded | load | networkidle
+`true` | `{waitUntil}`
+- **waitUntil**: `"commit"` | `"domcontentloaded"` | `"load"` | `"networkidle"`
 
 #### waitForNavigation
-`true` | `{timeout, waitUntil}` — wait for in-progress navigation to complete.
+`true` | `{timeout, waitUntil}`
+- Waits for an in-progress navigation to reach the specified readyState.
+- **waitUntil**: `"commit"` | `"domcontentloaded"` | `"load"` (default) | `"networkidle"`
 
 ### Interaction
 
 #### click
-`"selector"` | `"ref"` | `{ref, selector, text, x/y, selectors[]}`
-- Options: `force`, `jsClick`, `nativeOnly`, `scrollUntilVisible`, `exact`, `tag`, `withinSelector`, `waitAfter`, `waitAfterOptions: {timeout, stableTime}`, `timeout`
-- Hooks: readyWhen, settledWhen, observe
-- Returns: `{clicked, method: "cdp"|"jsClick"|"jsClick-auto", navigated?, newUrl?, newTabs?: [{targetId, url, title}]}`
+`"selector"` | `{ref, selector, text, selectors[], x/y}`
+- **Options**: `force`, `timeout` (default 10000), `button` (left/middle/right), `clickCount`
+- **Hooks**: readyWhen, settledWhen, observe
+- **Returns**: `{clicked, method: "cdp"|"jsClick-auto", navigated?, newUrl?, newTabs?}`
+- `newTabs` reports any tabs opened by the click (e.g., `target="_blank"` links)
 
 #### fill
 Multiple shapes for flexibility:
@@ -130,77 +140,95 @@ Multiple shapes for flexibility:
 - **Batch**: `{"#a":"x", "#b":"y"}` — fills multiple fields by selector
 - **Batch with options**: `{fields: {"#a":"x"}, react: true, clear: true}`
 
-Options: `clear`(true by default), `react`, `force`, `exact`, `timeout`
-Hooks: readyWhen, settledWhen, observe
-Returns: `{filled, navigated?, newUrl?}` (targeted) or `{total, filled, failed, results[], mode: "batch"}` (batch)
+**Options**: `clear` (default true), `react`, `force`, `exact`, `timeout`
+**Returns**: `{filled, navigated?, newUrl?}` (targeted) or `{total, filled, failed, results[], mode: "batch"}` (batch)
 
 #### press
-`"Enter"` | `"Control+a"` | `"Meta+Shift+Enter"` — keyboard shortcuts and key presses.
+`"Enter"` | `"Control+a"` | `"Meta+Shift+Enter"`
+- Keyboard shortcuts and key presses. Key names follow the [KeyboardEvent.key](https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/key/Key_Values) spec.
 
 #### hover
 `"selector"` | `{selector, ref, text, x/y}`
-- Options: `duration`, `force`, `timeout`, `captureResult`
-- Hooks: readyWhen, settledWhen, observe
-- Returns: `{hovered}` or with `captureResult: true`: `{hovered, capturedResult: {visibleElements[]}}`
+- **Options**: `duration` (ms), `force`, `timeout`, `captureResult`
+- **Returns**: `{hovered}` — with `captureResult: true`: adds `capturedResult: {visibleElements[]}`
 
 #### drag
 `{source, target}` — drag and drop between elements or coordinates.
-- Source/target: `"selector"` | `{ref}` | `{x, y}` | `{ref, offsetX, offsetY}`
-- Options: `steps`(10), `delay`(0), `method: "auto"|"mouse"|"html5"`
-- Returns: `{dragged, method, source: {x,y}, target: {x,y}}`
+- **source/target**: `"selector"` | `{ref}` | `{x, y}` | `{ref, offsetX, offsetY}`
+- **Options**: `steps` (default 10), `delay` (default 0), `method: "auto"|"mouse"|"html5"`
+- **Returns**: `{dragged, method, source: {x,y}, target: {x,y}}`
 
 #### selectOption
-`{selector, value|label|index|values}` — select from dropdown.
+`{selector, value|label|index|values}`
+- Select from `<select>` dropdown by value, label text, or index. `values` for multi-select.
+- **Returns**: `{selected: [string], multiple: boolean}`
 
 #### selectText
-`"selector"` | `{selector, start, end}` — select text in an element.
+`"selector"` | `{selector, start, end}`
+- Selects text in an input/textarea. Omit start/end to select all.
+- **Returns**: `{selected: true, selector}`
 
 #### upload
-Upload files to a file input.
-- **Auto-find**: `"/path/to/file"` or `["/a.txt", "/b.png"]` — finds `input[type="file"]` automatically
-- **Targeted**: `{selector|ref, file: "path"}` or `{selector|ref, files: ["a.txt", "b.png"]}`
-- Returns: `{uploaded, files[], accept, multiple, target}`
+`"/path/to/file"` | `["/a.txt", "/b.png"]` | `{selector|ref, file|files}`
+- Auto-finds `input[type="file"]` if no selector given.
+- **Returns**: `{uploaded, files[], accept, multiple, target}`
 
 #### submit
-`"selector"` | `{selector, reportValidity}` — submit a form.
-- Returns: `{submitted, valid, errors[]}`
+`"selector"` | `{selector, reportValidity}`
+- Submits a form. With `reportValidity: true`, triggers HTML5 validation.
+- **Returns**: `{submitted, valid, errors[]}`
 
 ### Query & Extraction
 
 #### snapshot
-`true` | `{root, detail, mode, maxDepth, maxElements, maxNameLength, includeText, includeFrames, pierceShadow, viewportOnly, inlineLimit, since}`
-- Detail: summary | interactive | full (default)
-- maxNameLength: truncate accessible names to N chars (default: 150, 0 to disable)
-- Since: `"f0s1"` — returns `{unchanged: true}` if page hasn't changed
-- Returns: YAML with role, "name", states, `[ref=f{F}s{N}e{M}]`, snapshotId
-- Snapshots over 9KB saved to file (configurable via `inlineLimit`)
+`true` | `{detail, mode, root, maxDepth, maxElements, maxNameLength, includeText, includeFrames, pierceShadow, viewportOnly, inlineLimit, preserveRefs, since}`
+- **detail**: `"summary"` | `"interactive"` | `"full"` (default) — controls output verbosity
+- **mode**: `"ai"` (default) | `"full"` — ai mode filters to relevant content
+- **root**: CSS selector or `"role=main"` to scope the snapshot
+- **maxNameLength**: truncate accessible names to N chars (default 150, 0 to disable)
+- **inlineLimit**: bytes before saving to file (default 9000)
+- **since**: `"f0s1"` — returns `{unchanged: true}` if page hasn't changed since that snapshot
+- **Returns**: YAML with role, "name", states, `[ref=f{F}s{N}e{M}]`, snapshotId
+- Snapshots over `inlineLimit` bytes are saved to a file (path in `artifacts.snapshot`)
 
 #### snapshotSearch
-`{text, pattern, role, exact, limit(10), context, near: {x, y, radius}}`
-- Returns: `{matches[], matchCount, searchedElements}`
-- Refs from snapshotSearch persist across subsequent commands
+`{text, pattern, role, exact, limit, context, near: {x, y, radius}}`
+- Search the snapshot for matching elements by text, regex pattern, or ARIA role.
+- **limit**: max results (default 10)
+- **context**: lines of surrounding context to include
+- **near**: spatial filter — only elements within `radius` px of `{x, y}`
+- **Returns**: `{matches[], matchCount, searchedElements}`
 
 #### query
-`"selector"` | `{selector, role, name, nameExact, nameRegex, level, limit, output, refs}`
-- CSS or ARIA role query
-- Returns: `{total, results[]}`
+`"selector"` | `{selector, role, name, nameExact, nameRegex, level, limit, output, count}`
+- Query by CSS selector or ARIA role with optional name/level filters.
+- **output**: `"text"` (default) | `"html"` | `"value"` | `"attributes"` | `["attr1", "attr2"]` | `{attribute: "data-id"}`
+- **limit**: max results (default 10)
+- **count**: `true` for count-only mode
+- **Returns**: `{selector, total, showing, results[]}`
 
 #### queryAll
 `{"label": "selector", ...}` — batch multiple queries in one step.
+- Each key is a friendly name, each value is a selector string or `{role, name}` object.
+- **Returns**: `{queries: {label: result, ...}}`
 
 #### get
 `"selector"` | `{selector|ref, mode}`
-- Modes: `text` (default), `html`, `value`, `box`, `attributes`
-- Auto-detects tables and lists when mode is text
-- Returns vary by mode (see EXAMPLES.md)
+- **Modes**: `"text"` (default), `"html"`, `"value"`, `"box"`, `"attributes"`
+- Auto-detects tables and lists when mode is `"text"`, returning structured data
+- `"value"` mode on a form returns all field values, validation state, and labels
+- See EXAMPLES.md for response shapes per mode
 
 #### inspect
-`true` | `{selectors[], limit}` — page overview with element counts.
-- Returns: `{title, url, counts}`
+`true` | `{selectors[], limit}`
+- Page overview: returns element counts by tag type (a, button, input, form, etc.)
+- **selectors**: additional CSS selectors to count; **limit**: sample values per selector
+- **Returns**: `{title, url, elements: {a, button, input, ...}, custom?: {}}`
 
 #### elementsAt
-`{x, y}` | `[{x,y}, ...]` | `{x, y, radius, limit}` — find elements at coordinates.
-- Returns: element info with ref, tag, selector, clickable, box
+`{x, y}` | `[{x,y}, ...]` | `{x, y, radius, limit}`
+- Find elements at specific coordinates or within a radius.
+- **Returns**: element info with ref, tag, selector, clickable, box, distance (for radius)
 
 #### getUrl
 `true` — returns `{url}`
@@ -208,63 +236,91 @@ Upload files to a file input.
 #### getTitle
 `true` — returns `{title}`
 
-### Page Control
+### Waiting & Polling
 
 #### wait
 `"selector"` | `{selector, hidden, minCount}` | `{text, caseSensitive}` | `{textRegex}` | `{urlContains}`
-- Waits for element, text, or URL condition
+- Waits for element presence/absence, text appearance, or URL change.
+- **hidden**: `true` to wait for element to disappear
+- **minCount**: wait until at least N elements match (default 1)
+- **caseSensitive**: `true` (default) for text matching
+- **timeout**: ms to wait (default 30000)
 
 #### sleep
-`number` (ms, 0-60000) — fixed time delay.
-
-#### scroll
-`"top"` | `"bottom"` | `"up"` | `"down"` | `"selector"` | `{deltaY}` | `{x, y}`
-- Returns: `{scrollX, scrollY}`
-
-#### frame
-Unified frame operations:
-- `"selector"` — switch to frame by CSS selector
-- `0` — switch to frame by index
-- `"top"` — return to main frame
-- `{name: "frameName"}` — switch by name
-- `{list: true}` — list all frames
-
-#### viewport
-`"iphone-14"` | `{width, height, mobile, hasTouch, isLandscape}` — set viewport size.
-
-#### pageFunction
-`"() => expr"` | `"document.title"` | `{fn, expression, refs(bool), timeout}`
-- Runs custom JavaScript in the browser
-- Auto-wrapped as IIFE, return value auto-serialized, runs in current frame context
-- `refs: true` passes `window.__ariaRefs` to the function
+`number` (ms, 0–60000) — fixed time delay.
 
 #### poll
-`"() => expr"` | `{fn, interval, timeout}` — poll predicate until truthy.
+`"() => expr"` | `{fn, interval, timeout}`
+- Polls a function in the browser until it returns truthy.
+- **interval**: poll frequency in ms (default 100)
+- **timeout**: max wait in ms (default 30000)
+- **Returns**: `{resolved: true, value, elapsed}` or `{resolved: false, elapsed, lastValue}`
+
+### Scripting
+
+#### pageFunction
+`"() => expr"` | `"document.title"` | `{fn, expression, refs, timeout}`
+- Runs custom JavaScript in the browser in the current frame context.
+- Bare expressions auto-wrapped. Return values auto-serialized (Dates, Maps, Sets, Elements, NodeLists).
+- **refs**: `true` to pass `window.__ariaRefs` as first argument
+- **timeout**: execution timeout in ms
+- **Returns**: `{type, value}` — see EXAMPLES.md for typed return values
 
 #### assert
 `{url: {contains|equals|startsWith|endsWith|matches}}` | `{text}` | `{selector, text, caseSensitive}`
-- Returns: `{passed, assertions[]}`
+- Assert URL conditions or text presence. Throws on failure.
+- **Returns**: `{passed, assertions[]}`
+
+### Page Control
+
+#### scroll
+`"top"` | `"bottom"` | `"up"` | `"down"` | `"selector"` | `"ref"` | `{deltaY}` | `{x, y}`
+- Scroll page or scroll an element into view. Direction strings (`"up"`, `"down"`) scroll by 300px.
+- **Returns**: `{scrollX, scrollY}`
+
+#### frame
+`"selector"` | `0` | `"top"` | `{name: "frameName"}` | `{list: true}`
+- Switch to an iframe by selector, index, or name. `"top"` returns to main frame.
+- `{list: true}` returns the frame tree without switching.
+
+#### viewport
+`"iphone-14"` | `{width, height, mobile, hasTouch, isLandscape, deviceScaleFactor}`
+- Set viewport size. Accepts device preset strings (e.g., `"pixel-7"`, `"ipad-pro-11"`, `"macbook-pro-14"`, `"desktop-hd"`) or explicit dimensions.
+- **Returns**: `{width, height, deviceScaleFactor}`
 
 ### Browser & Tabs
 
-#### chromeStatus (not a step — top-level)
-`true` | `{host, port, headless, autoLaunch}` — returns `{running, launched, version, port, tabs[]}`
-> You rarely need this — `newTab` auto-launches Chrome. Use only for diagnostics or non-default ports.
+#### chromeStatus
+`true` | `{host, port, headless, autoLaunch}`
+- Diagnostics step — checks if Chrome is running and reachable.
+- **Returns**: `{running, launched, version, port, tabs[]}`
+- You rarely need this — `newTab` auto-launches Chrome.
 
 #### listTabs
-`true` — returns `{count, tabs[]}`
+`true` — returns `{count, tabs[]}` with targetId, url, title, alias per tab.
 
 #### closeTab
-`"tabId"` — returns `{closed}`
+`"tabId"` — closes the specified tab. Use your tab alias (e.g., `"t1"`).
 
 #### cookies
-`{get: true}` | `{get: ["url"], name}` | `{set: [{name, value, domain, expires}]}` | `{delete: "name", domain}` | `{clear: true, domain}`
+- `{get: true}` | `{get: ["url"], name: "session_id"}` — get cookies for current page or specific URLs
+- `{set: [{name, value, domain, path, expires, httpOnly, secure, sameSite}]}` — set cookies (`expires` accepts `"1h"`, `"7d"`, `"30m"`, `"1w"`, `"1y"` or Unix timestamp)
+- `{delete: "name", domain}` — delete specific cookie(s)
+- `{clear: true, domain}` — clear all cookies, optionally filtered by domain
 
 #### console
-`true` | `{level, limit, clear, stackTrace}` — returns `{messages[]}`
+`true` | `{level, type, since, limit, clear, stackTrace}`
+- **level**: filter by `"error"`, `"warning"`, `"log"`, etc.
+- **type**: `"console"` or `"exception"`
+- **limit**: max messages (default 50)
+- **clear**: clear buffer after returning
+- **stackTrace**: include call stacks
+- **Returns**: `{total, showing, messages[]}`
 
 #### pdf
-`"filename"` | `{path, landscape, printBackground, scale, pageRanges}` — generate PDF.
+`"filename"` | `{path, landscape, printBackground, scale, pageRanges, selector}`
+- Generate PDF. Relative paths resolve to platform temp directory.
+- **selector**: capture a specific element instead of full page
 
 ### Site Profiles
 
@@ -299,24 +355,23 @@ Updated: YYYY-MM-DD  |  Fingerprint: <tech-stack>
 - `getDom` — use `get` with `mode: "html"` instead
 - `getBox` — use `get` with `mode: "box"` instead
 
-## Optional Steps
-
-Add `"optional": true` to any step to continue on failure (status becomes "skipped").
+---
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| Tabs accumulating | Include `tab` at top level |
+| Tabs accumulating | Include `tab` at top level to reuse existing tabs |
 | CONNECTION error | Check Chrome is reachable; use `chromeStatus` to diagnose |
 | Chrome not found | Set `CHROME_PATH` env var |
-| Element not found | Add `wait` step first |
-| Clicks not working | Scroll into view first, or `force: true` |
+| Element not found | Add `wait` step first, or check snapshot for correct ref |
+| Clicks not working | Scroll into view first, or use `force: true` |
 | `back` returns noHistory | New tabs start at about:blank; navigate first |
-| Select dropdown not working | Use click+click or press arrow keys |
+| Select dropdown not working | Use click+click pattern or press arrow keys |
 | Type not appearing | Click input first to focus, then type |
-| Elements missing from snapshot | Custom widgets may lack ARIA roles; use `pageFunction` or `get` with `mode: "html"` as fallback |
+| Elements missing from snapshot | Custom widgets may lack ARIA roles; use `pageFunction` or `get` with `mode: "html"` |
 | macOS: Chrome running but no CDP | `chromeStatus` launches new instance with CDP enabled |
+| Shell escaping issues | Use heredoc or pipe from file (see EXAMPLES.md) |
 
 ## Best Practices
 
@@ -330,5 +385,4 @@ Add `"optional": true` to any step to continue on failure (status becomes "skipp
 - **Use website navigation** — click links and submit forms; don't guess URLs
 - **Prefer refs** over CSS selectors — use `snapshot` + refs for resilient targeting
 - **Check `newTabs` after click** — clicks on `target="_blank"` links report new tabs; use `switchTab` to switch
-- **Use `switchTab` for popups** — connect by alias (`"t2"`), targetId, or URL regex (`{url: "pattern"}`)
 - **Be persistent** — try alternative selectors, add waits, scroll first

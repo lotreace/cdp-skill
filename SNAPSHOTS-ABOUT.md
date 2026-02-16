@@ -6,7 +6,7 @@ Snapshots are **accessibility tree representations** of a web page. Instead of r
 
 ## How They're Captured
 
-The core logic is in `cdp-skill/src/aria.js`. A large JavaScript function (the `SNAPSHOT_SCRIPT`, lines ~473-1298) is injected into the browser via `Runtime.evaluate`. It walks the DOM tree, detects ARIA roles (implicit and explicit), extracts accessible names/states, and builds a hierarchical tree. Each interactive element gets a **versioned ref** like `s1e4` (snapshot 1, element 4).
+The core logic is in `cdp-skill/scripts/aria.js`. A large JavaScript function (the `SNAPSHOT_SCRIPT`, lines ~473-1298) is injected into the browser via `Runtime.evaluate`. It walks the DOM tree, detects ARIA roles (implicit and explicit), extracts accessible names/states, and builds a hierarchical tree. Each interactive element gets a **versioned ref** like `s1e4` (snapshot 1, element 4).
 
 Refs are stored browser-side in a `Map` (`window.__ariaRefs`) so they can be looked up later for clicking/filling.
 
@@ -20,7 +20,7 @@ Three levels, handled in `aria.js` lines ~1360-1528:
 
 ## Large Snapshot Handling
 
-Implemented in `cdp-skill/src/runner/execute-query.js` lines ~29-101:
+Implemented in `cdp-skill/scripts/runner/execute-query.js` lines ~29-101:
 
 - **Inline limit**: 9000 bytes (the `DEFAULT_INLINE_LIMIT`)
 - If the YAML exceeds that, it's written to `/tmp/cdp-skill/{tabAlias}.snapshot.yaml` and the response contains an `artifacts.snapshot` file path instead of inline YAML
@@ -49,7 +49,7 @@ Refs persist across snapshots — when `preserveRefs: true` is used, new snapsho
 
 ## Auto-Snapshots and Diffs
 
-Every visual action (click, fill, goto) automatically captures before/after viewport snapshots (`step-executors.js` lines ~370-440). The diff engine (`src/diff.js`) compares them and reports what changed — elements added, removed, or modified — so the agent knows what happened without re-reading the whole page.
+Every visual action (click, fill, goto) automatically captures before/after viewport snapshots (`step-executors.js` lines ~370-440). The diff engine (`scripts/diff.js`) compares them and reports what changed — elements added, removed, or modified — so the agent knows what happened without re-reading the whole page.
 
 ## Caching
 

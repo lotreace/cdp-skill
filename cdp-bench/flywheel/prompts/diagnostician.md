@@ -92,7 +92,7 @@ Write to `{{run_dir}}/diagnosis.json`:
       "name": "Stale element references",
       "affectedTests": ["001-saucedemo", "024-demoqa"],
       "estimatedSHSGain": 5,
-      "files": ["src/aria.js", "src/dom.js"],
+      "files": ["scripts/aria.js", "scripts/dom.js"],
       "approach": "Re-resolve refs on each action instead of caching...",
       "risk": "low",
       "relatedVotingIssues": [{"id": "6.5", "votes": 14}]

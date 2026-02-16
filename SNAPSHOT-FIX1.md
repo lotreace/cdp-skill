@@ -38,7 +38,7 @@ Testing guide: `SNAPSHOT-TESTING.md`
 
 **Evidence:** HN agent measured 32KB response for a 16KB snapshot. ECMAScript agent got a 1MB+ response for a 100-byte summary.
 
-**Where:** `src/runner/execute-query.js` lines 59-79, 97
+**Where:** `scripts/runner/execute-query.js` lines 59-79, 97
 
 **Fix:** Remove refs from the inline JSON response entirely. The refs are already stored browser-side in `window.__ariaRefs` (aria.js line 1273). When an agent uses a ref like `s1e4` in a click, the click executor resolves it browser-side. The CSS selector map in the JSON is never consumed by agents.
 
@@ -63,7 +63,7 @@ If backward compatibility is needed (it shouldn't be per CLAUDE.md), offer `incl
 
 **Evidence:** Wikipedia agent — 11/11 headings returned ref=None. ECMAScript agent — "Array.prototype.map" heading found but no ref to navigate to it.
 
-**Where:** `src/aria.js` lines 910-932, 1033-1037 — `generateRef()` only assigns refs to elements where `isInteractable` is true.
+**Where:** `scripts/aria.js` lines 910-932, 1033-1037 — `generateRef()` only assigns refs to elements where `isInteractable` is true.
 
 **Fix:** In the snapshot search code path, also assign refs to headings. Headings are navigation targets even though they're not traditionally "interactive". Two options:
 
@@ -102,7 +102,7 @@ Option A is simpler and keeps the ref-based workflow consistent. The click execu
 
 **Evidence:** GitHub agent — every tab click (Issues, PRs, Code) reports navigated:false. Even `waitAfter: {networkidle: true}` doesn't help.
 
-**Where:** `src/runner/step-executors.js` lines 408-426 (post-step snapshot logic), `src/runner/execute-interaction.js` (click execution)
+**Where:** `scripts/runner/step-executors.js` lines 408-426 (post-step snapshot logic), `scripts/runner/execute-interaction.js` (click execution)
 
 **Fix:** Before executing a click, install a `pushState`/`replaceState` listener. After the click, poll briefly (200-500ms) for URL changes.
 
@@ -159,7 +159,7 @@ Also restore the original `pushState`/`replaceState` after detection to avoid le
 
 **Evidence:** Confirmed by 5 of 6 agents across HN, Wikipedia, Amazon, Herokuapp, ECMAScript spec.
 
-**Where:** `src/aria.js` lines 1364-1464 — `generateSummaryView()`. The viewport element counting logic likely has a detection failure.
+**Where:** `scripts/aria.js` lines 1364-1464 — `generateSummaryView()`. The viewport element counting logic likely has a detection failure.
 
 **Fix:** Debug the viewport detection in summary mode. The viewport-only snapshot mode works correctly (it produces correct viewport content), so the counting code in summary mode is using a different or broken viewport check. Likely the IntersectionObserver or bounding rect check isn't being set up for the summary code path.
 
@@ -173,7 +173,7 @@ Also restore the original `pushState`/`replaceState` after detection to avoid le
 
 **Evidence:** HN agent — caching "unchanged" response still carried 5.8KB viewport. ECMAScript agent — viewport repeated in every response.
 
-**Where:** `src/runner/step-executors.js` lines 408-426
+**Where:** `scripts/runner/step-executors.js` lines 408-426
 
 **Fix:** Only attach viewportSnapshot for action steps (click, fill, goto, scroll, hover, press, type, drag, selectOption). Skip it for query steps (snapshot, snapshotSearch, query, inspect, extract, formState, console, getBox, refAt) and for caching responses where `unchanged: true`.
 
@@ -198,7 +198,7 @@ if (isActionStep && !result.unchanged) {
 
 **Evidence:** ECMAScript agent, HN agent.
 
-**Where:** `src/runner/execute-query.js` — the summary code path still calls the full snapshot generator which populates refs.
+**Where:** `scripts/runner/execute-query.js` — the summary code path still calls the full snapshot generator which populates refs.
 
 **Fix:** When `detail === 'summary'`, skip ref generation entirely or strip refs from the response before returning.
 
@@ -220,7 +220,7 @@ if (detail === 'summary') {
 
 **Evidence:** GitHub agent — 57KB full snapshot, would be ~8KB with truncation. Amazon agent — ~2400 chars wasted on name duplication per page.
 
-**Where:** `src/aria.js` lines 689-744 — `getAccessibleName()`
+**Where:** `scripts/aria.js` lines 689-744 — `getAccessibleName()`
 
 **Fix:** Add a `maxNameLength` parameter (default: 150) that truncates names. Also suppress duplicate child text when a link contains a heading with the same name.
 
@@ -250,7 +250,7 @@ if (parentRole === 'link' && role === 'heading' && name === parentName) {
 
 **Evidence:** Amazon, Wikipedia, HN agents.
 
-**Where:** `src/aria.js` (tree building), `src/runner/execute-query.js` (snapshot parameters)
+**Where:** `scripts/aria.js` (tree building), `scripts/runner/execute-query.js` (snapshot parameters)
 
 **Fix:** Add an `exclude` parameter that strips named landmarks or roles from the snapshot tree before serialization:
 
@@ -277,7 +277,7 @@ Also consider auto-scoping: if `role=main` exists and no `root` is specified, de
 
 **Evidence:** Herokuapp agent — `since` always reports "unchanged" after toggling checkboxes, because DOM size and interactive count don't change.
 
-**Where:** `src/aria.js` lines 493-501 — `computePageHash()`
+**Where:** `scripts/aria.js` lines 493-501 — `computePageHash()`
 
 **Fix:** Add a lightweight state checksum to the hash. Iterate known interactive elements and hash their state bits:
 
@@ -316,7 +316,7 @@ Keep it lightweight — only check states of already-known refs, don't traverse 
 
 **Evidence:** Herokuapp agent — dropdown page shows just `combobox` after selecting "Option 2".
 
-**Where:** `src/aria.js` lines 689-744 — `getAccessibleName()`
+**Where:** `scripts/aria.js` lines 689-744 — `getAccessibleName()`
 
 **Fix:** For `<select>` elements, use the selected option's text as the accessible name:
 
@@ -340,7 +340,7 @@ Output: `combobox "Option 2" [ref=s1e1]`
 
 **Evidence:** Herokuapp agent — tables page shows completely empty cells.
 
-**Where:** `src/aria.js` — tree building, text inclusion logic
+**Where:** `scripts/aria.js` — tree building, text inclusion logic
 
 **Fix:** Table cells (`cell`, `columnheader`, `rowheader`) should include their text content by default. The text content IS the accessible content for table cells.
 
@@ -362,7 +362,7 @@ if (alwaysIncludeText.includes(role) && textContent) {
 
 **Evidence:** ECMAScript agent — navigating to `#sec-promise.all` took 32.4s.
 
-**Where:** `src/runner/execute-navigation.js` / `src/page/page-controller.js` — the navigate function
+**Where:** `scripts/runner/execute-navigation.js` / `scripts/page/page-controller.js` — the navigate function
 
 **Fix:** Detect same-origin URLs that differ only in hash and use `location.hash` instead of `Page.navigate`:
 
@@ -399,7 +399,7 @@ if (sameOriginHashOnly) {
 
 **Evidence:** Amazon agent — international shopping dialog has two unnamed buttons, no way to distinguish "Stay" from "Redirect".
 
-**Where:** `src/aria.js` lines 689-744 — `getAccessibleName()`
+**Where:** `scripts/aria.js` lines 689-744 — `getAccessibleName()`
 
 **Fix:** Add fallback chain when ARIA name is empty:
 
@@ -430,7 +430,7 @@ function getAccessibleName(el) {
 
 **Problem:** "star" matches "start"/"started". No word-boundary awareness.
 
-**Where:** `src/runner/execute-query.js` lines 880-957
+**Where:** `scripts/runner/execute-query.js` lines 880-957
 
 **Fix:** Default to word-boundary matching. Add a `matchMode` parameter:
 - `"word"` (default): match whole words only
@@ -453,7 +453,7 @@ function matchesText(name, query, matchMode = 'word') {
 
 **Problem:** Search results don't include `[checked]`, `[selected]`, `[disabled]` states.
 
-**Where:** `src/runner/execute-query.js` lines 936-947
+**Where:** `scripts/runner/execute-query.js` lines 936-947
 
 **Fix:** Add states to the match object:
 
@@ -473,7 +473,7 @@ if (node.value) match.states.value = node.value;
 
 **Problem:** All matches share identical generic paths like `table > rowgroup > row > cell`.
 
-**Where:** `src/runner/execute-query.js` — path building in search results
+**Where:** `scripts/runner/execute-query.js` — path building in search results
 
 **Fix:** Include the nearest named ancestor in the path. Walk up the tree looking for an element with a name or heading:
 
@@ -503,7 +503,7 @@ function buildContextPath(node, maxDepth = 3) {
 
 **Problem:** selectOption produces no `changes` field unlike click and fill.
 
-**Where:** `src/runner/step-executors.js`
+**Where:** `scripts/runner/step-executors.js`
 
 **Fix:** Ensure auto-snapshot runs after selectOption and diff is computed, same as for click/fill.
 
@@ -513,7 +513,7 @@ function buildContextPath(node, maxDepth = 3) {
 
 **Problem:** Raw HTML tags leak into accessible names on some sites.
 
-**Where:** `src/aria.js` — `getAccessibleName()`
+**Where:** `scripts/aria.js` — `getAccessibleName()`
 
 **Fix:** Strip HTML tags from the final name string:
 
@@ -527,7 +527,7 @@ name = name.replace(/<[^>]*>/g, '').trim();
 
 **Problem:** GitHub's search placeholder text is misidentified as a modal.
 
-**Where:** `src/runner/step-executors.js` — modal detection logic
+**Where:** `scripts/runner/step-executors.js` — modal detection logic
 
 **Fix:** Only report `context.modal` when a visible element with `role="dialog"` or `role="alertdialog"` exists. Check visibility (not just DOM presence).
 
@@ -537,7 +537,7 @@ name = name.replace(/<[^>]*>/g, '').trim();
 
 **Problem:** Fixed navigation (like the ECMAScript spec TOC) repeats in every viewport snapshot, wasting ~60%.
 
-**Where:** `src/aria.js` — viewport detection
+**Where:** `scripts/aria.js` — viewport detection
 
 **Fix:** Add `excludeFixed: true` option (or make it default for viewport-only snapshots). Check `position: fixed` or `position: sticky` via `getComputedStyle()` and exclude those subtrees after the first snapshot.
 

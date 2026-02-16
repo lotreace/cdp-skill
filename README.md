@@ -15,13 +15,13 @@ A lightweight, zero-dependency browser automation library using Chrome DevTools 
 
 ```bash
 # Open a tab (Chrome auto-launches if needed)
-node src/cdp-skill.js '{"steps":[{"openTab":"https://google.com"}]}'
+node scripts/cdp-skill.js '{"steps":[{"openTab":"https://google.com"}]}'
 
 # Use the returned tab ID for subsequent calls
-node src/cdp-skill.js '{"tab":"t1","steps":[{"click":"#btn"}]}'
+node scripts/cdp-skill.js '{"tab":"t1","steps":[{"click":"#btn"}]}'
 
 # Non-default Chrome (rare)
-node src/cdp-skill.js '{"steps":[{"openTab":{"url":"https://google.com","port":9333,"headless":true}}]}'
+node scripts/cdp-skill.js '{"steps":[{"openTab":{"url":"https://google.com","port":9333,"headless":true}}]}'
 ```
 
 ## Features
@@ -126,7 +126,7 @@ node src/cdp-skill.js '{"steps":[{"openTab":{"url":"https://google.com","port":9
 ## Architecture
 
 ```
-src/
+scripts/
 ├── cdp-skill.js              # CLI entry point, JSON parsing, response assembly
 ├── aria.js                   # Accessibility snapshots, role queries
 ├── diff.js                   # Snapshot diffing, viewport change detection

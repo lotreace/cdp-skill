@@ -30,7 +30,7 @@ Read `cdp-skill/SKILL.md` for CLI reference.
 **Always use headless mode:**
 
 ```bash
-node cdp-skill/src/cdp-skill.js '{"steps": [{"newTab": {"url": "...", "headless": true}}]}'
+node cdp-skill/scripts/cdp-skill.js '{"steps": [{"newTab": {"url": "...", "headless": true}}]}'
 ```
 
 Work through the task. Stay within the step budget.
@@ -45,7 +45,7 @@ After completing the task, verify each milestone from the test definition. For e
 
 Use cdp-skill to verify:
 ```bash
-node cdp-skill/src/cdp-skill.js '{"steps": [{"pageFunction": "() => document.title.includes(\"text\")"}]}' --tab tN
+node cdp-skill/scripts/cdp-skill.js '{"steps": [{"pageFunction": "() => document.title.includes(\"text\")"}]}' --tab tN
 ```
 
 ### 5. Write Trace

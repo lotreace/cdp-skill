@@ -79,14 +79,12 @@ const recs = data.issues
     workaround: i.workaround
   }));
 
-const ranked = engine.rank(recs);
-const viable = ranked.filter(r => !r.needsDesignReview && !r.skipped).sort((a, b) => b.priority - a.priority);
-const review = ranked.filter(r => r.needsDesignReview);
-console.log(JSON.stringify({ top5: viable.slice(0, 5), needsDesignReview: review.slice(0, 3) }, null, 2));
+const { recommendations, needsDesignReview } = engine.rank(recs);
+console.log(JSON.stringify({ top5: recommendations.slice(0, 5), needsDesignReview: needsDesignReview.slice(0, 3) }, null, 2));
 '
 ```
 
-**Note:** `engine.rank()` returns a flat array. Each element has `needsDesignReview` (boolean) and `skipped` (boolean). Filter and sort the array yourself.
+**Note:** `engine.rank()` returns `{ recommendations, needsDesignReview }`. `recommendations` is sorted by priority (highest first). `needsDesignReview` contains issues with 3+ consecutive failed attempts.
 
 ### Step 2: Present Selection
 
@@ -111,7 +109,7 @@ Read the full issue from `improvements.json`:
 
 ### Step 4: Implement the Fix
 
-Read relevant source files in `cdp-skill/src/`. Implement a targeted, minimal fix following the project's functional style.
+Read relevant source files in `cdp-skill/scripts/`. Implement a targeted, minimal fix following the project's functional style.
 
 ### Step 5: Run Unit Tests
 

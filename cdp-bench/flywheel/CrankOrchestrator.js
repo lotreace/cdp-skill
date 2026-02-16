@@ -221,7 +221,7 @@ async function runRecordPhase(flags) {
     shs: validateResult.shs,
     passRate: validateResult.testsPassed / Math.max(1, validateResult.testsRun),
     avgCompletion: 0,
-    avgEfficiency: 0,
+    avgComposite: 0,
     totalTests: validateResult.testsRun,
     passed: validateResult.testsPassed,
     perfect: validateResult.testsPerfect,
@@ -235,7 +235,7 @@ async function runRecordPhase(flags) {
 
   if (runData.testResults.length > 0) {
     runData.avgCompletion = runData.testResults.reduce((s, r) => s + r.completion, 0) / runData.testResults.length;
-    runData.avgEfficiency = runData.testResults.reduce((s, r) => s + (r.composite || 0), 0) / runData.testResults.length;
+    runData.avgComposite = runData.testResults.reduce((s, r) => s + (r.composite || 0), 0) / runData.testResults.length;
   }
 
   writeBaseline(runData, version, baselinesDir);

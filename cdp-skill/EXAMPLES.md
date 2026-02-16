@@ -23,7 +23,7 @@ Separate open and navigate:
 
 Stdin pipe:
 ```bash
-echo '{"steps":[{"newTab":"https://google.com"}]}' | node src/cdp-skill.js
+echo '{"steps":[{"newTab":"https://google.com"}]}' | node scripts/cdp-skill.js
 ```
 
 ### Tab Lifecycle
@@ -68,7 +68,7 @@ Close when done:
   },
   "screenshot": "/tmp/cdp-skill/t1.after.png",
   "fullSnapshot": "/tmp/cdp-skill/t1.after.yaml",
-  "viewportSnapshot": "- heading \"Title\" [level=1]\n- button \"Submit\" [ref=s1e1]\n...",
+  "viewportSnapshot": "- heading \"Title\" [level=1]\n- button \"Submit\" [ref=f0s1e1]\n...",
   "steps": [{"action": "goto", "status": "ok"}]
 }
 ```
@@ -97,14 +97,14 @@ Close when done:
       "title": "Example Page",
       "scrollPosition": {"x": 0, "y": 1200, "maxY": 5000, "percentY": 24},
       "visibleButtons": [
-        {"text": "Submit", "selector": "#submit-btn", "ref": "s1e4"},
-        {"text": "Cancel", "selector": "button.cancel", "ref": "s1e5"}
+        {"text": "Submit", "selector": "#submit-btn", "ref": "f0s1e4"},
+        {"text": "Cancel", "selector": "button.cancel", "ref": "f0s1e5"}
       ],
       "visibleLinks": [{"text": "Home", "href": "..."}],
       "visibleErrors": ["Please fill in all required fields"],
       "nearMatches": [
-        {"text": "Submit Form", "selector": "button.submit-form", "ref": "s1e12", "score": 70},
-        {"text": "Submit Feedback", "selector": "#feedback-submit", "ref": "s1e15", "score": 50}
+        {"text": "Submit Form", "selector": "button.submit-form", "ref": "f0s1e12", "score": 70},
+        {"text": "Submit Feedback", "selector": "#feedback-submit", "ref": "f0s1e15", "score": 50}
       ]
     }
   }],
@@ -130,7 +130,7 @@ Close when done:
   },
   "screenshot": "/tmp/cdp-skill/t1.after.png",
   "fullSnapshot": "/tmp/cdp-skill/t1.after.yaml",
-  "viewportSnapshot": "- heading \"New Page\" [level=1]\n- button \"Submit\" [ref=s1e1]\n...",
+  "viewportSnapshot": "- heading \"New Page\" [level=1]\n- button \"Submit\" [ref=f0s1e1]\n...",
   "steps": [{"action": "click", "status": "ok"}]
 }
 ```
@@ -149,10 +149,10 @@ Close when done:
   "screenshot": "/tmp/cdp-skill/t1.after.png",
   "fullSnapshot": "/tmp/cdp-skill/t1.after.yaml",
   "changes": {
-    "summary": "Clicked. 3 added (s1e120, s1e121, s1e122), 1 removed (s1e1).",
-    "added": ["- link \"New Link\" [ref=s1e120]"],
-    "removed": ["- link \"Old Link\" [ref=s1e1]"],
-    "changed": [{"ref": "s1e5", "field": "expanded", "from": false, "to": true}]
+    "summary": "Clicked. 3 added (f0s1e120, f0s1e121, f0s1e122), 1 removed (f0s1e1).",
+    "added": ["- link \"New Link\" [ref=f0s1e120]"],
+    "removed": ["- link \"Old Link\" [ref=f0s1e1]"],
+    "changed": [{"ref": "f0s1e5", "field": "expanded", "from": false, "to": true}]
   },
   "steps": [{"action": "click", "status": "ok"}]
 }
@@ -210,7 +210,7 @@ By targetId:
 {"steps":[{"switchTab":{"targetId":"ABC123..."}},{"snapshot":true}]}
 ```
 
-### New Tab Handling — click → detect → switchTab
+### New Tab Handling — click -> detect -> switchTab
 When a click opens a new tab (e.g. `target="_blank"`), the response includes `newTabs`:
 ```json
 {
@@ -233,7 +233,7 @@ Then connect to the new tab:
 ### click — Basic
 ```json
 {"click": "#submit"}
-{"click": {"ref": "s1e4"}}
+{"click": {"ref": "f0s1e4"}}
 {"click": {"x": 450, "y": 200}}
 ```
 
@@ -243,33 +243,17 @@ Then connect to the new tab:
 {"click": {"text": "Learn more", "exact": true}}
 ```
 
-### click — Force JavaScript click
+### click — Force (bypass actionability checks)
 ```json
-{"click": {"selector": "#submit", "jsClick": true}}
-{"click": {"ref": "s1e4", "jsClick": true}}
-```
-
-### click — Disable auto-fallback
-```json
-{"click": {"selector": "#btn", "nativeOnly": true}}
+{"click": {"selector": "#submit", "force": true}}
+{"click": {"ref": "f0s1e4", "force": true}}
 ```
 
 ### click — Multi-selector fallback
 ```json
-{"click": {"selectors": ["[ref=s1e4]", "#submit", {"role": "button", "name": "Submit"}]}}
+{"click": {"selectors": ["#submit", "button.primary", "[type=submit]"]}}
 ```
 Response: `{clicked: true, matchedSelector: "#submit"}`
-
-### click — Scroll until visible
-```json
-{"click": {"selector": "#btn", "scrollUntilVisible": true}}
-```
-
-### click — Wait after click
-```json
-{"click": {"selector": "#submit", "waitAfter": true}}
-{"click": {"selector": "#nav-link", "waitAfter": true, "waitAfterOptions": {"timeout": 10000}}}
-```
 
 ### click — Diagnostics (element covered)
 ```json
@@ -287,7 +271,7 @@ Response: `{clicked: true, matchedSelector: "#submit"}`
 ### fill — Targeted
 ```json
 {"fill": {"selector": "#email", "value": "user@example.com"}}
-{"fill": {"ref": "s1e3", "value": "text"}}
+{"fill": {"ref": "f0s1e3", "value": "text"}}
 {"fill": {"label": "Email address", "value": "test@example.com"}}
 ```
 
@@ -344,7 +328,7 @@ Response:
   "capturedResult": {
     "visibleElements": [
       {"selector": ".tooltip", "text": "Click to edit", "visible": true},
-      {"selector": ".dropdown-menu", "itemCount": 5}
+      {"selector": ".dropdown-menu", "text": "Menu items", "visible": true}
     ]
   }
 }
@@ -353,8 +337,8 @@ Response:
 ### drag
 ```json
 {"drag": {"source": "#draggable", "target": "#dropzone"}}
-{"drag": {"source": {"ref": "s1e1"}, "target": {"ref": "s1e5"}}}
-{"drag": {"source": {"ref": "s1e1", "offsetX": 20}, "target": {"ref": "s1e5", "offsetY": -10}}}
+{"drag": {"source": {"ref": "f0s1e1"}, "target": {"ref": "f0s1e5"}}}
+{"drag": {"source": {"ref": "f0s1e1", "offsetX": 20}, "target": {"ref": "f0s1e5", "offsetY": -10}}}
 {"drag": {"source": {"x": 100, "y": 100}, "target": {"x": 300, "y": 200}}}
 {"drag": {"source": "#item", "target": "#container", "steps": 20, "delay": 10}}
 ```
@@ -381,6 +365,10 @@ Response:
 ```json
 {"selectText": "#input"}
 {"selectText": {"selector": "#input", "start": 0, "end": 5}}
+```
+Response:
+```json
+{"selected": true, "selector": "#input"}
 ```
 
 ### upload
@@ -419,32 +407,32 @@ Response:
 {"snapshot": {"pierceShadow": true}}
 {"snapshot": {"detail": "interactive"}}
 {"snapshot": {"inlineLimit": 28000}}
-{"snapshot": {"since": "s1"}}
+{"snapshot": {"since": "f0s1"}}
 ```
 
 YAML output example:
 ```yaml
 - navigation:
-  - link "Home" [ref=s1e1]
+  - link "Home" [ref=f0s1e1]
 - main:
   - heading "Welcome" [level=1]
-  - textbox "Email" [required] [invalid] [name=email] [ref=s1e3]
-  - button "Submit" [ref=s1e4]
+  - textbox "Email" [required] [invalid] [name=email] [ref=f0s1e3]
+  - button "Submit" [ref=f0s1e4]
 ```
 
 ### Snapshot Caching (since)
 ```json
-{"snapshot": {"since": "s1"}}
+{"snapshot": {"since": "f0s1"}}
 ```
 
 Unchanged:
 ```json
-{"unchanged": true, "snapshotId": "s1", "message": "Page unchanged since s1"}
+{"unchanged": true, "snapshotId": "f0s1", "message": "Page unchanged since f0s1"}
 ```
 
 Changed:
 ```json
-{"snapshotId": "s2", "yaml": "- button \"Login\" [ref=s2e1]\n...", "refs": {}}
+{"snapshotId": "f0s2", "yaml": "- button \"Login\" [ref=f0s2e1]\n...", "refs": {}}
 ```
 
 ### Detail: summary
@@ -485,8 +473,8 @@ Response:
 ```json
 {
   "matches": [
-    {"path": "main > form > button", "ref": "s1e47", "name": "Submit Form", "role": "button"},
-    {"path": "dialog > button", "ref": "s1e89", "name": "Submit Feedback", "role": "button"}
+    {"path": "main > form > button", "ref": "f0s1e47", "name": "Submit Form", "role": "button"},
+    {"path": "dialog > button", "ref": "f0s1e89", "name": "Submit Feedback", "role": "button"}
   ],
   "matchCount": 2,
   "searchedElements": 1847
@@ -506,7 +494,16 @@ Response:
 {"query": {"role": "button"}}
 {"query": {"role": "button", "name": "Submit"}}
 {"query": {"role": "heading", "level": 2}}
-{"query": {"role": ["button", "link"], "refs": true}}
+{"query": {"role": ["button", "link"]}}
+```
+
+### query — Count only
+```json
+{"query": {"selector": "li.item", "count": true}}
+```
+Response:
+```json
+{"selector": "li.item", "total": 42}
 ```
 
 ### queryAll
@@ -556,7 +553,7 @@ Response:
 ### get — Bounding box extraction
 ```json
 {"get": {"selector": "#element", "mode": "box"}}
-{"get": {"ref": "s1e1", "mode": "box"}}
+{"get": {"ref": "f0s1e1", "mode": "box"}}
 ```
 Response:
 ```json
@@ -629,6 +626,25 @@ Response:
 {"inspect": true}
 {"inspect": {"selectors": [".item"], "limit": 3}}
 ```
+Response:
+```json
+{
+  "title": "Page Title",
+  "url": "https://example.com",
+  "elements": {
+    "a": 12,
+    "button": 5,
+    "input": 3,
+    "textarea": 1,
+    "select": 0,
+    "h1": 1,
+    "h2": 3,
+    "h3": 0,
+    "img": 8,
+    "form": 1
+  }
+}
+```
 
 ### elementsAt — Single point
 ```json
@@ -637,7 +653,7 @@ Response:
 Response:
 ```json
 {
-  "ref": "s1e5",
+  "ref": "f0s1e5",
   "existing": false,
   "tag": "BUTTON",
   "selector": "#submit-btn",
@@ -657,8 +673,8 @@ Response:
 {
   "count": 3,
   "elements": [
-    {"x": 100, "y": 200, "ref": "s1e1", "tag": "BUTTON", "selector": "#btn1", "clickable": true},
-    {"x": 300, "y": 400, "ref": "s1e2", "tag": "DIV", "selector": "div.card", "clickable": false},
+    {"x": 100, "y": 200, "ref": "f0s1e1", "tag": "BUTTON", "selector": "#btn1", "clickable": true},
+    {"x": 300, "y": 400, "ref": "f0s1e2", "tag": "DIV", "selector": "div.card", "clickable": false},
     {"x": 500, "y": 150, "error": "No element at this coordinate"}
   ]
 }
@@ -676,15 +692,15 @@ Response:
   "radius": 100,
   "count": 5,
   "elements": [
-    {"ref": "s1e1", "tag": "BUTTON", "selector": "#nearby-btn", "clickable": true, "distance": 12},
-    {"ref": "s1e2", "tag": "SPAN", "selector": "span.label", "clickable": false, "distance": 28}
+    {"ref": "f0s1e1", "tag": "BUTTON", "selector": "#nearby-btn", "clickable": true, "distance": 12},
+    {"ref": "f0s1e2", "tag": "SPAN", "selector": "span.label", "clickable": false, "distance": 28}
   ]
 }
 ```
 
 ---
 
-## Page Control
+## Waiting & Polling
 
 ### wait — Element
 ```json
@@ -696,6 +712,7 @@ Response:
 ### wait — Text
 ```json
 {"wait": {"text": "Welcome"}}
+{"wait": {"text": "welcome", "caseSensitive": false}}
 {"wait": {"textRegex": "Order #[A-Z0-9]+"}}
 ```
 
@@ -709,50 +726,24 @@ Response:
 {"sleep": 2000}
 ```
 
-### scroll
+### poll
 ```json
-{"scroll": "top"}
-{"scroll": "bottom"}
-{"scroll": "up"}
-{"scroll": "down"}
-{"scroll": "#element"}
-{"scroll": {"deltaY": 500}}
-{"scroll": {"x": 0, "y": 1000}}
+{"poll": "() => document.querySelector('.loaded') !== null"}
+{"poll": "() => document.readyState === 'complete'"}
 ```
 
-### frame — List frames
+Object form:
 ```json
-{"frame": {"list": true}}
+{"poll": {"fn": "() => !document.querySelector('.spinner') && document.querySelector('.results')?.children.length > 0", "interval": 100, "timeout": 10000}}
+```
+Response:
+```json
+{"resolved": true, "value": true, "elapsed": 2340}
 ```
 
-### frame — Switch to frame
-```json
-{"frame": "iframe#content"}
-{"frame": 0}
-{"frame": {"name": "myFrame"}}
-```
+---
 
-### frame — Return to main frame
-```json
-{"frame": "top"}
-```
-
-### frame — Workflow (switch → interact → return)
-```json
-{"steps": [
-  {"frame": "iframe#editor"},
-  {"fill": {"selector": "#input", "value": "Hello"}},
-  {"click": "#save"},
-  {"frame": "top"}
-]}
-```
-
-### viewport
-```json
-{"viewport": "iphone-14"}
-{"viewport": {"width": 1280, "height": 720}}
-{"viewport": {"width": 375, "height": 667, "mobile": true, "hasTouch": true, "isLandscape": true}}
-```
+## Scripting
 
 ### pageFunction
 ```json
@@ -776,17 +767,6 @@ Object form:
 - Element: `{type: "Element", tagName, id, className, textContent, isConnected}`
 - NodeList: `{type: "NodeList", length: N, items: [...]}`
 
-### poll
-```json
-{"poll": "() => document.querySelector('.loaded') !== null"}
-{"poll": "() => document.readyState === 'complete'"}
-```
-
-Object form:
-```json
-{"poll": {"fn": "() => !document.querySelector('.spinner') && document.querySelector('.results')?.children.length > 0", "interval": 100, "timeout": 10000}}
-```
-
 ### assert
 ```json
 {"assert": {"url": {"contains": "/success"}}}
@@ -804,6 +784,67 @@ Response:
     {"type": "url", "actual": "https://example.com/success", "expected": {"contains": "/success"}, "passed": true}
   ]
 }
+```
+
+---
+
+## Page Control
+
+### scroll
+```json
+{"scroll": "top"}
+{"scroll": "bottom"}
+{"scroll": "up"}
+{"scroll": "down"}
+{"scroll": "#element"}
+{"scroll": "f0s1e4"}
+{"scroll": {"deltaY": 500}}
+{"scroll": {"x": 0, "y": 1000}}
+```
+Response:
+```json
+{"scrollX": 0, "scrollY": 1000}
+```
+
+### frame — List frames
+```json
+{"frame": {"list": true}}
+```
+
+### frame — Switch to frame
+```json
+{"frame": "iframe#content"}
+{"frame": 0}
+{"frame": {"name": "myFrame"}}
+```
+
+### frame — Return to main frame
+```json
+{"frame": "top"}
+```
+
+### frame — Workflow (switch -> interact -> return)
+```json
+{"steps": [
+  {"frame": "iframe#editor"},
+  {"fill": {"selector": "#input", "value": "Hello"}},
+  {"click": "#save"},
+  {"frame": "top"}
+]}
+```
+
+### viewport
+```json
+{"viewport": "iphone-14"}
+{"viewport": "pixel-7"}
+{"viewport": "macbook-pro-14"}
+{"viewport": "desktop-hd"}
+{"viewport": {"width": 1280, "height": 720}}
+{"viewport": {"width": 375, "height": 667, "mobile": true, "hasTouch": true, "isLandscape": true}}
+```
+Response:
+```json
+{"width": 390, "height": 844, "deviceScaleFactor": 3}
 ```
 
 ---
@@ -859,12 +900,25 @@ Response:
 ```json
 {"console": true}
 {"console": {"level": "error", "limit": 20, "stackTrace": true}}
+{"console": {"type": "exception", "limit": 10}}
+{"console": {"clear": true}}
+```
+Response:
+```json
+{
+  "total": 5,
+  "showing": 5,
+  "messages": [
+    {"level": "error", "text": "TypeError: x is undefined", "type": "console", "url": "app.js", "line": 42, "timestamp": 1700000000}
+  ]
+}
 ```
 
 ### pdf
 ```json
 {"pdf": "report.pdf"}
 {"pdf": {"path": "/absolute/path/report.pdf", "landscape": true, "printBackground": true}}
+{"pdf": {"path": "element.pdf", "selector": "#chart"}}
 ```
 
 ---
@@ -873,25 +927,25 @@ Response:
 
 ### readyWhen
 ```json
-{"click": {"ref": "s1e5", "readyWhen": "() => !document.querySelector('.loading')"}}
+{"click": {"ref": "f0s1e5", "readyWhen": "() => !document.querySelector('.loading')"}}
 {"fill": {"selector": "#email", "value": "test@test.com", "readyWhen": "() => document.querySelector('#email').offsetHeight > 0"}}
 ```
 
 ### settledWhen
 ```json
-{"click": {"ref": "s1e5", "settledWhen": "() => document.querySelector('.results')?.children.length > 0"}}
+{"click": {"ref": "f0s1e5", "settledWhen": "() => document.querySelector('.results')?.children.length > 0"}}
 {"click": {"selector": "#nav-link", "settledWhen": "() => location.href.includes('/results')"}}
 ```
 
 ### observe
 ```json
-{"click": {"ref": "s1e5", "observe": "() => ({url: location.href, count: document.querySelectorAll('.item').length})"}}
+{"click": {"ref": "f0s1e5", "observe": "() => ({url: location.href, count: document.querySelectorAll('.item').length})"}}
 ```
 
 ### Combined hooks
 ```json
 {"click": {
-  "ref": "s1e5",
+  "ref": "f0s1e5",
   "readyWhen": "() => !document.querySelector('.loading')",
   "settledWhen": "() => document.querySelectorAll('.result').length > 0",
   "observe": "() => document.querySelectorAll('.result').length"
@@ -912,9 +966,13 @@ Response:
 {"readSiteProfile": "github.com"}
 {"readSiteProfile": {"domain": "github.com"}}
 ```
-Response:
+Response (found):
 ```json
 {"found": true, "domain": "github.com", "content": "# github.com\n..."}
+```
+Response (not found):
+```json
+{"found": false, "domain": "github.com"}
 ```
 
 ### Full Profile Template
@@ -956,23 +1014,28 @@ Use `react: true` option or settledWhen to verify input accepted.
 ```json
 {"click": "#maybe-exists", "optional": true}
 ```
+Response when element not found:
+```json
+{"action": "click", "status": "skipped", "error": "Element not found"}
+```
 
 ---
 
-## Debug Mode
+## Shell Tips
 
-### CLI Debug Logging
+### Heredoc (avoids quote escaping)
 ```bash
-node src/cdp-skill.js --debug '{"steps":[{"goto":"https://google.com"}]}'
-```
-
-### Shell Escaping Tips
-```bash
-# Heredoc approach (Unix)
-node src/cdp-skill.js <<'EOF'
+node scripts/cdp-skill.js <<'EOF'
 {"steps":[{"pageFunction":"document.querySelectorAll('button').length"}]}
 EOF
+```
 
-# Or save to file and pipe
-cat steps.json | node src/cdp-skill.js
+### Pipe from file
+```bash
+cat steps.json | node scripts/cdp-skill.js
+```
+
+### Debug logging
+```bash
+node scripts/cdp-skill.js --debug '{"steps":[{"goto":"https://google.com"}]}'
 ```
