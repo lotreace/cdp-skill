@@ -68,7 +68,7 @@ Close when done:
   },
   "screenshot": "/tmp/cdp-skill/t1.after.png",
   "fullSnapshot": "/tmp/cdp-skill/t1.after.yaml",
-  "viewportSnapshot": "- heading \"Title\" [level=1]\n- button \"Submit\" [ref=f0s1e1]\n...",
+  "viewportSnapshot": "/tmp/cdp-skill/t1.viewport.yaml",
   "steps": [{"action": "goto", "status": "ok"}]
 }
 ```
@@ -130,7 +130,7 @@ Close when done:
   },
   "screenshot": "/tmp/cdp-skill/t1.after.png",
   "fullSnapshot": "/tmp/cdp-skill/t1.after.yaml",
-  "viewportSnapshot": "- heading \"New Page\" [level=1]\n- button \"Submit\" [ref=f0s1e1]\n...",
+  "viewportSnapshot": "/tmp/cdp-skill/t1.viewport.yaml",
   "steps": [{"action": "click", "status": "ok"}]
 }
 ```

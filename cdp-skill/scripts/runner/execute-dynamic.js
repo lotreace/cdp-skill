@@ -408,13 +408,14 @@ function sanitizeDomain(domain) {
  * Load a site profile for the given domain.
  *
  * @param {string} domain - hostname (e.g. "github.com")
- * @returns {Promise<string|null>} profile markdown or null
+ * @returns {Promise<string|null>} profile file path or null
  */
 export async function loadSiteProfile(domain) {
   const clean = sanitizeDomain(domain);
   const profilePath = path.join(SITES_DIR, `${clean}.md`);
   try {
-    return await fs.readFile(profilePath, 'utf8');
+    await fs.access(profilePath);
+    return profilePath;
   } catch {
     return null;
   }
@@ -452,9 +453,9 @@ export async function executeReadSiteProfile(params) {
     throw new Error('readSiteProfile requires a domain string');
   }
 
-  const content = await loadSiteProfile(domain);
-  if (content) {
-    return { found: true, domain, content };
+  const profilePath = await loadSiteProfile(domain);
+  if (profilePath) {
+    return { found: true, domain, path: profilePath };
   }
   return { found: false, domain };
 }

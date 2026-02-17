@@ -668,7 +668,11 @@ export async function runSteps(deps, steps, options = {}) {
       result.navigated = navigated;
       result.fullSnapshot = fullSnapshotPath;
       result.context = afterContext;
-      result.viewportSnapshot = afterViewport.yaml;
+
+      // Write viewport snapshot to file to keep response concise
+      const viewportPath = await resolveTempPath(`${options.tabAlias || 'command'}.viewport.yaml`, '.yaml');
+      await fs.writeFile(viewportPath, afterViewport.yaml || '', 'utf8');
+      result.viewportSnapshot = viewportPath;
       result.truncated = afterViewport.truncated || false;
 
       if (!navigated && beforeViewport?.yaml) {

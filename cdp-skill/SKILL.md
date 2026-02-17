@@ -33,12 +33,12 @@ Tab IDs (t1, t2, ...) persist across CLI invocations. Chrome auto-launches if no
 **Output fields:**
 - `status`: "ok" or "error"
 - `tab`: short tab ID (e.g. "t1")
-- `siteProfile`: full markdown content of existing profile (after goto/newTab to known site)
+- `siteProfile`: path to site profile file (after goto/newTab to known site)
 - `actionRequired`: `{action, domain, message}` — **MUST be handled immediately** before continuing (see Site Profiles)
 - `context`: `{url, title, scroll: {y, percent}, viewport: {width, height}, activeElement?, modal?}`
 - `screenshot`: path to after-screenshot (auto-captured on every visual action)
 - `fullSnapshot`: path to full-page accessibility snapshot file
-- `viewportSnapshot`: inline viewport-only snapshot YAML
+- `viewportSnapshot`: path to viewport-only accessibility snapshot file
 - `changes`: `{summary, added[], removed[], changed[]}` — viewport diff on same-page interactions
 - `navigated`: true when URL pathname changed
 - `console`: `{errors, warnings, messages[]}` — captured errors/warnings

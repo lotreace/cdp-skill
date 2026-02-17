@@ -785,15 +785,15 @@ async function main() {
       truncated: result.truncated
     };
 
-    // Remove null/undefined fields for compactness
+    // Remove null/undefined/false-y fields for compactness
     if (!output.siteProfile) delete output.siteProfile;
     if (!output.actionRequired) delete output.actionRequired;
-    if (output.navigated === undefined) delete output.navigated;
+    if (!output.navigated) delete output.navigated;
     if (!output.fullSnapshot) delete output.fullSnapshot;
     if (!output.context) delete output.context;
     if (!output.changes) delete output.changes;
     if (!output.viewportSnapshot) delete output.viewportSnapshot;
-    if (output.truncated === undefined) delete output.truncated;
+    if (!output.truncated) delete output.truncated;
     if (!output.screenshot) delete output.screenshot;
     if (!output.console) delete output.console;
     if (output.errors.length === 0) delete output.errors;

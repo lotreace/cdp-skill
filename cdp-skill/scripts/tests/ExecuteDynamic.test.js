@@ -680,7 +680,7 @@ describe('step-executors goto profile integration', () => {
     assert.strictEqual(result.action, 'goto');
     assert.strictEqual(result.status, 'ok');
     assert.ok(result.siteProfile);
-    assert.ok(result.siteProfile.includes('Pre-existing profile'));
+    assert.ok(result.siteProfile.endsWith('.md'), 'siteProfile should be a file path');
   });
 
   it('should return profileAvailable false on goto for unknown domain', async () => {
