@@ -20,7 +20,7 @@ const targets = [
 const filesToCopy = [
   'SKILL.md',
   'EXAMPLES.md',
-  'src',
+  'scripts',
 ];
 
 function ensureParentDir(targetPath) {

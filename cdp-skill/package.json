@@ -1,6 +1,6 @@
 {
   "name": "cdp-skill",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "Browser automation skill using Chrome DevTools Protocol for Claude Code and AI agents",
   "type": "module",
   "main": "scripts/index.js",
@@ -24,7 +24,7 @@
     "install.js",
     "uninstall.js",
     "SKILL.md",
-    "scripts/",
+    "EXAMPLES.md",
     "scripts/"
   ],
   "repository": {
