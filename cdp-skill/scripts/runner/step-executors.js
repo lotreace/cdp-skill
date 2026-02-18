@@ -457,13 +457,13 @@ export async function executeStep(deps, step, options = {}) {
       const eaParams = step.elementsAt;
       if (Array.isArray(eaParams)) {
         // Batch mode (array of coordinates)
-        stepResult.output = await executeElementsAt(pageController.session, eaParams);
+        stepResult.output = await executeElementsAt(pageController, eaParams);
       } else if (eaParams && typeof eaParams === 'object' && eaParams.radius !== undefined) {
         // Nearby mode (has radius)
-        stepResult.output = await executeElementsNear(pageController.session, eaParams);
+        stepResult.output = await executeElementsNear(pageController, eaParams);
       } else {
         // Single point mode (was refAt)
-        stepResult.output = await executeRefAt(pageController.session, eaParams);
+        stepResult.output = await executeRefAt(pageController, eaParams);
       }
     } else if (step.pageFunction !== undefined) {
       stepResult.action = 'pageFunction';
@@ -576,7 +576,10 @@ export async function executeStep(deps, step, options = {}) {
 
     if (isOptional) {
       stepResult.status = 'skipped';
-      stepResult.error = `${error.message} (timeout: ${stepTimeout}ms)`;
+      const isTimeout = error.code === 'TIMEOUT' || error.name === 'TimeoutError' || error.message?.includes('timed out');
+      stepResult.error = isTimeout
+        ? `${error.message} (timeout: ${stepTimeout}ms)`
+        : error.message;
     } else {
       stepResult.status = 'error';
       stepResult.error = error.message;

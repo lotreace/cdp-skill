@@ -96,8 +96,14 @@ export async function executeEval(pageController, params) {
         reject(new Error(`Eval timed out after ${evalTimeout}ms`));
       }, evalTimeout);
     });
-    result = await Promise.race([evalPromise, timeoutPromise]);
-    clearTimeout(evalTimeoutId);
+    try {
+      result = await Promise.race([evalPromise, timeoutPromise]);
+    } catch (err) {
+      evalPromise.catch(() => {}); // suppress dangling rejection if timeout won
+      throw err;
+    } finally {
+      clearTimeout(evalTimeoutId);
+    }
   } else {
     result = await evalPromise;
   }

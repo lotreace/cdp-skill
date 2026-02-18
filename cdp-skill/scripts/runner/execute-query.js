@@ -119,7 +119,7 @@ export async function executeGetDom(pageController, params) {
   const expression = selector
     ? `(function() {
         const el = document.querySelector(${JSON.stringify(selector)});
-        if (!el) return { error: 'Element not found: ${selector}' };
+        if (!el) return { error: 'Element not found: ' + ${JSON.stringify(selector)} };
         return {
           html: ${outer} ? el.outerHTML : el.innerHTML,
           tagName: el.tagName.toLowerCase(),
@@ -228,10 +228,11 @@ export async function executeGetBox(ariaSnapshot, params) {
  * @returns {Promise<Object>} Result with filled element info
  */
 
-export async function executeRefAt(session, params) {
+export async function executeRefAt(pageController, params) {
+  const session = pageController.session;
   const { x, y } = params;
 
-  const result = await session.send('Runtime.evaluate', {
+  const evalArgs = {
     expression: `(function() {
       const x = ${x};
       const y = ${y};
@@ -352,7 +353,10 @@ export async function executeRefAt(session, params) {
       };
     })()`,
     returnByValue: true
-  });
+  };
+  const contextId = pageController.getFrameContext();
+  if (contextId) evalArgs.contextId = contextId;
+  const result = await session.send('Runtime.evaluate', evalArgs);
 
   if (result.exceptionDetails) {
     throw new Error(`refAt error: ${result.exceptionDetails.text}`);
@@ -370,8 +374,9 @@ export async function executeRefAt(session, params) {
  * Execute an elementsAt step - get refs for elements at multiple coordinates
  */
 
-export async function executeElementsAt(session, coords) {
-  const result = await session.send('Runtime.evaluate', {
+export async function executeElementsAt(pageController, coords) {
+  const session = pageController.session;
+  const evalArgs = {
     expression: `(function() {
       const coords = ${JSON.stringify(coords)};
 
@@ -499,7 +504,10 @@ export async function executeElementsAt(session, coords) {
       return { elements: results, count: results.filter(r => !r.error).length };
     })()`,
     returnByValue: true
-  });
+  };
+  const contextId = pageController.getFrameContext();
+  if (contextId) evalArgs.contextId = contextId;
+  const result = await session.send('Runtime.evaluate', evalArgs);
 
   if (result.exceptionDetails) {
     throw new Error(`elementsAt error: ${result.exceptionDetails.text}`);
@@ -512,10 +520,11 @@ export async function executeElementsAt(session, coords) {
  * Execute an elementsNear step - get refs for all elements near a coordinate
  */
 
-export async function executeElementsNear(session, params) {
+export async function executeElementsNear(pageController, params) {
+  const session = pageController.session;
   const { x, y, radius = 50, limit = 20 } = params;
 
-  const result = await session.send('Runtime.evaluate', {
+  const evalArgs = {
     expression: `(function() {
       const centerX = ${x};
       const centerY = ${y};
@@ -665,7 +674,10 @@ export async function executeElementsNear(session, params) {
       };
     })()`,
     returnByValue: true
-  });
+  };
+  const contextId = pageController.getFrameContext();
+  if (contextId) evalArgs.contextId = contextId;
+  const result = await session.send('Runtime.evaluate', evalArgs);
 
   if (result.exceptionDetails) {
     throw new Error(`elementsNear error: ${result.exceptionDetails.text}`);
@@ -829,10 +841,7 @@ export async function executeQueryAll(elementLocator, params) {
   const results = {};
 
   for (const [name, selectorOrConfig] of Object.entries(params)) {
-    // Support both string selectors and query config objects
-    const queryParams = typeof selectorOrConfig === 'string'
-      ? selectorOrConfig
-      : selectorOrConfig;
+    const queryParams = selectorOrConfig;
 
     try {
       results[name] = await executeQuery(elementLocator, queryParams);

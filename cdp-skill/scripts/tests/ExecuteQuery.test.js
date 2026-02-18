@@ -501,8 +501,8 @@ describe('executeGetBox', () => {
 
 describe('executeRefAt', () => {
   it('should get element ref at coordinates', async () => {
-    const session = createMockPageController({ refAt: true }).session;
-    const result = await executeRefAt(session, { x: 100, y: 200 });
+    const pageController = createMockPageController({ refAt: true });
+    const result = await executeRefAt(pageController, { x: 100, y: 200 });
 
     assert.strictEqual(result.ref, 'f0s1e1');
     assert.strictEqual(result.tag, 'BUTTON');
@@ -511,8 +511,8 @@ describe('executeRefAt', () => {
   });
 
   it('should return element info with box', async () => {
-    const session = createMockPageController({ refAt: true }).session;
-    const result = await executeRefAt(session, { x: 100, y: 200 });
+    const pageController = createMockPageController({ refAt: true });
+    const result = await executeRefAt(pageController, { x: 100, y: 200 });
 
     assert.ok(result.box);
     assert.strictEqual(result.box.x, 100);
@@ -522,17 +522,17 @@ describe('executeRefAt', () => {
   });
 
   it('should throw if no element at coordinates', async () => {
-    const session = createMockPageController({ refAtNoElement: true }).session;
+    const pageController = createMockPageController({ refAtNoElement: true });
     await assert.rejects(
-      async () => executeRefAt(session, { x: 999, y: 999 }),
+      async () => executeRefAt(pageController, { x: 999, y: 999 }),
       /No element at coordinates/
     );
   });
 
   it('should throw on evaluation error', async () => {
-    const session = createMockPageController({ evalError: true }).session;
+    const pageController = createMockPageController({ evalError: true });
     await assert.rejects(
-      async () => executeRefAt(session, { x: 100, y: 100 }),
+      async () => executeRefAt(pageController, { x: 100, y: 100 }),
       /Evaluation error/
     );
   });
@@ -544,12 +544,12 @@ describe('executeRefAt', () => {
 
 describe('executeElementsAt', () => {
   it('should get elements at multiple coordinates', async () => {
-    const session = createMockPageController({ elementsAt: true }).session;
+    const pageController = createMockPageController({ elementsAt: true });
     const coords = [
       { x: 100, y: 100 },
       { x: 200, y: 200 }
     ];
-    const result = await executeElementsAt(session, coords);
+    const result = await executeElementsAt(pageController, coords);
 
     assert.ok(result.results);
     assert.strictEqual(result.results.length, 2);
@@ -558,16 +558,16 @@ describe('executeElementsAt', () => {
   });
 
   it('should handle empty coordinates array', async () => {
-    const session = createMockPageController({ elementsAt: true }).session;
-    const result = await executeElementsAt(session, []);
+    const pageController = createMockPageController({ elementsAt: true });
+    const result = await executeElementsAt(pageController, []);
 
     assert.ok(result.results || Array.isArray(result));
   });
 
   it('should throw on evaluation error', async () => {
-    const session = createMockPageController({ evalError: true }).session;
+    const pageController = createMockPageController({ evalError: true });
     await assert.rejects(
-      async () => executeElementsAt(session, [{ x: 100, y: 100 }]),
+      async () => executeElementsAt(pageController, [{ x: 100, y: 100 }]),
       /Evaluation error/
     );
   });
@@ -579,9 +579,9 @@ describe('executeElementsAt', () => {
 
 describe('executeElementsNear', () => {
   it('should get elements near coordinates', async () => {
-    const session = createMockPageController({ elementsNear: true }).session;
+    const pageController = createMockPageController({ elementsNear: true });
     const params = { x: 100, y: 100, radius: 50 };
-    const result = await executeElementsNear(session, params);
+    const result = await executeElementsNear(pageController, params);
 
     assert.ok(result.elements);
     assert.strictEqual(result.elements.length, 2);
@@ -590,18 +590,18 @@ describe('executeElementsNear', () => {
   });
 
   it('should default radius to 100 if not provided', async () => {
-    const session = createMockPageController({ elementsNear: true }).session;
+    const pageController = createMockPageController({ elementsNear: true });
     const params = { x: 100, y: 100 };
-    const result = await executeElementsNear(session, params);
+    const result = await executeElementsNear(pageController, params);
 
     // Should still work with default radius
     assert.ok(result.elements || result.searchRadius);
   });
 
   it('should throw on evaluation error', async () => {
-    const session = createMockPageController({ evalError: true }).session;
+    const pageController = createMockPageController({ evalError: true });
     await assert.rejects(
-      async () => executeElementsNear(session, { x: 100, y: 100 }),
+      async () => executeElementsNear(pageController, { x: 100, y: 100 }),
       /Evaluation error/
     );
   });
